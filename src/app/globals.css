@@ -1,0 +1,279 @@
+@import "tailwindcss";
+
+/*
+  Design tokens — Design_System.md §4-§6.
+  Semantic names only. Never use a raw hex in component code.
+  Light is :root; dark is the flagship theme and applies via system preference
+  or an explicit data-theme override. The sidebar stays graphite in both themes.
+*/
+
+:root {
+  /* Neutrals — light (§4.2) */
+  --canvas: #f6f7f9;
+  --surface: #ffffff;
+  --raised: #ffffff;
+  --sunken: #eff1f4;
+  --sidebar: #0f1319;
+  --border-subtle: #e4e7ec;
+  --border-strong: #c9cfd9;
+  --text-primary: #171c24;
+  --text-secondary: #48505e;
+  --text-muted: #66707f;
+  --text-disabled: #9aa3b0;
+
+  /* Action + Ally identity (§4.3) — violet belongs to Ally alone */
+  --action-primary: #1d4ed8;
+  --action-primary-hover: #1e40af;
+  --action-primary-fg: #ffffff;
+  --ally-fg: #6d28d9;
+  --ally-bg: #f3eefd;
+  --ally-border: #d6c9f5;
+
+  /* Status — tied to loan urgency, never decoration (§4.4) */
+  --critical-fg: #b42318;
+  --critical-bg: #fdebe9;
+  --warning-fg: #9a6700;
+  --warning-bg: #fbf1de;
+  --healthy-fg: #16794c;
+  --healthy-bg: #e7f6ee;
+  --info-fg: #175cd3;
+  --info-bg: #e8f0fd;
+  --neutral-fg: #66707f;
+  --neutral-bg: #eff1f4;
+
+  --shadow-1: 0 1px 2px rgb(16 24 40 / 0.06), 0 1px 3px rgb(16 24 40 / 0.1);
+  --shadow-2: 0 4px 8px -2px rgb(16 24 40 / 0.1), 0 2px 4px -2px rgb(16 24 40 / 0.06);
+  --shadow-3: 0 12px 16px -4px rgb(16 24 40 / 0.08), 0 4px 6px -2px rgb(16 24 40 / 0.03);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Neutrals — dark, flagship (§4.1) */
+    --canvas: #0b0e14;
+    --surface: #12161f;
+    --raised: #1a2029;
+    --sunken: #080b10;
+    --sidebar: #0a0d12;
+    --border-subtle: #232b37;
+    --border-strong: #364153;
+    --text-primary: #e8edf4;
+    --text-secondary: #a8b3c2;
+    --text-muted: #8593a6;
+    --text-disabled: #5a6675;
+
+    --action-primary: #4d8dff;
+    --action-primary-hover: #6aa1ff;
+    --action-primary-fg: #0a1428;
+    --ally-fg: #a78bfa;
+    --ally-bg: #221a33;
+    --ally-border: #3d3159;
+
+    --critical-fg: #f0716a;
+    --critical-bg: #2c1414;
+    --warning-fg: #e8a33d;
+    --warning-bg: #2a2210;
+    --healthy-fg: #4cc38a;
+    --healthy-bg: #0f2a1d;
+    --info-fg: #7db1ff;
+    --info-bg: #10203a;
+    --neutral-fg: #8593a6;
+    --neutral-bg: #1a2029;
+
+    --shadow-1: 0 1px 2px rgb(0 0 0 / 0.4);
+    --shadow-2: 0 4px 8px -2px rgb(0 0 0 / 0.5);
+    --shadow-3: 0 12px 16px -4px rgb(0 0 0 / 0.55);
+  }
+}
+
+[data-theme="dark"] {
+  --canvas: #0b0e14;
+  --surface: #12161f;
+  --raised: #1a2029;
+  --sunken: #080b10;
+  --sidebar: #0a0d12;
+  --border-subtle: #232b37;
+  --border-strong: #364153;
+  --text-primary: #e8edf4;
+  --text-secondary: #a8b3c2;
+  --text-muted: #8593a6;
+  --text-disabled: #5a6675;
+  --action-primary: #4d8dff;
+  --action-primary-hover: #6aa1ff;
+  --action-primary-fg: #0a1428;
+  --ally-fg: #a78bfa;
+  --ally-bg: #221a33;
+  --ally-border: #3d3159;
+  --critical-fg: #f0716a;
+  --critical-bg: #2c1414;
+  --warning-fg: #e8a33d;
+  --warning-bg: #2a2210;
+  --healthy-fg: #4cc38a;
+  --healthy-bg: #0f2a1d;
+  --info-fg: #7db1ff;
+  --info-bg: #10203a;
+  --neutral-fg: #8593a6;
+  --neutral-bg: #1a2029;
+  --shadow-1: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-2: 0 4px 8px -2px rgb(0 0 0 / 0.5);
+  --shadow-3: 0 12px 16px -4px rgb(0 0 0 / 0.55);
+}
+
+[data-theme="light"] {
+  --canvas: #f6f7f9;
+  --surface: #ffffff;
+  --raised: #ffffff;
+  --sunken: #eff1f4;
+  --sidebar: #0f1319;
+  --border-subtle: #e4e7ec;
+  --border-strong: #c9cfd9;
+  --text-primary: #171c24;
+  --text-secondary: #48505e;
+  --text-muted: #66707f;
+  --text-disabled: #9aa3b0;
+  --action-primary: #1d4ed8;
+  --action-primary-hover: #1e40af;
+  --action-primary-fg: #ffffff;
+  --ally-fg: #6d28d9;
+  --ally-bg: #f3eefd;
+  --ally-border: #d6c9f5;
+  --critical-fg: #b42318;
+  --critical-bg: #fdebe9;
+  --warning-fg: #9a6700;
+  --warning-bg: #fbf1de;
+  --healthy-fg: #16794c;
+  --healthy-bg: #e7f6ee;
+  --info-fg: #175cd3;
+  --info-bg: #e8f0fd;
+  --neutral-fg: #66707f;
+  --neutral-bg: #eff1f4;
+}
+
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-raised: var(--raised);
+  --color-sunken: var(--sunken);
+  --color-sidebar: var(--sidebar);
+  --color-subtle: var(--border-subtle);
+  --color-strong: var(--border-strong);
+
+  --color-primary: var(--text-primary);
+  --color-secondary: var(--text-secondary);
+  --color-muted: var(--text-muted);
+  --color-disabled: var(--text-disabled);
+
+  --color-action: var(--action-primary);
+  --color-action-hover: var(--action-primary-hover);
+  --color-action-fg: var(--action-primary-fg);
+
+  --color-ally: var(--ally-fg);
+  --color-ally-bg: var(--ally-bg);
+  --color-ally-border: var(--ally-border);
+
+  --color-critical: var(--critical-fg);
+  --color-critical-bg: var(--critical-bg);
+  --color-warning: var(--warning-fg);
+  --color-warning-bg: var(--warning-bg);
+  --color-healthy: var(--healthy-fg);
+  --color-healthy-bg: var(--healthy-bg);
+  --color-info: var(--info-fg);
+  --color-info-bg: var(--info-bg);
+  --color-neutral: var(--neutral-fg);
+  --color-neutral-bg: var(--neutral-bg);
+
+  --font-sans: var(--font-inter), -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+
+  --shadow-e1: var(--shadow-1);
+  --shadow-e2: var(--shadow-2);
+  --shadow-e3: var(--shadow-3);
+}
+
+/* Type scale — base 14, density-first (§5.2) */
+@theme {
+  --text-metric-lg: 1.75rem;
+  --text-metric-lg--line-height: 2.125rem;
+  --text-metric-md: 1.25rem;
+  --text-metric-md--line-height: 1.625rem;
+  --text-h1: 1.375rem;
+  --text-h1--line-height: 1.75rem;
+  --text-h2: 1.125rem;
+  --text-h2--line-height: 1.625rem;
+  --text-h3: 1rem;
+  --text-h3--line-height: 1.5rem;
+  --text-body: 0.875rem;
+  --text-body--line-height: 1.375rem;
+  --text-small: 0.8125rem;
+  --text-small--line-height: 1.25rem;
+  --text-label: 0.75rem;
+  --text-label--line-height: 1rem;
+  --text-micro: 0.6875rem;
+  --text-micro--line-height: 0.875rem;
+}
+
+@layer base {
+  html {
+    color-scheme: light dark;
+  }
+
+  body {
+    background-color: var(--canvas);
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    line-height: 1.375rem;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Numerals are first-class citizens: tabular everywhere (§5.4) */
+  .tnum,
+  table,
+  input[type="number"] {
+    font-variant-numeric: tabular-nums lining-nums;
+  }
+
+  *:focus-visible {
+    outline: 2px solid var(--action-primary);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--action-primary) 30%, transparent);
+  }
+}
+
+@layer utilities {
+  /* Restrained motion — nothing blinks or bounces (§2.1) */
+  .animate-shimmer {
+    background: linear-gradient(
+      90deg,
+      var(--sunken) 0%,
+      var(--raised) 50%,
+      var(--sunken) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.4s ease-in-out infinite;
+  }
+
+  @keyframes shimmer {
+    0% {
+      background-position: 200% 0;
+    }
+    100% {
+      background-position: -200% 0;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-shimmer {
+    animation: none;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
