@@ -90,7 +90,8 @@ export default async function TodayPage() {
 
       {/* The queue: one ranked list. */}
       <Card className="mt-4">
-        <div className="flex items-center justify-between border-b border-subtle px-4 py-3">
+        {/* Wraps rather than collides once the chip and the heading can't share a line. */}
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 border-b border-subtle px-4 py-3">
           <h2 className="text-h3 font-semibold text-primary">
             What needs you
             {items.length > 0 ? (
@@ -100,7 +101,7 @@ export default async function TodayPage() {
             ) : null}
           </h2>
           {approvals > 0 ? (
-            <span className="inline-flex items-center gap-1.5 rounded border border-ally-border bg-ally-bg px-1.5 py-0.5 text-label font-semibold text-ally">
+            <span className="inline-flex shrink-0 items-center gap-1.5 rounded border border-ally-border bg-ally-bg px-1.5 py-0.5 text-label font-semibold text-ally">
               {approvals} waiting for your approval
             </span>
           ) : null}
