@@ -1,0 +1,709 @@
+/**
+ * The demonstration book of business.
+ *
+ * Fake but mortgage-real (QA_Plan data-safety rule: fixtures only, never real
+ * borrowers). Shaped so every Phase-1 surface has something true to say:
+ * a lock about to expire, leads still waiting on a first call, files stalled in
+ * processing, past clients due an annual review.
+ *
+ * Dates are expressed as offsets from "now" so the demo stays current whenever
+ * it is re-seeded.
+ */
+import type { Stage } from "@/lib/stages";
+
+export type SeedPerson = {
+  key: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  language: "en" | "vi" | "zh" | "es";
+  city: string;
+  state: string;
+  /** null = no opportunity (a plain contact, e.g. a sphere referral source). */
+  loan: SeedLoan | null;
+  tags?: string[];
+};
+
+export type SeedLoan = {
+  stage: Stage;
+  purpose: "purchase" | "refinance" | "cash_out_refi" | "heloc";
+  program: string;
+  amount: number | null;
+  status?: "active" | "funded" | "lost";
+  /** Days from now — negative is in the past. */
+  daysSinceActivity?: number;
+  lockExpiresInDays?: number;
+  closingInDays?: number;
+  fundedDaysAgo?: number;
+  preapprovalExpiresInDays?: number;
+  preapprovalAmount?: number;
+  docsNeeded?: string | null;
+  docsNeededDaysAgo?: number;
+  propertyCity?: string;
+  loanNumber?: string;
+  lender?: string;
+  /** Present only for opportunities that began as a captured lead. */
+  lead?: {
+    channel: string;
+    campaign?: string;
+    intent: "purchase" | "refinance" | "heloc" | "quote" | "rate_alert" | "qualify";
+    capturedHoursAgo: number;
+    /** null = never contacted; drives the speed-to-lead queue class. */
+    firstResponseHoursAgo: number | null;
+    priceRange?: string;
+    ficoRange?: string;
+  };
+};
+
+export const PEOPLE: SeedPerson[] = [
+  // --- Deadline pressure: the lock that needs a human today ----------------
+  {
+    key: "nguyen",
+    firstName: "Thanh",
+    lastName: "Nguyễn",
+    email: "thanh.nguyen@example.com",
+    phone: "(425) 555-0106",
+    language: "vi",
+    city: "Renton",
+    state: "WA",
+    tags: ["first-time buyer"],
+    loan: {
+      stage: "clear_to_close",
+      purpose: "purchase",
+      program: "FHA",
+      amount: 512_000,
+      loanNumber: "LF-24118",
+      lender: "Rocket TPO",
+      lockExpiresInDays: 2,
+      closingInDays: 6,
+      daysSinceActivity: 3,
+      propertyCity: "Renton",
+    },
+  },
+  {
+    key: "rodriguez",
+    firstName: "Carmen",
+    lastName: "Rodriguez",
+    email: "carmen.rodriguez@example.com",
+    phone: "(206) 555-0155",
+    language: "es",
+    city: "Kent",
+    state: "WA",
+    loan: {
+      stage: "closing_scheduled",
+      purpose: "purchase",
+      program: "Conventional",
+      amount: 689_000,
+      loanNumber: "LF-24102",
+      lender: "UWM",
+      lockExpiresInDays: 9,
+      closingInDays: 3,
+      daysSinceActivity: 1,
+      propertyCity: "Kent",
+    },
+  },
+
+  // --- New leads: the speed-to-lead queue ----------------------------------
+  {
+    key: "torres",
+    firstName: "Maria",
+    lastName: "Torres",
+    email: "maria.torres@example.com",
+    phone: "(253) 555-0171",
+    language: "en",
+    city: "Tacoma",
+    state: "WA",
+    loan: {
+      stage: "new_lead",
+      purpose: "refinance",
+      program: "Conventional",
+      amount: null,
+      daysSinceActivity: 0,
+      lead: {
+        channel: "facebook_ads",
+        campaign: "Refinance 1",
+        intent: "refinance",
+        capturedHoursAgo: 0.4,
+        firstResponseHoursAgo: null,
+        priceRange: "$400K–$450K",
+        ficoRange: "700–719",
+      },
+    },
+  },
+  {
+    key: "patel",
+    firstName: "Ravi",
+    lastName: "Patel",
+    email: "ravi.patel@example.com",
+    phone: "(425) 555-0188",
+    language: "en",
+    city: "Bellevue",
+    state: "WA",
+    loan: {
+      stage: "new_lead",
+      purpose: "purchase",
+      program: "Conventional",
+      amount: null,
+      daysSinceActivity: 0,
+      lead: {
+        channel: "lf_website",
+        campaign: "Rate table widget",
+        intent: "quote",
+        capturedHoursAgo: 3.5,
+        firstResponseHoursAgo: null,
+        priceRange: "$800K–$900K",
+        ficoRange: "760–779",
+      },
+    },
+  },
+  {
+    key: "kim",
+    firstName: "Grace",
+    lastName: "Kim",
+    email: "grace.kim@example.com",
+    phone: "(206) 555-0129",
+    language: "en",
+    city: "Seattle",
+    state: "WA",
+    loan: {
+      stage: "contact_attempt",
+      purpose: "purchase",
+      program: "Conventional",
+      amount: null,
+      daysSinceActivity: 2,
+      lead: {
+        channel: "partner_referral",
+        campaign: "Windermere — J. Alvarez",
+        intent: "purchase",
+        capturedHoursAgo: 52,
+        firstResponseHoursAgo: 48,
+        priceRange: "$650K–$700K",
+      },
+    },
+  },
+  {
+    key: "okonkwo",
+    firstName: "Chidi",
+    lastName: "Okonkwo",
+    email: "chidi.okonkwo@example.com",
+    phone: "(425) 555-0144",
+    language: "en",
+    city: "Redmond",
+    state: "WA",
+    loan: {
+      stage: "new_lead",
+      purpose: "purchase",
+      program: "Conventional",
+      amount: null,
+      daysSinceActivity: 1,
+      lead: {
+        channel: "qm_pricer",
+        intent: "rate_alert",
+        capturedHoursAgo: 26,
+        firstResponseHoursAgo: null,
+        priceRange: "$550K–$600K",
+      },
+    },
+  },
+
+  // --- Qualify -------------------------------------------------------------
+  {
+    key: "tran",
+    firstName: "Bích",
+    lastName: "Trần",
+    email: "bich.tran@example.com",
+    phone: "(425) 555-0163",
+    language: "vi",
+    city: "Bellevue",
+    state: "WA",
+    tags: ["self-employed"],
+    loan: {
+      stage: "preapproval",
+      purpose: "purchase",
+      program: "Bank statement",
+      amount: null,
+      preapprovalAmount: 740_000,
+      preapprovalExpiresInDays: 11,
+      daysSinceActivity: 4,
+      docsNeeded: "last 2 bank statements, 2025 P&L",
+      docsNeededDaysAgo: 4,
+    },
+  },
+  {
+    key: "alvarez",
+    firstName: "Diego",
+    lastName: "Alvarez",
+    email: "diego.alvarez@example.com",
+    phone: "(206) 555-0192",
+    language: "es",
+    city: "Burien",
+    state: "WA",
+    loan: {
+      stage: "searching_for_home",
+      purpose: "purchase",
+      program: "FHA",
+      amount: null,
+      preapprovalAmount: 430_000,
+      preapprovalExpiresInDays: 34,
+      daysSinceActivity: 9,
+    },
+  },
+  {
+    key: "chen",
+    firstName: "Wei",
+    lastName: "Chen",
+    email: "wei.chen@example.com",
+    phone: "(425) 555-0175",
+    language: "zh",
+    city: "Sammamish",
+    state: "WA",
+    loan: {
+      stage: "prequalification",
+      purpose: "purchase",
+      program: "Jumbo",
+      amount: null,
+      daysSinceActivity: 2,
+    },
+  },
+  {
+    key: "hoang",
+    firstName: "Liên",
+    lastName: "Hoàng",
+    email: "lien.hoang@example.com",
+    phone: "(253) 555-0138",
+    language: "vi",
+    city: "Federal Way",
+    state: "WA",
+    loan: {
+      stage: "consultation_scheduled",
+      purpose: "purchase",
+      program: "Conventional",
+      amount: null,
+      daysSinceActivity: 1,
+    },
+  },
+
+  // --- Transact ------------------------------------------------------------
+  {
+    key: "pham",
+    firstName: "Anna",
+    lastName: "Phạm",
+    email: "anna.pham@example.com",
+    phone: "(425) 555-0111",
+    language: "vi",
+    city: "Bothell",
+    state: "WA",
+    loan: {
+      stage: "disclosures",
+      purpose: "purchase",
+      program: "Conventional",
+      amount: 595_000,
+      loanNumber: "LF-24131",
+      lender: "UWM",
+      closingInDays: 27,
+      daysSinceActivity: 2,
+      propertyCity: "Bothell",
+    },
+  },
+  {
+    key: "le",
+    firstName: "Quang",
+    lastName: "Lê",
+    email: "quang.le@example.com",
+    phone: "(206) 555-0197",
+    language: "vi",
+    city: "Seattle",
+    state: "WA",
+    loan: {
+      stage: "processing",
+      purpose: "refinance",
+      program: "VA",
+      amount: 448_000,
+      loanNumber: "LF-24127",
+      lender: "Pennymac TPO",
+      daysSinceActivity: 6,
+      docsNeeded: "updated VOE, homeowners policy",
+      docsNeededDaysAgo: 5,
+      propertyCity: "Seattle",
+    },
+  },
+  {
+    key: "vu",
+    firstName: "Hạnh",
+    lastName: "Vũ",
+    email: "hanh.vu@example.com",
+    phone: "(425) 555-0152",
+    language: "vi",
+    city: "Lynnwood",
+    state: "WA",
+    loan: {
+      stage: "submitted_to_underwriting",
+      purpose: "purchase",
+      program: "Conventional",
+      amount: 623_000,
+      loanNumber: "LF-24124",
+      lender: "Rocket TPO",
+      closingInDays: 18,
+      daysSinceActivity: 4,
+      propertyCity: "Lynnwood",
+    },
+  },
+  {
+    key: "brooks",
+    firstName: "Denise",
+    lastName: "Brooks",
+    email: "denise.brooks@example.com",
+    phone: "(206) 555-0183",
+    language: "en",
+    city: "Shoreline",
+    state: "WA",
+    loan: {
+      stage: "conditional_approval",
+      purpose: "purchase",
+      program: "Conventional",
+      amount: 705_000,
+      loanNumber: "LF-24120",
+      lender: "UWM",
+      closingInDays: 12,
+      lockExpiresInDays: 16,
+      daysSinceActivity: 2,
+      docsNeeded: "letter of explanation — recent deposit",
+      docsNeededDaysAgo: 2,
+      propertyCity: "Shoreline",
+    },
+  },
+  {
+    key: "santos",
+    firstName: "Elena",
+    lastName: "Santos",
+    email: "elena.santos@example.com",
+    phone: "(253) 555-0166",
+    language: "en",
+    city: "Auburn",
+    state: "WA",
+    loan: {
+      stage: "under_contract",
+      purpose: "purchase",
+      program: "FHA",
+      amount: 465_000,
+      loanNumber: "LF-24134",
+      closingInDays: 31,
+      daysSinceActivity: 1,
+      propertyCity: "Auburn",
+    },
+  },
+  {
+    key: "murphy",
+    firstName: "Sean",
+    lastName: "Murphy",
+    email: "sean.murphy@example.com",
+    phone: "(425) 555-0109",
+    language: "en",
+    city: "Issaquah",
+    state: "WA",
+    loan: {
+      stage: "application",
+      purpose: "refinance",
+      program: "Conventional",
+      amount: 380_000,
+      loanNumber: "LF-24136",
+      daysSinceActivity: 1,
+      propertyCity: "Issaquah",
+    },
+  },
+
+  // --- Funded / Retain / Grow ---------------------------------------------
+  {
+    key: "gallagher",
+    firstName: "Erin",
+    lastName: "Gallagher",
+    email: "erin.gallagher@example.com",
+    phone: "(206) 555-0121",
+    language: "en",
+    city: "Ballard",
+    state: "WA",
+    loan: {
+      stage: "funded",
+      status: "funded",
+      purpose: "purchase",
+      program: "Conventional",
+      amount: 640_000,
+      loanNumber: "LF-24098",
+      lender: "UWM",
+      fundedDaysAgo: 4,
+      daysSinceActivity: 4,
+      propertyCity: "Ballard",
+    },
+  },
+  {
+    key: "dinh",
+    firstName: "Phúc",
+    lastName: "Đinh",
+    email: "phuc.dinh@example.com",
+    phone: "(425) 555-0148",
+    language: "vi",
+    city: "Everett",
+    state: "WA",
+    loan: {
+      stage: "post_close",
+      status: "funded",
+      purpose: "purchase",
+      program: "FHA",
+      amount: 418_000,
+      loanNumber: "LF-23941",
+      fundedDaysAgo: 47,
+      daysSinceActivity: 20,
+      propertyCity: "Everett",
+    },
+  },
+  {
+    key: "whitmore",
+    firstName: "Paul",
+    lastName: "Whitmore",
+    email: "paul.whitmore@example.com",
+    phone: "(206) 555-0134",
+    language: "en",
+    city: "Magnolia",
+    state: "WA",
+    loan: {
+      stage: "annual_review",
+      status: "funded",
+      purpose: "purchase",
+      program: "Conventional",
+      amount: 812_000,
+      loanNumber: "LF-23107",
+      fundedDaysAgo: 358,
+      daysSinceActivity: 96,
+      propertyCity: "Magnolia",
+    },
+  },
+  {
+    key: "ito",
+    firstName: "Kenji",
+    lastName: "Ito",
+    email: "kenji.ito@example.com",
+    phone: "(425) 555-0159",
+    language: "en",
+    city: "Kirkland",
+    state: "WA",
+    loan: {
+      stage: "refinance_opportunity",
+      status: "funded",
+      purpose: "refinance",
+      program: "Conventional",
+      amount: 553_000,
+      loanNumber: "LF-22884",
+      fundedDaysAgo: 690,
+      daysSinceActivity: 130,
+      propertyCity: "Kirkland",
+    },
+  },
+  {
+    key: "adeyemi",
+    firstName: "Folake",
+    lastName: "Adeyemi",
+    email: "folake.adeyemi@example.com",
+    phone: "(253) 555-0177",
+    language: "en",
+    city: "Puyallup",
+    state: "WA",
+    loan: {
+      stage: "referral_retention",
+      status: "funded",
+      purpose: "purchase",
+      program: "Conventional",
+      amount: 472_000,
+      loanNumber: "LF-23566",
+      fundedDaysAgo: 195,
+      daysSinceActivity: 62,
+      propertyCity: "Puyallup",
+    },
+  },
+
+  // --- A lost file: the pipeline must show reality, not only wins ----------
+  {
+    key: "carver",
+    firstName: "Nate",
+    lastName: "Carver",
+    email: "nate.carver@example.com",
+    phone: "(206) 555-0198",
+    language: "en",
+    city: "Seattle",
+    state: "WA",
+    loan: {
+      stage: "consultation_completed",
+      status: "lost",
+      purpose: "purchase",
+      program: "Conventional",
+      amount: null,
+      daysSinceActivity: 21,
+    },
+  },
+
+  // --- Contacts with no opportunity ---------------------------------------
+  {
+    key: "reyes",
+    firstName: "Sofia",
+    lastName: "Reyes",
+    email: "sofia.reyes@example.com",
+    phone: "(206) 555-0113",
+    language: "en",
+    city: "Seattle",
+    state: "WA",
+    tags: ["sphere", "past client referral source"],
+    loan: null,
+  },
+  {
+    key: "bui",
+    firstName: "Tuấn",
+    lastName: "Bùi",
+    email: "tuan.bui@example.com",
+    phone: "(425) 555-0126",
+    language: "vi",
+    city: "Bellevue",
+    state: "WA",
+    tags: ["sphere"],
+    loan: null,
+  },
+];
+
+export type SeedTask = {
+  title: string;
+  detail?: string;
+  personKey: string;
+  /** Negative = overdue. */
+  dueInDays: number;
+  priority?: "low" | "normal" | "high";
+  done?: boolean;
+};
+
+export const TASKS: SeedTask[] = [
+  {
+    title: "Order VOE for Quang Lê",
+    detail: "Employer changed payroll providers — request through the new portal.",
+    personKey: "le",
+    dueInDays: -2,
+    priority: "high",
+  },
+  {
+    title: "Send Thanh the closing appointment details",
+    detail: "Confirm signing location and what to bring.",
+    personKey: "nguyen",
+    dueInDays: -1,
+    priority: "high",
+  },
+  {
+    title: "Call Bích about the bank statements",
+    detail: "Two months still outstanding; she asked to be called after 5pm.",
+    personKey: "tran",
+    dueInDays: 0,
+    priority: "normal",
+  },
+  {
+    title: "Review Denise's letter of explanation",
+    personKey: "brooks",
+    dueInDays: 1,
+  },
+  {
+    title: "Follow up with Diego on the house search",
+    detail: "Preapproved 5 weeks ago; check whether he's still actively looking.",
+    personKey: "alvarez",
+    dueInDays: 2,
+  },
+  {
+    title: "Congratulate Erin and ask for a review",
+    personKey: "gallagher",
+    dueInDays: 3,
+    priority: "low",
+  },
+  {
+    title: "Send Wei the jumbo program comparison",
+    personKey: "chen",
+    dueInDays: -4,
+  },
+  {
+    title: "Confirm appraisal delivery for Hạnh",
+    personKey: "vu",
+    dueInDays: 4,
+    done: true,
+  },
+];
+
+export type SeedAppointment = {
+  title: string;
+  kind: "consultation" | "call" | "closing";
+  personKey: string;
+  /** Hours from the start of today. */
+  atHour: number;
+  minutes?: number;
+  location?: string;
+};
+
+export const APPOINTMENTS: SeedAppointment[] = [
+  {
+    title: "Consultation — first-time buyer",
+    kind: "consultation",
+    personKey: "hoang",
+    atHour: 14,
+    location: "Zoom",
+  },
+  {
+    title: "Check-in call about the house search",
+    kind: "call",
+    personKey: "alvarez",
+    atHour: 16,
+    minutes: 30,
+  },
+  {
+    title: "Closing — Rodriguez",
+    kind: "closing",
+    personKey: "rodriguez",
+    atHour: 10,
+    location: "Chicago Title, Kent",
+  },
+];
+
+export type SeedNote = {
+  personKey: string;
+  body: string;
+  daysAgo: number;
+};
+
+export const NOTES: SeedNote[] = [
+  {
+    personKey: "nguyen",
+    body: "Thanh called about the lock. Explained it expires Friday and we're clear to close — he's comfortable, but wants the signing before his shift starts. Confirm the 8am slot.",
+    daysAgo: 3,
+  },
+  {
+    personKey: "tran",
+    body: "Bích is self-employed (nail salon, 6 years). Bank statement program is the right fit. She prefers Vietnamese for anything written.",
+    daysAgo: 12,
+  },
+  {
+    personKey: "le",
+    body: "VA refi. Quang's employer switched payroll providers, so the VOE bounced. Needs a fresh request.",
+    daysAgo: 6,
+  },
+  {
+    personKey: "kim",
+    body: "Referred by Jenna Alvarez at Windermere. Grace is pre-shopping, not urgent — wants to understand what she'd qualify for before touring.",
+    daysAgo: 2,
+  },
+  {
+    personKey: "alvarez",
+    body: "Preapproved at $430K FHA. Looking in Burien and White Center. Hasn't sent an offer yet.",
+    daysAgo: 9,
+  },
+  {
+    personKey: "gallagher",
+    body: "Funded. Erin mentioned her sister is buying next spring — worth a note in the spring.",
+    daysAgo: 4,
+  },
+  {
+    personKey: "whitmore",
+    body: "Closed last July. Rate 6.875%. Worth an annual review call.",
+    daysAgo: 96,
+  },
+];

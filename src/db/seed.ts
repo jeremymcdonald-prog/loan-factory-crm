@@ -4,7 +4,7 @@
  * Fake but mortgage-real: names, programs, stages, and dates that behave like a
  * working broker shop so Today, Pipeline, and the approval queue have something
  * true to say. Data-safety rule from QA_Plan: fixtures only, no real borrowers.
- * Idempotent — safe to re-run; it truncates the tenant's data first.
+ * Idempotent — safe to re-run; it clears the tenant's data first.
  */
 import { config } from "dotenv";
 import { Pool } from "pg";
@@ -12,6 +12,8 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { sql } from "drizzle-orm";
 import * as schema from "./schema";
 import { hashPassword } from "../lib/password";
+import { PEOPLE, TASKS, APPOINTMENTS, NOTES } from "./seed-data";
+import { STAGES, phaseOf } from "../lib/stages";
 
 config({ path: ".env.local" });
 
@@ -29,9 +31,7 @@ const U = {
 const TEAM_ID = "2b000000-0000-4000-8000-000000000001";
 
 function daysFromNow(n: number): Date {
-  const d = new Date();
-  d.setDate(d.getDate() + n);
-  return d;
+  return new Date(Date.now() + n * 86_400_000);
 }
 
 function hoursFromNow(n: number): Date {
@@ -40,6 +40,12 @@ function hoursFromNow(n: number): Date {
 
 function isoDate(d: Date): string {
   return d.toISOString().slice(0, 10);
+}
+
+function atHourToday(hour: number, minutes = 0): Date {
+  const d = new Date();
+  d.setHours(hour, minutes, 0, 0);
+  return d;
 }
 
 async function main() {
@@ -54,17 +60,21 @@ async function main() {
   // Clean slate for this tenant (children first). One statement per call:
   // node-postgres prepares each query, and a prepared statement cannot carry
   // multiple commands.
-  await db.execute(sql`DELETE FROM ai_action_log WHERE tenant_id = ${TENANT_ID}`);
-  await db.execute(sql`DELETE FROM ai_insight WHERE tenant_id = ${TENANT_ID}`);
-  await db.execute(sql`DELETE FROM audit_log WHERE tenant_id = ${TENANT_ID}`);
-  await db.execute(sql`DELETE FROM event WHERE tenant_id = ${TENANT_ID}`);
-  await db.execute(sql`DELETE FROM note WHERE tenant_id = ${TENANT_ID}`);
-  await db.execute(sql`DELETE FROM task WHERE tenant_id = ${TENANT_ID}`);
-  await db.execute(sql`DELETE FROM appointment WHERE tenant_id = ${TENANT_ID}`);
-  await db.execute(sql`DELETE FROM loan_stage_history WHERE tenant_id = ${TENANT_ID}`);
-  await db.execute(sql`DELETE FROM lead WHERE tenant_id = ${TENANT_ID}`);
-  await db.execute(sql`DELETE FROM loan WHERE tenant_id = ${TENANT_ID}`);
-  await db.execute(sql`DELETE FROM person WHERE tenant_id = ${TENANT_ID}`);
+  for (const table of [
+    "ai_action_log",
+    "ai_insight",
+    "audit_log",
+    "event",
+    "note",
+    "task",
+    "appointment",
+    "loan_stage_history",
+    "lead",
+    "loan",
+    "person",
+  ]) {
+    await db.execute(sql`DELETE FROM ${sql.identifier(table)} WHERE tenant_id = ${TENANT_ID}`);
+  }
   await db.execute(sql`UPDATE team SET leader_user_id = NULL WHERE tenant_id = ${TENANT_ID}`);
   await db.execute(sql`DELETE FROM "user" WHERE tenant_id = ${TENANT_ID}`);
   await db.execute(sql`DELETE FROM team WHERE tenant_id = ${TENANT_ID}`);
@@ -159,13 +169,185 @@ async function main() {
     },
   ]);
 
-  await db
-    .update(schema.team)
-    .set({ leaderUserId: U.linh })
-    .where(sql`id = ${TEAM_ID}`);
+  await db.update(schema.team).set({ leaderUserId: U.linh }).where(sql`id = ${TEAM_ID}`);
 
-  console.log(`  tenant: Loan Factory (NMLS 320841)`);
-  console.log(`  users:  5 (lo, lo_assistant, processor, team_leader, admin)`);
+  // --- People, opportunities, leads ----------------------------------------
+  // Locked rule (Data_Model §3.5): capturing a lead creates the person, the
+  // stage-1 loan, and the lead row together. There is one lifecycle state
+  // machine — loan.stage — and `lead` records only how the episode began.
+
+  const personIds = new Map<string, string>();
+  const loanIds = new Map<string, string>();
+
+  for (const p of PEOPLE) {
+    const hasLoan = p.loan !== null;
+    const type = !hasLoan
+      ? "other"
+      : p.loan!.status === "funded"
+        ? "past_client"
+        : STAGES.indexOf(p.loan!.stage) <= 1
+          ? "lead"
+          : "borrower";
+
+    const [person] = await db
+      .insert(schema.person)
+      .values({
+        tenantId: TENANT_ID,
+        firstName: p.firstName,
+        lastName: p.lastName,
+        emails: [{ address: p.email, label: "personal", verified: true }],
+        phones: [{ number: p.phone, label: "mobile", smsCapable: true }],
+        mailingAddress: { city: p.city, state: p.state },
+        preferredLanguage: p.language,
+        type: type as "lead" | "borrower" | "past_client" | "other",
+        ownerUserId: U.minh,
+        tags: p.tags ?? null,
+        source: p.loan?.lead ? { channel: p.loan.lead.channel } : undefined,
+      })
+      .returning({ id: schema.person.id });
+
+    personIds.set(p.key, person.id);
+    if (!p.loan) continue;
+
+    const l = p.loan;
+    const lastActivity = daysFromNow(-(l.daysSinceActivity ?? 0));
+    const phase = phaseOf(l.stage);
+    const stalled =
+      (l.daysSinceActivity ?? 0) > (phase === "TRANSACT" ? 3 : 7) && l.status !== "funded";
+
+    const [loanRow] = await db
+      .insert(schema.loan)
+      .values({
+        tenantId: TENANT_ID,
+        personId: person.id,
+        loUserId: U.minh,
+        processorUserId: phase === "TRANSACT" ? U.david : null,
+        stage: l.stage,
+        status: l.status ?? "active",
+        purpose: l.purpose,
+        program: l.program,
+        amount: l.amount ? String(l.amount) : null,
+        loanNumber: l.loanNumber ?? null,
+        lenderName: l.lender ?? null,
+        propertyAddress: l.propertyCity ? { city: l.propertyCity, state: "WA" } : undefined,
+        rateLockExpiresAt:
+          l.lockExpiresInDays !== undefined ? isoDate(daysFromNow(l.lockExpiresInDays)) : null,
+        rateLockDate: l.lockExpiresInDays !== undefined ? isoDate(daysFromNow(-30)) : null,
+        closingDate: l.closingInDays !== undefined ? isoDate(daysFromNow(l.closingInDays)) : null,
+        fundedAt: l.fundedDaysAgo !== undefined ? isoDate(daysFromNow(-l.fundedDaysAgo)) : null,
+        preapprovalAmount: l.preapprovalAmount ? String(l.preapprovalAmount) : null,
+        preapprovalIssuedAt: l.preapprovalAmount ? isoDate(daysFromNow(-20)) : null,
+        preapprovalExpiresAt:
+          l.preapprovalExpiresInDays !== undefined
+            ? isoDate(daysFromNow(l.preapprovalExpiresInDays))
+            : null,
+        disclosuresSentAt: l.stage === "disclosures" ? daysFromNow(-2) : null,
+        ctcIssuedAt: l.stage === "clear_to_close" ? daysFromNow(-1) : null,
+        docsNeeded: Boolean(l.docsNeeded),
+        docsNeededSummary: l.docsNeeded ?? null,
+        docsNeededSince:
+          l.docsNeededDaysAgo !== undefined ? daysFromNow(-l.docsNeededDaysAgo) : null,
+        stalledSince: stalled ? lastActivity : null,
+        lostReason: l.status === "lost" ? "Chose another lender — rate shopped" : null,
+        applicationLink: "https://loanfactory.com/minh/apply",
+        lastActivityAt: lastActivity,
+      })
+      .returning({ id: schema.loan.id });
+
+    loanIds.set(p.key, loanRow.id);
+
+    // Stage history: the path this file walked to reach its current stage.
+    const currentIndex = STAGES.indexOf(l.stage);
+    const totalDays = Math.max(currentIndex * 4, 1);
+    for (let i = 0; i <= currentIndex; i++) {
+      await db.insert(schema.loanStageHistory).values({
+        tenantId: TENANT_ID,
+        loanId: loanRow.id,
+        fromStage: i === 0 ? null : STAGES[i - 1],
+        toStage: STAGES[i],
+        changedByUserId: U.minh,
+        createdAt: daysFromNow(-(totalDays - i * 4)),
+      });
+    }
+
+    if (l.lead) {
+      await db.insert(schema.lead).values({
+        tenantId: TENANT_ID,
+        personId: person.id,
+        loanId: loanRow.id,
+        source: { channel: l.lead.channel, campaign: l.lead.campaign },
+        intent: l.lead.intent,
+        assignedUserId: U.minh,
+        capturedAt: hoursFromNow(-l.lead.capturedHoursAgo),
+        firstResponseAt:
+          l.lead.firstResponseHoursAgo !== null
+            ? hoursFromNow(-l.lead.firstResponseHoursAgo)
+            : null,
+        statedPriceRange: l.lead.priceRange ?? null,
+        statedLocation: `${p.city}, ${p.state}`,
+        statedFicoRange: l.lead.ficoRange ?? null,
+      });
+    }
+  }
+
+  // --- Tasks ---------------------------------------------------------------
+  for (const t of TASKS) {
+    const personId = personIds.get(t.personKey);
+    await db.insert(schema.task).values({
+      tenantId: TENANT_ID,
+      title: t.title,
+      detail: t.detail ?? null,
+      ownerUserId: U.minh,
+      dueAt: daysFromNow(t.dueInDays),
+      status: t.done ? "done" : "open",
+      priority: t.priority ?? "normal",
+      personId: personId ?? null,
+      loanId: loanIds.get(t.personKey) ?? null,
+      completedAt: t.done ? daysFromNow(-1) : null,
+      completedByUserId: t.done ? U.minh : null,
+    });
+  }
+
+  // --- Appointments --------------------------------------------------------
+  for (const a of APPOINTMENTS) {
+    await db.insert(schema.appointment).values({
+      tenantId: TENANT_ID,
+      title: a.title,
+      kind: a.kind,
+      startsAt: atHourToday(a.atHour, a.minutes ?? 0),
+      endsAt: atHourToday(a.atHour + 1, a.minutes ?? 0),
+      location: a.location ?? null,
+      ownerUserId: U.minh,
+      personId: personIds.get(a.personKey) ?? null,
+      loanId: loanIds.get(a.personKey) ?? null,
+    });
+  }
+
+  // --- Notes ---------------------------------------------------------------
+  for (const n of NOTES) {
+    await db.insert(schema.note).values({
+      tenantId: TENANT_ID,
+      body: n.body,
+      authorUserId: U.minh,
+      personId: personIds.get(n.personKey) ?? null,
+      loanId: loanIds.get(n.personKey) ?? null,
+      createdAt: daysFromNow(-n.daysAgo),
+    });
+  }
+
+  const counts = {
+    people: personIds.size,
+    opportunities: loanIds.size,
+    tasks: TASKS.length,
+    appointments: APPOINTMENTS.length,
+    notes: NOTES.length,
+  };
+
+  console.log(`  tenant:        Loan Factory (NMLS 320841)`);
+  console.log(`  users:         5 across 5 roles`);
+  console.log(`  people:        ${counts.people}`);
+  console.log(`  opportunities: ${counts.opportunities} across the 20 stages`);
+  console.log(`  tasks:         ${counts.tasks}   appointments: ${counts.appointments}   notes: ${counts.notes}`);
   console.log("");
   console.log("Sign in with:  minh@loanfactory.com  /  Demo1234!");
 
@@ -176,5 +358,3 @@ main().catch((error) => {
   console.error("Seed failed:", error);
   process.exit(1);
 });
-
-export { TENANT_ID, U as SEED_USERS, TEAM_ID, daysFromNow, hoursFromNow, isoDate };

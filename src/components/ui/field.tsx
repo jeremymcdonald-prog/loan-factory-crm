@@ -3,7 +3,13 @@
  * Labels are always visible (never placeholder-as-label). Errors are specific
  * and state what to do, in plain language.
  */
-import { forwardRef, type InputHTMLAttributes, type SelectHTMLAttributes, type ReactNode } from "react";
+import {
+  forwardRef,
+  type InputHTMLAttributes,
+  type SelectHTMLAttributes,
+  type TextareaHTMLAttributes,
+  type ReactNode,
+} from "react";
 import { cn } from "@/lib/cn";
 
 const CONTROL =
@@ -65,7 +71,7 @@ Select.displayName = "Select";
 
 export const Textarea = forwardRef<
   HTMLTextAreaElement,
-  InputHTMLAttributes<HTMLTextAreaElement>
+  TextareaHTMLAttributes<HTMLTextAreaElement>
 >(({ className, ...props }, ref) => (
   <textarea
     ref={ref}
