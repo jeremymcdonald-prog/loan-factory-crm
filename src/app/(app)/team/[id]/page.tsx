@@ -9,8 +9,10 @@ import {
   memberOpenTasks,
   memberActiveLoans,
   memberActivity,
+  listTeamMembers,
   ACTIVITY_LABELS,
 } from "@/lib/queries/team";
+import { ReassignTask } from "./reassign-task";
 import { ROLE_LABELS, ROLE_DESCRIPTIONS, seesWholeBook, canManageUsers } from "@/lib/roles";
 import { moneyCompact, relativeTime, absoluteTime, initialsOf, phoneNumber } from "@/lib/format";
 import { taskUrgency } from "@/lib/urgency";
@@ -61,12 +63,14 @@ export default async function TeamMemberPage({
       tasks: await memberOpenTasks(db, id),
       loans: await memberActiveLoans(db, id),
       activity: await memberActivity(db, id),
+      // The reassign picker's targets — every active teammate in the tenant.
+      roster: await listTeamMembers(db, null),
     };
   });
 
   if (!data) notFound();
 
-  const { member, workload, tasks, loans, activity } = data;
+  const { member, workload, tasks, loans, activity, roster } = data;
   const now = new Date();
   const firstName = member.fullName.split(/\s+/)[0] ?? member.fullName;
   const isSelf = member.id === user.userId;
@@ -74,6 +78,9 @@ export default async function TeamMemberPage({
   // Hiding the control is not access control — the action re-checks the role.
   // Nobody needs an audited look at their own book, so it's self-excluded too.
   const canViewAs = seesWholeBook(user.role) && !isSelf;
+  // Reassignment is a leader's balancing tool — allowed on anyone's tasks,
+  // including their own (moving your own work to a teammate is legitimate).
+  const canActFor = seesWholeBook(user.role);
 
   const wholeBook = seesWholeBook(member.role);
   const managesUsers = canManageUsers(member.role);
@@ -321,6 +328,12 @@ export default async function TeamMemberPage({
                   {workload.overdueTasks} overdue
                 </p>
               ) : null}
+              {workload && workload.pendingApprovals > 0 ? (
+                <p className="mt-0.5 text-small text-ai tnum">
+                  {workload.pendingApprovals} AI draft
+                  {workload.pendingApprovals === 1 ? "" : "s"} awaiting their approval
+                </p>
+              ) : null}
             </div>
 
             <div className="p-4">
@@ -361,6 +374,16 @@ export default async function TeamMemberPage({
                               >
                                 {t.personFirstName} {t.personLastName}
                               </Link>
+                            ) : null}
+                            {canActFor ? (
+                              <ReassignTask
+                                taskId={t.id}
+                                currentOwnerId={member.id}
+                                targets={roster.map((r) => ({
+                                  id: r.id,
+                                  fullName: r.fullName,
+                                }))}
+                              />
                             ) : null}
                           </span>
                         </span>

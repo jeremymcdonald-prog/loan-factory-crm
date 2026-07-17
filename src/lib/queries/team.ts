@@ -20,7 +20,7 @@
 import "server-only";
 import { and, asc, desc, eq, inArray, isNotNull, isNull, or, sql, type SQLWrapper } from "drizzle-orm";
 import type { Db } from "@/db";
-import { user, team, task, loan, lead, event, person } from "@/db/schema";
+import { user, team, task, loan, lead, event, person, aiInsight } from "@/db/schema";
 import type { CurrentUser } from "@/lib/auth";
 import type { Stage } from "@/lib/stages";
 
@@ -89,8 +89,16 @@ function workloadColumns() {
   const openTask = ownsOpenTask(user.id);
   const overdueTask = and(openTask, sql`${task.dueAt} < now()`);
   const answered = answeredLead(user.id);
+  const pendingApproval = and(
+    eq(aiInsight.forUserId, user.id),
+    eq(aiInsight.status, "pending"),
+  );
 
   return {
+    /** AI drafts waiting on this person — the leader's review-queue lens. */
+    pendingApprovals: sql<number>`(
+      SELECT count(*)::int FROM ${aiInsight} WHERE ${pendingApproval}
+    )`,
     openTasks: sql<number>`(
       SELECT count(*)::int FROM ${task} WHERE ${openTask}
     )`,
@@ -165,6 +173,7 @@ export type TeamMemberRow = {
   nmlsId: string | null;
   language: string;
   lastLoginAt: Date | null;
+  pendingApprovals: number;
   openTasks: number;
   overdueTasks: number;
   activeFiles: number;
@@ -311,7 +320,7 @@ export async function getMemberWorkload(
   memberId: string,
 ): Promise<Pick<
   TeamMemberRow,
-  "openTasks" | "overdueTasks" | "activeFiles" | "activeVolume" | "leadsAnswered" | "medianResponseSeconds"
+  "pendingApprovals" | "openTasks" | "overdueTasks" | "activeFiles" | "activeVolume" | "leadsAnswered" | "medianResponseSeconds"
 > | null> {
   const [row] = await db
     .select(workloadColumns())

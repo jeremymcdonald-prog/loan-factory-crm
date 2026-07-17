@@ -21,11 +21,13 @@ export function TopBar({
   email,
   role,
   tenantName,
+  demoMode = false,
 }: {
   fullName: string;
   email: string;
   role: string;
   tenantName: string;
+  demoMode?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -70,6 +72,16 @@ export function TopBar({
           />
         </div>
       </div>
+
+      {demoMode ? (
+        <span
+          title="This build is populated with sample data for demonstration. It is not connected to live systems."
+          className="hidden shrink-0 items-center gap-1.5 rounded-full border border-warning-border bg-warning-bg px-2.5 py-1 text-label font-semibold text-warning sm:inline-flex"
+        >
+          <span aria-hidden className="size-1.5 rounded-full bg-warning" />
+          Demo Mode — sample data
+        </span>
+      ) : null}
 
       <div className="relative pl-1" ref={ref}>
         <button

@@ -226,6 +226,11 @@ export default async function TeamPage() {
                           {member.overdueTasks} overdue
                         </span>
                       ) : null}
+                      {member.pendingApprovals > 0 ? (
+                        <span className="block text-small text-ai tnum">
+                          {member.pendingApprovals} to approve
+                        </span>
+                      ) : null}
                     </td>
 
                     <td

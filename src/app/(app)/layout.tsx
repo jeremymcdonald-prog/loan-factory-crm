@@ -15,9 +15,9 @@ export default async function AppLayout({
 }) {
   const user = await requireUser();
 
-  const { tenantName, approvalCount } = await queryAs(user, async (db) => {
+  const { tenantName, approvalCount, demoMode } = await queryAs(user, async (db) => {
     const [org] = await db
-      .select({ name: tenant.name })
+      .select({ name: tenant.name, settings: tenant.settings })
       .from(tenant)
       .where(eq(tenant.id, user.tenantId))
       .limit(1);
@@ -30,6 +30,9 @@ export default async function AppLayout({
     return {
       tenantName: org?.name ?? "Loan Factory",
       approvalCount: pending?.value ?? 0,
+      // The committee build flags itself in data, so the indicator can never
+      // ship to a real tenant by accident — it exists only where seeded.
+      demoMode: Boolean((org?.settings as Record<string, unknown>)?.demoMode),
     };
   });
 
@@ -45,6 +48,7 @@ export default async function AppLayout({
           email={user.email}
           role={user.role}
           tenantName={tenantName}
+          demoMode={demoMode}
         />
         <main className="flex-1 overflow-y-auto pb-14 lg:pb-0">{children}</main>
       </div>

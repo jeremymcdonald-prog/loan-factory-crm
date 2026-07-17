@@ -184,6 +184,20 @@ function MessageBubble({
 
         <p className="mt-1.5 whitespace-pre-wrap text-body text-primary">{m.body}</p>
 
+        {typeof m.meta?.translationEn === "string" ? (
+          <details className="mt-2 rounded-control border border-subtle bg-sunken/60 px-2.5 py-1.5">
+            <summary className="cursor-pointer list-none text-label font-semibold text-secondary">
+              English translation
+            </summary>
+            <p className="mt-1 whitespace-pre-wrap text-small text-secondary">
+              {m.meta.translationEn}
+            </p>
+            <p className="mt-1 text-micro text-muted">
+              Generated for your reference — not a reviewed legal translation.
+            </p>
+          </details>
+        ) : null}
+
         {m.preparedByAi || note || m.templateRef ? (
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
             {m.preparedByAi ? (

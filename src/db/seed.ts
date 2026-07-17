@@ -21,6 +21,13 @@ import {
   AUTOMATIONS,
 } from "./seed-modules";
 import { parseTemplates } from "./import-templates";
+import {
+  DEMO_LOS,
+  generateDemoBooks,
+  generateDemoPartners,
+  MULTILINGUAL_THREADS,
+  MULTILINGUAL_INSIGHTS,
+} from "./demo-data";
 import { STAGES, phaseOf } from "../lib/stages";
 
 config({ path: ".env.local" });
@@ -105,9 +112,11 @@ async function main() {
     status: "active",
     companyNmls: "320841",
     settings: {
-      defaultLanguages: ["en", "vi"],
+      defaultLanguages: ["en", "vi", "es", "ru"],
       compensation: "lender_paid_only",
       equalHousing: true,
+      // Committee build: every surface labels itself as sample data.
+      demoMode: true,
     },
   });
 
@@ -586,6 +595,437 @@ async function main() {
     });
   }
 
+  // ==========================================================================
+  // DEMO-SCALE DATA — the Loan Officer Committee build. Everything below is
+  // deterministic generated sample data; the branch should feel like it has
+  // been operating for months across a 10-LO team.
+  // ==========================================================================
+
+  // --- The rest of the team (Minh already exists) --------------------------
+  const loIds = new Map<string, string>([["minh", U.minh]]);
+  let loSeq = 10;
+  for (const lo of DEMO_LOS) {
+    if (lo.key === "minh") continue;
+    loSeq += 1;
+    const id = `3c000000-0000-4000-8000-0000000000${loSeq}`;
+    loIds.set(lo.key, id);
+    await db.insert(schema.user).values({
+      id,
+      tenantId: TENANT_ID,
+      authUserId: id,
+      email: lo.email,
+      passwordHash: demoHash,
+      fullName: lo.fullName,
+      phone: `(425) 555-0${loSeq}0`,
+      nmlsId: lo.nmlsId,
+      role: "lo",
+      teamId: TEAM_ID,
+      language: lo.language,
+      status: "active",
+      // Staggered recent sign-ins so the roster looks alive.
+      lastLoginAt: hoursFromNow(-(loSeq * 5 - 40)),
+    });
+  }
+
+  let partnerEmailSeq = 0;
+  function makePartnerEmail(first: string, last: string): string {
+    partnerEmailSeq += 1;
+    const clean = (s: string) =>
+      s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/g, "d");
+    return `${clean(first)}.${clean(last)}${partnerEmailSeq}@example.com`;
+  }
+
+  // --- Generated books: people, opportunities, leads, notes, tasks ---------
+  const books = generateDemoBooks();
+  const generatedPeople = new Map<string, { personId: string; loanId: string | null; language: string; firstName: string; lastName: string; loKey: string; active: boolean }[]>();
+
+  for (const gp of books) {
+    const loUserId = loIds.get(gp.loKey)!;
+
+    const type = !gp.loan
+      ? "other"
+      : gp.loan.status === "funded"
+        ? "past_client"
+        : STAGES.indexOf(gp.loan.stage) <= 1
+          ? "lead"
+          : "borrower";
+
+    const [personRow] = await db
+      .insert(schema.person)
+      .values({
+        tenantId: TENANT_ID,
+        firstName: gp.firstName,
+        lastName: gp.lastName,
+        emails: [{ address: gp.email, label: "personal" }],
+        phones: [{ number: gp.phone, label: "mobile", smsCapable: true }],
+        mailingAddress: { city: gp.city, state: gp.state },
+        preferredLanguage: gp.language,
+        type: type as "lead" | "borrower" | "past_client" | "other",
+        ownerUserId: loUserId,
+        tags: gp.tags,
+        source: gp.loan?.lead ? { channel: gp.loan.lead.channel } : { channel: "manual" },
+      })
+      .returning({ id: schema.person.id });
+
+    let loanId: string | null = null;
+
+    if (gp.loan) {
+      const l = gp.loan;
+      const lastActivity = daysFromNow(-l.daysSinceActivity);
+      const phase = phaseOf(l.stage);
+      const stalled =
+        l.status === "active" && l.daysSinceActivity > (phase === "TRANSACT" ? 3 : 7);
+
+      const [loanRow] = await db
+        .insert(schema.loan)
+        .values({
+          tenantId: TENANT_ID,
+          personId: personRow.id,
+          loUserId,
+          processorUserId: phase === "TRANSACT" ? U.david : null,
+          stage: l.stage,
+          status: l.status,
+          purpose: l.purpose,
+          program: l.program,
+          amount: l.amount ? String(l.amount) : null,
+          propertyAddress: { city: gp.city, state: gp.state },
+          rateLockExpiresAt:
+            l.lockExpiresInDays !== undefined ? isoDate(daysFromNow(l.lockExpiresInDays)) : null,
+          closingDate:
+            l.closingInDays !== undefined ? isoDate(daysFromNow(l.closingInDays)) : null,
+          fundedAt:
+            l.fundedDaysAgo !== undefined ? isoDate(daysFromNow(-l.fundedDaysAgo)) : null,
+          docsNeeded: Boolean(l.docsNeeded),
+          docsNeededSummary: l.docsNeeded ?? null,
+          docsNeededSince: l.docsNeeded ? daysFromNow(-2) : null,
+          stalledSince: stalled ? lastActivity : null,
+          lostReason: l.status === "lost" ? "Went with another lender" : null,
+          lastActivityAt: lastActivity,
+          createdAt: daysFromNow(-(l.fundedDaysAgo ?? l.daysSinceActivity + 30)),
+        })
+        .returning({ id: schema.loan.id });
+      loanId = loanRow.id;
+
+      // A short stage trail so pipeline-movement metrics have history.
+      const stageIdx = STAGES.indexOf(l.stage);
+      const trailStart = Math.max(0, stageIdx - 2);
+      for (let s = trailStart; s <= stageIdx; s++) {
+        await db.insert(schema.loanStageHistory).values({
+          tenantId: TENANT_ID,
+          loanId,
+          fromStage: s === 0 ? null : STAGES[s - 1],
+          toStage: STAGES[s],
+          changedByUserId: loUserId,
+          createdAt: daysFromNow(-(l.daysSinceActivity + (stageIdx - s) * 6)),
+        });
+      }
+
+      if (l.lead) {
+        await db.insert(schema.lead).values({
+          tenantId: TENANT_ID,
+          personId: personRow.id,
+          loanId,
+          source: { channel: l.lead.channel },
+          intent: l.purpose === "refinance" ? "refinance" : "purchase",
+          assignedUserId: loUserId,
+          capturedAt: hoursFromNow(-l.lead.capturedHoursAgo),
+          firstResponseAt:
+            l.lead.firstResponseMinutes !== null
+              ? hoursFromNow(-l.lead.capturedHoursAgo + l.lead.firstResponseMinutes / 60)
+              : null,
+        });
+      }
+
+      // Follow-up tasks: overdue in proportion to the LO's habits.
+      if (l.status === "active" && (l.docsNeeded || l.daysSinceActivity > 2)) {
+        const overdue = l.daysSinceActivity > 3;
+        await db.insert(schema.task).values({
+          tenantId: TENANT_ID,
+          title: l.docsNeeded
+            ? `Chase ${l.docsNeeded} — ${gp.firstName} ${gp.lastName}`
+            : `Follow up with ${gp.firstName} ${gp.lastName}`,
+          ownerUserId: loUserId,
+          dueAt: overdue ? daysFromNow(-Math.min(l.daysSinceActivity - 1, 6)) : daysFromNow(1),
+          status: "open",
+          priority: overdue ? "high" : "normal",
+          personId: personRow.id,
+          loanId,
+        });
+      }
+
+      // Activity events power the team feed and audit history.
+      await db.insert(schema.event).values({
+        tenantId: TENANT_ID,
+        kind: l.status === "funded" ? "loan.stage_advanced" : "touch.logged",
+        personId: personRow.id,
+        loanId,
+        actorUserId: loUserId,
+        payload: {},
+        createdAt: daysFromNow(-Math.min(l.daysSinceActivity, 28)),
+      });
+    }
+
+    for (const noteText of gp.notes) {
+      await db.insert(schema.note).values({
+        tenantId: TENANT_ID,
+        body: noteText,
+        authorUserId: loUserId,
+        personId: personRow.id,
+        loanId,
+        createdAt: daysFromNow(-(gp.loan?.daysSinceActivity ?? 10) - 1),
+      });
+    }
+
+    const list = generatedPeople.get(gp.loKey) ?? [];
+    list.push({
+      personId: personRow.id,
+      loanId,
+      language: gp.language,
+      firstName: gp.firstName,
+      lastName: gp.lastName,
+      loKey: gp.loKey,
+      active: gp.loan?.status === "active",
+    });
+    generatedPeople.set(gp.loKey, list);
+  }
+
+  // Appointments this week across the team.
+  for (const lo of DEMO_LOS) {
+    const book = generatedPeople.get(lo.key) ?? [];
+    const actives = book.filter((p) => p.active).slice(0, 2);
+    let hour = 9 + (loIds.size % 3);
+    for (const p of actives) {
+      await db.insert(schema.appointment).values({
+        tenantId: TENANT_ID,
+        title: `Consultation — ${p.firstName} ${p.lastName}`,
+        kind: "consultation",
+        startsAt: atHourToday(hour, 0),
+        endsAt: atHourToday(hour + 1, 0),
+        ownerUserId: loIds.get(lo.key)!,
+        personId: p.personId,
+        loanId: p.loanId,
+      });
+      hour += 2;
+    }
+  }
+
+  // Audit history: sign-ins over the past week so the log looks lived-in.
+  for (const [, userId] of loIds) {
+    for (let d = 1; d <= 5; d++) {
+      await db.insert(schema.auditLog).values({
+        tenantId: TENANT_ID,
+        actorUserId: userId,
+        action: "user.login",
+        entity: "user",
+        entityId: userId,
+        createdAt: daysFromNow(-d),
+      });
+    }
+  }
+
+  // --- Generated partners, linked to each LO's real people ------------------
+  const genPartners = generateDemoPartners();
+  for (const gp of genPartners) {
+    const [partnerRow] = await db
+      .insert(schema.partner)
+      .values({
+        tenantId: TENANT_ID,
+        firstName: gp.firstName,
+        lastName: gp.lastName,
+        company: gp.company,
+        kind: gp.kind,
+        tier: gp.tier,
+        emails: [{ address: makePartnerEmail(gp.firstName, gp.lastName), label: "work" }],
+        phones: [{ number: "(425) 555-0300", label: "mobile", smsCapable: true }],
+        preferredLanguage: gp.language,
+        ownerUserId: loIds.get(gp.loKey)!,
+        lastTouchAt: daysFromNow(-gp.lastTouchDaysAgo),
+        notesSummary: gp.notesSummary,
+      })
+      .returning({ id: schema.partner.id });
+
+    const book = (generatedPeople.get(gp.loKey) ?? []).filter((p) => p.loanId);
+    for (const referred of book.slice(0, Math.min(2, book.length))) {
+      await db.insert(schema.partnerRelationship).values({
+        tenantId: TENANT_ID,
+        partnerId: partnerRow.id,
+        personId: referred.personId,
+        loanId: referred.loanId,
+        role: "referred",
+      });
+    }
+  }
+
+  // --- Multilingual conversations with English translations -----------------
+  for (const thread of MULTILINGUAL_THREADS) {
+    const book = generatedPeople.get(thread.loKey) ?? [];
+    const match = book.find((p) => p.language === thread.personLanguage) ?? book[0];
+    if (!match) continue;
+
+    const newest = Math.min(...thread.messages.map((m) => m.hoursAgo));
+    const last = thread.messages.reduce((a, b) => (a.hoursAgo < b.hoursAgo ? a : b));
+
+    const [conv] = await db
+      .insert(schema.conversation)
+      .values({
+        tenantId: TENANT_ID,
+        subject: thread.subject,
+        channel: thread.channel,
+        personId: match.personId,
+        loanId: match.loanId,
+        ownerUserId: loIds.get(thread.loKey)!,
+        lastMessageAt: hoursFromNow(-newest),
+        awaitingReply: last.direction === "inbound",
+      })
+      .returning({ id: schema.conversation.id });
+
+    for (const m of thread.messages) {
+      await db.insert(schema.message).values({
+        tenantId: TENANT_ID,
+        conversationId: conv.id,
+        channel: thread.channel,
+        direction: m.direction,
+        status: m.direction === "inbound" ? "received" : "sent",
+        subject: thread.subject,
+        body: m.body,
+        preparedByAi: m.preparedByAi ?? false,
+        languageCode: thread.personLanguage,
+        authorUserId: m.direction === "outbound" ? loIds.get(thread.loKey)! : null,
+        sentAt: m.direction === "outbound" ? hoursFromNow(-m.hoursAgo) : null,
+        occurredAt: hoursFromNow(-m.hoursAgo),
+        // Demo translation for the loan officer — generated, not reviewed.
+        meta: m.translationEn ? { translationEn: m.translationEn } : {},
+      });
+    }
+  }
+
+  // --- Multilingual AI drafts pending approval ------------------------------
+  for (const ins of MULTILINGUAL_INSIGHTS) {
+    const book = generatedPeople.get(ins.loKey) ?? [];
+    const match = book.find((p) => p.language === ins.language) ?? book[0];
+    if (!match) continue;
+
+    const [row] = await db
+      .insert(schema.aiInsight)
+      .values({
+        tenantId: TENANT_ID,
+        kind: "draft_email",
+        status: "pending",
+        tier: "t2",
+        forUserId: loIds.get(ins.loKey)!,
+        personId: match.personId,
+        loanId: match.loanId,
+        title: ins.title,
+        body: ins.body,
+        rationale: ins.rationale,
+        factors: ins.factors,
+        languageCode: ins.language,
+      })
+      .returning({ id: schema.aiInsight.id });
+
+    await db.insert(schema.aiActionLog).values({
+      tenantId: TENANT_ID,
+      insightId: row.id,
+      action: "insight.generated",
+      model: "mock-router-v1",
+      promptVersion: "demo-seed",
+      detail: { language: ins.language },
+    });
+  }
+
+  // --- Additional campaigns, including multilingual ones --------------------
+  const extraCampaigns = [
+    { name: "Boletín mensual — clientes hispanohablantes", status: "running" as const, ownerKey: "carlos", audience: "Spanish-speaking past clients and leads", size: 31, sent: 31, open: 19, reply: 5 },
+    { name: "Bản tin quý — khách hàng người Việt", status: "finished" as const, ownerKey: "thuy", audience: "Vietnamese-speaking clients", size: 24, sent: 24, open: 17, reply: 6 },
+    { name: "Ежеквартальная рассылка — русскоязычные клиенты", status: "scheduled" as const, ownerKey: "elena", audience: "Russian-speaking clients", size: 18, sent: 0, open: 0, reply: 0 },
+    { name: "Spring open-house partner push", status: "finished" as const, ownerKey: "priya", audience: "All referral partners", size: 22, sent: 22, open: 15, reply: 4 },
+  ];
+  for (const c of extraCampaigns) {
+    await db.insert(schema.campaign).values({
+      tenantId: TENANT_ID,
+      name: c.name,
+      status: c.status,
+      audience: { label: c.audience, type: "custom_demo" },
+      audienceSize: c.size,
+      scheduledFor: c.status === "scheduled" ? daysFromNow(3) : null,
+      ownerUserId: loIds.get(c.ownerKey)!,
+      sentCount: c.sent,
+      openCount: c.open,
+      replyCount: c.reply,
+    });
+  }
+
+  // --- Video-message demo drafts (composer examples) ------------------------
+  const videoDrafts = [
+    {
+      ownerKey: "linh",
+      subject: "July market update — video newsletter",
+      language: "en" as const,
+      intro:
+        "Hi everyone,\n\nI recorded a short update on what we're seeing this month — inventory, buyer activity, and what it means if you're waiting to make a move.",
+      video: { title: "July market update", caption: "3-minute update from Linh", durationSeconds: 184 },
+    },
+    {
+      ownerKey: "carlos",
+      subject: "Un mensaje rápido sobre sus documentos",
+      language: "es" as const,
+      intro:
+        "Hola María,\n\nLe grabé un video corto explicando exactamente qué documentos faltan y cómo enviarlos desde su teléfono — a veces es más fácil verlo que leerlo.",
+      video: { title: "Cómo enviar sus documentos", caption: "Video de 2 minutos", durationSeconds: 127 },
+    },
+    {
+      ownerKey: "thuy",
+      subject: "Cảm ơn anh đã giới thiệu khách hàng",
+      language: "vi" as const,
+      intro:
+        "Chào anh,\n\nEm gửi một video ngắn cảm ơn anh đã tin tưởng giới thiệu khách. Em cũng chia sẻ nhanh tình hình hồ sơ để anh tiện theo dõi.",
+      video: { title: "Cảm ơn đối tác", caption: "Video 90 giây", durationSeconds: 92 },
+    },
+    {
+      ownerKey: "elena",
+      subject: "Год после покупки — короткое видео для вас",
+      language: "ru" as const,
+      intro:
+        "Здравствуйте, Виктор!\n\nЗаписала для вас короткое видео: год после покупки — хороший момент посмотреть, всё ли работает на вас. Три минуты, без обязательств.",
+      video: { title: "Годовой обзор", caption: "Видео 3 минуты", durationSeconds: 178 },
+    },
+  ];
+
+  const leaderId = U.linh;
+  for (const d of videoDrafts) {
+    const ownerId = d.ownerKey === "linh" ? leaderId : loIds.get(d.ownerKey)!;
+    const book = generatedPeople.get(d.ownerKey === "linh" ? "minh" : d.ownerKey) ?? [];
+    const match = book.find((p) => p.language === d.language) ?? book[0];
+
+    const [conv] = await db
+      .insert(schema.conversation)
+      .values({
+        tenantId: TENANT_ID,
+        subject: d.subject,
+        channel: "email",
+        personId: match?.personId ?? null,
+        ownerUserId: ownerId,
+        lastMessageAt: daysFromNow(0),
+        awaitingReply: false,
+      })
+      .returning({ id: schema.conversation.id });
+
+    await db.insert(schema.message).values({
+      tenantId: TENANT_ID,
+      conversationId: conv.id,
+      channel: "email",
+      direction: "outbound",
+      status: "draft",
+      subject: d.subject,
+      body: `${d.intro}\n\n[Video: ${d.video.title}]\n\nIf the video doesn't load, use this link instead.`,
+      preparedByAi: false,
+      languageCode: d.language,
+      authorUserId: ownerId,
+      occurredAt: daysFromNow(0),
+      meta: { video: { ...d.video, demo: true } },
+    });
+  }
+
   const policyCounts = parsed.reduce<Record<string, number>>((acc, t) => {
     acc[t.policy] = (acc[t.policy] ?? 0) + 1;
     return acc;
@@ -609,8 +1049,31 @@ async function main() {
       `${policyCounts.manual_only ?? 0} manual only, ` +
       `${policyCounts.never_automate ?? 0} never automate)`,
   );
+  const totalPeople = await db.execute(
+    sql`SELECT count(*)::int AS n FROM person WHERE tenant_id = ${TENANT_ID}`,
+  );
+  const totalLoans = await db.execute(
+    sql`SELECT count(*)::int AS total,
+               count(*) FILTER (WHERE status = 'active')::int AS active,
+               count(*) FILTER (WHERE status = 'funded')::int AS funded
+          FROM loan WHERE tenant_id = ${TENANT_ID}`,
+  );
+  const langMix = await db.execute(
+    sql`SELECT preferred_language, count(*)::int AS n FROM person
+         WHERE tenant_id = ${TENANT_ID} GROUP BY 1 ORDER BY 2 DESC`,
+  );
+
   console.log("");
-  console.log("Sign in with:  minh@loanfactory.com  /  Demo1234!");
+  console.log("DEMO BUILD (Loan Officer Committee — sample data only)");
+  console.log(`  people total:  ${(totalPeople.rows[0] as { n: number }).n}`);
+  const lt = totalLoans.rows[0] as { total: number; active: number; funded: number };
+  console.log(`  opportunities: ${lt.total} (${lt.active} active, ${lt.funded} funded)`);
+  console.log(
+    `  languages:     ${langMix.rows.map((r) => `${(r as { preferred_language: string }).preferred_language}:${(r as { n: number }).n}`).join("  ")}`,
+  );
+  console.log("");
+  console.log("Sign in as the TEAM LEADER:  linh@loanfactory.com  /  Demo1234!");
+  console.log("(Individual LOs: minh@, carlos@, priya@, tom@, elena@, marcus@, thuy@, rebecca@, diego@, grace.k@ — same password)");
 
   await pool.end();
 }

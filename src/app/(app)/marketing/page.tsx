@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Megaphone, LibraryBig, CheckCircle2, ArrowRight } from "lucide-react";
+import { Megaphone, LibraryBig, CheckCircle2, ArrowRight, Video } from "lucide-react";
 import { requireUser, queryAs } from "@/lib/auth";
 import {
   listCampaigns,
@@ -87,11 +87,21 @@ export default async function MarketingPage({
           </Link>
         }
         action={
-          <NewCampaignButton
-            templates={templates}
-            audiences={audiences}
-            companyNmls={nmls}
-          />
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Secondary: the one primary on this screen stays "New campaign". */}
+            <Link
+              href="/marketing/compose"
+              className="inline-flex h-9 items-center justify-center gap-2 whitespace-nowrap rounded-control border border-strong bg-surface px-3.5 text-body font-semibold text-primary shadow-e1 transition-colors hover:bg-sunken"
+            >
+              <Video className="size-4" aria-hidden />
+              New video message
+            </Link>
+            <NewCampaignButton
+              templates={templates}
+              audiences={audiences}
+              companyNmls={nmls}
+            />
+          </div>
         }
       />
 
