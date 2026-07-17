@@ -1,151 +1,178 @@
 @import "tailwindcss";
 
 /*
-  Design tokens — Design_System.md §4-§6.
-  Semantic names only. Never use a raw hex in component code.
-  Light is :root; dark is the flagship theme and applies via system preference
-  or an explicit data-theme override. The sidebar stays graphite in both themes.
+  Loan Factory design tokens.
+
+  Brand extracted from the original Loan Factory interface: warm white
+  surfaces, soft beige canvas, Loan Factory orange for action, charcoal text.
+  Semantic names only — never a raw hex in component code.
+
+  Accessibility note, and why the orange is two values: white on the brand
+  orange #E0603A measures 3.56:1, which fails WCAG AA for text. So:
+    --action-primary  #C24E2C  (brand's own deeper orange) carries TEXT — 4.75:1
+    --brand-orange    #E0603A  carries NON-TEXT accents only (active nav rail,
+                               focus ring, indicators) where the 3:1 bar applies.
+  Status values are the brand's own green/amber, darkened the minimum needed to
+  clear 4.5:1 on both the canvas and their own tints.
 */
 
 :root {
-  /* Neutrals — light (§4.2) */
-  --canvas: #f6f7f9;
+  /* Neutrals — warm white surfaces on a soft beige canvas */
+  --canvas: #f6f1ea;
   --surface: #ffffff;
   --raised: #ffffff;
-  --sunken: #eff1f4;
-  --sidebar: #0f1319;
-  --border-subtle: #e4e7ec;
-  --border-strong: #c9cfd9;
-  --text-primary: #171c24;
-  --text-secondary: #48505e;
-  --text-muted: #66707f;
-  --text-disabled: #9aa3b0;
+  --sunken: #f0e9e0;
+  --sidebar: #241e1a;
+  --border-subtle: #ebe3da;
+  --border-strong: #d9cec1;
+  --text-primary: #241e1a; /* 16.5:1 */
+  --text-secondary: #6b5a48; /* 6.6:1 */
+  --text-muted: #756a5f; /* 4.7:1 on canvas */
+  --text-disabled: #b3a99e; /* disabled only — never readable content */
 
-  /* Action + Ally identity (§4.3) — violet belongs to Ally alone */
-  --action-primary: #1d4ed8;
-  --action-primary-hover: #1e40af;
+  /* Action — Loan Factory orange */
+  --action-primary: #c24e2c;
+  --action-primary-hover: #a8401f;
   --action-primary-fg: #ffffff;
-  --ally-fg: #6d28d9;
-  --ally-bg: #f3eefd;
-  --ally-border: #d6c9f5;
+  --brand-orange: #e0603a;
 
-  /* Status — tied to loan urgency, never decoration (§4.4) */
+  /* Ally — the brand's own purple. Violet belongs to Ally alone. */
+  --ally-fg: #7a5a86;
+  --ally-bg: #f1eaf3;
+  --ally-border: #ddcfe2;
+
+  /* Status — green, amber, red only, tied to urgency */
   --critical-fg: #b42318;
-  --critical-bg: #fdebe9;
-  --warning-fg: #9a6700;
-  --warning-bg: #fbf1de;
-  --healthy-fg: #16794c;
-  --healthy-bg: #e7f6ee;
-  --info-fg: #175cd3;
-  --info-bg: #e8f0fd;
-  --neutral-fg: #66707f;
-  --neutral-bg: #eff1f4;
+  --critical-bg: #f7e7e1;
+  --warning-fg: #8a6015;
+  --warning-bg: #f7efdc;
+  --healthy-fg: #386e4d;
+  --healthy-bg: #e7f0ea;
+  --info-fg: #6b5a48;
+  --info-bg: #f0e9e0;
+  --neutral-fg: #756a5f;
+  --neutral-bg: #f0e9e0;
 
-  --shadow-1: 0 1px 2px rgb(16 24 40 / 0.06), 0 1px 3px rgb(16 24 40 / 0.1);
-  --shadow-2: 0 4px 8px -2px rgb(16 24 40 / 0.1), 0 2px 4px -2px rgb(16 24 40 / 0.06);
-  --shadow-3: 0 12px 16px -4px rgb(16 24 40 / 0.08), 0 4px 6px -2px rgb(16 24 40 / 0.03);
+  --shadow-1: 0 1px 2px rgb(36 30 26 / 0.06), 0 1px 3px rgb(36 30 26 / 0.08);
+  --shadow-2: 0 4px 8px -2px rgb(36 30 26 / 0.08), 0 2px 4px -2px rgb(36 30 26 / 0.05);
+  --shadow-3: 0 12px 20px -6px rgb(36 30 26 / 0.12), 0 4px 8px -3px rgb(36 30 26 / 0.06);
 }
 
+/*
+  Dark is a warm charcoal variant of the same brand — never blue graphite.
+  On dark, the full-strength brand orange carries charcoal text at 4.6:1.
+*/
 @media (prefers-color-scheme: dark) {
   :root {
-    /* Neutrals — dark, flagship (§4.1) */
-    --canvas: #0b0e14;
-    --surface: #12161f;
-    --raised: #1a2029;
-    --sunken: #080b10;
-    --sidebar: #0a0d12;
-    --border-subtle: #232b37;
-    --border-strong: #364153;
-    --text-primary: #e8edf4;
-    --text-secondary: #a8b3c2;
-    --text-muted: #8593a6;
-    --text-disabled: #5a6675;
+    --canvas: #1a1512;
+    --surface: #241e1a;
+    --raised: #2e2723;
+    --sunken: #14100e;
+    --sidebar: #14100e;
+    --border-subtle: #3a302a;
+    --border-strong: #4a3f37;
+    --text-primary: #f6f1ea;
+    --text-secondary: #c9bdb0;
+    --text-muted: #9c9187;
+    --text-disabled: #6b6058;
 
-    --action-primary: #4d8dff;
-    --action-primary-hover: #6aa1ff;
-    --action-primary-fg: #0a1428;
-    --ally-fg: #a78bfa;
-    --ally-bg: #221a33;
-    --ally-border: #3d3159;
+    --action-primary: #e0603a;
+    --action-primary-hover: #ef7551;
+    --action-primary-fg: #241e1a;
+    --brand-orange: #e0603a;
 
-    --critical-fg: #f0716a;
-    --critical-bg: #2c1414;
-    --warning-fg: #e8a33d;
-    --warning-bg: #2a2210;
-    --healthy-fg: #4cc38a;
-    --healthy-bg: #0f2a1d;
-    --info-fg: #7db1ff;
-    --info-bg: #10203a;
-    --neutral-fg: #8593a6;
-    --neutral-bg: #1a2029;
+    --ally-fg: #c4a5cf;
+    --ally-bg: #2b1f30;
+    --ally-border: #46374d;
+
+    --critical-fg: #f0857a;
+    --critical-bg: #351915;
+    --warning-fg: #dda63f;
+    --warning-bg: #302512;
+    --healthy-fg: #63bb87;
+    --healthy-bg: #142a1e;
+    --info-fg: #c9bdb0;
+    --info-bg: #2e2723;
+    --neutral-fg: #9c9187;
+    --neutral-bg: #2e2723;
 
     --shadow-1: 0 1px 2px rgb(0 0 0 / 0.4);
     --shadow-2: 0 4px 8px -2px rgb(0 0 0 / 0.5);
-    --shadow-3: 0 12px 16px -4px rgb(0 0 0 / 0.55);
+    --shadow-3: 0 12px 20px -6px rgb(0 0 0 / 0.55);
   }
 }
 
-[data-theme="dark"] {
-  --canvas: #0b0e14;
-  --surface: #12161f;
-  --raised: #1a2029;
-  --sunken: #080b10;
-  --sidebar: #0a0d12;
-  --border-subtle: #232b37;
-  --border-strong: #364153;
-  --text-primary: #e8edf4;
-  --text-secondary: #a8b3c2;
-  --text-muted: #8593a6;
-  --text-disabled: #5a6675;
-  --action-primary: #4d8dff;
-  --action-primary-hover: #6aa1ff;
-  --action-primary-fg: #0a1428;
-  --ally-fg: #a78bfa;
-  --ally-bg: #221a33;
-  --ally-border: #3d3159;
-  --critical-fg: #f0716a;
-  --critical-bg: #2c1414;
-  --warning-fg: #e8a33d;
-  --warning-bg: #2a2210;
-  --healthy-fg: #4cc38a;
-  --healthy-bg: #0f2a1d;
-  --info-fg: #7db1ff;
-  --info-bg: #10203a;
-  --neutral-fg: #8593a6;
-  --neutral-bg: #1a2029;
-  --shadow-1: 0 1px 2px rgb(0 0 0 / 0.4);
-  --shadow-2: 0 4px 8px -2px rgb(0 0 0 / 0.5);
-  --shadow-3: 0 12px 16px -4px rgb(0 0 0 / 0.55);
-}
-
 [data-theme="light"] {
-  --canvas: #f6f7f9;
+  --canvas: #f6f1ea;
   --surface: #ffffff;
   --raised: #ffffff;
-  --sunken: #eff1f4;
-  --sidebar: #0f1319;
-  --border-subtle: #e4e7ec;
-  --border-strong: #c9cfd9;
-  --text-primary: #171c24;
-  --text-secondary: #48505e;
-  --text-muted: #66707f;
-  --text-disabled: #9aa3b0;
-  --action-primary: #1d4ed8;
-  --action-primary-hover: #1e40af;
+  --sunken: #f0e9e0;
+  --sidebar: #241e1a;
+  --border-subtle: #ebe3da;
+  --border-strong: #d9cec1;
+  --text-primary: #241e1a;
+  --text-secondary: #6b5a48;
+  --text-muted: #756a5f;
+  --text-disabled: #b3a99e;
+  --action-primary: #c24e2c;
+  --action-primary-hover: #a8401f;
   --action-primary-fg: #ffffff;
-  --ally-fg: #6d28d9;
-  --ally-bg: #f3eefd;
-  --ally-border: #d6c9f5;
+  --brand-orange: #e0603a;
+  --ally-fg: #7a5a86;
+  --ally-bg: #f1eaf3;
+  --ally-border: #ddcfe2;
   --critical-fg: #b42318;
-  --critical-bg: #fdebe9;
-  --warning-fg: #9a6700;
-  --warning-bg: #fbf1de;
-  --healthy-fg: #16794c;
-  --healthy-bg: #e7f6ee;
-  --info-fg: #175cd3;
-  --info-bg: #e8f0fd;
-  --neutral-fg: #66707f;
-  --neutral-bg: #eff1f4;
+  --critical-bg: #f7e7e1;
+  --warning-fg: #8a6015;
+  --warning-bg: #f7efdc;
+  --healthy-fg: #386e4d;
+  --healthy-bg: #e7f0ea;
+  --info-fg: #6b5a48;
+  --info-bg: #f0e9e0;
+  --neutral-fg: #756a5f;
+  --neutral-bg: #f0e9e0;
+}
+
+[data-theme="dark"] {
+  --canvas: #1a1512;
+  --surface: #241e1a;
+  --raised: #2e2723;
+  --sunken: #14100e;
+  --sidebar: #14100e;
+  --border-subtle: #3a302a;
+  --border-strong: #4a3f37;
+  --text-primary: #f6f1ea;
+  --text-secondary: #c9bdb0;
+  --text-muted: #9c9187;
+  --text-disabled: #6b6058;
+  --action-primary: #e0603a;
+  --action-primary-hover: #ef7551;
+  --action-primary-fg: #241e1a;
+  --brand-orange: #e0603a;
+  --ally-fg: #c4a5cf;
+  --ally-bg: #2b1f30;
+  --ally-border: #46374d;
+  --critical-fg: #f0857a;
+  --critical-bg: #351915;
+  --warning-fg: #dda63f;
+  --warning-bg: #302512;
+  --healthy-fg: #63bb87;
+  --healthy-bg: #142a1e;
+  --info-fg: #c9bdb0;
+  --info-bg: #2e2723;
+  --neutral-fg: #9c9187;
+  --neutral-bg: #2e2723;
+}
+
+/* Sidebar internals — the graphite-to-charcoal rail keeps its own scale so it
+   reads the same in both themes (brand constant). */
+:root {
+  --sidebar-fg: #e8e1d8;
+  --sidebar-fg-muted: #9c9187;
+  --sidebar-fg-dim: #6b6058;
+  --sidebar-hover: #322a25;
+  --sidebar-active: rgb(224 96 58 / 0.16);
+  --sidebar-border: #3a302a;
 }
 
 @theme inline {
@@ -165,6 +192,7 @@
   --color-action: var(--action-primary);
   --color-action-hover: var(--action-primary-hover);
   --color-action-fg: var(--action-primary-fg);
+  --color-brand: var(--brand-orange);
 
   --color-ally: var(--ally-fg);
   --color-ally-bg: var(--ally-bg);
@@ -181,6 +209,13 @@
   --color-neutral: var(--neutral-fg);
   --color-neutral-bg: var(--neutral-bg);
 
+  --color-sidebar-fg: var(--sidebar-fg);
+  --color-sidebar-fg-muted: var(--sidebar-fg-muted);
+  --color-sidebar-fg-dim: var(--sidebar-fg-dim);
+  --color-sidebar-hover: var(--sidebar-hover);
+  --color-sidebar-active: var(--sidebar-active);
+  --color-sidebar-border: var(--sidebar-border);
+
   --font-sans: var(--font-inter), -apple-system, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
 
@@ -189,7 +224,7 @@
   --shadow-e3: var(--shadow-3);
 }
 
-/* Type scale — base 14, density-first (§5.2) */
+/* Type scale — base 14, density-first */
 @theme {
   --text-metric-lg: 1.75rem;
   --text-metric-lg--line-height: 2.125rem;
@@ -225,7 +260,7 @@
     text-rendering: optimizeLegibility;
   }
 
-  /* Numerals are first-class citizens: tabular everywhere (§5.4) */
+  /* Numerals are first-class: tabular everywhere */
   .tnum,
   table,
   input[type="number"] {
@@ -233,18 +268,17 @@
   }
 
   *:focus-visible {
-    outline: 2px solid var(--action-primary);
+    outline: 2px solid var(--brand-orange);
     outline-offset: 2px;
     border-radius: 2px;
   }
 
   ::selection {
-    background: color-mix(in oklab, var(--action-primary) 30%, transparent);
+    background: color-mix(in oklab, var(--brand-orange) 26%, transparent);
   }
 }
 
 @layer utilities {
-  /* Restrained motion — nothing blinks or bounces (§2.1) */
   .animate-shimmer {
     background: linear-gradient(
       90deg,

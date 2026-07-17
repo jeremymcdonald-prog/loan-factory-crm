@@ -41,6 +41,7 @@ const COLORS = [
   "action",
   "action-hover",
   "action-fg",
+  "brand",
   "ally",
   "ally-bg",
   "ally-border",
@@ -54,6 +55,12 @@ const COLORS = [
   "info-bg",
   "neutral",
   "neutral-bg",
+  "sidebar-fg",
+  "sidebar-fg-muted",
+  "sidebar-fg-dim",
+  "sidebar-hover",
+  "sidebar-active",
+  "sidebar-border",
 ];
 
 const twMerge = extendTailwindMerge({

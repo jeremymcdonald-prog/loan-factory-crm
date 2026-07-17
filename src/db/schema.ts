@@ -518,6 +518,271 @@ export const aiActionLog = pgTable(
   (t) => [index("ai_action_tenant_created_idx").on(t.tenantId, t.createdAt)],
 );
 
+// ---------------------------------------------------------------------------
+// Partners — referral relationships (agents, and everyone else who sends business)
+// ---------------------------------------------------------------------------
+
+export const partnerKind = pgEnum("partner_kind", [
+  "real_estate_agent",
+  "builder",
+  "financial_advisor",
+  "attorney",
+  "past_client",
+  "other",
+]);
+
+/** Relationship health — the plain-language tiers used across Partners. */
+export const partnerTier = pgEnum("partner_tier", ["core", "growing", "quiet", "new"]);
+
+export const partner = pgTable(
+  "partner",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenant.id),
+    firstName: text("first_name").notNull(),
+    lastName: text("last_name").notNull(),
+    company: text("company"),
+    kind: partnerKind("kind").notNull().default("real_estate_agent"),
+    tier: partnerTier("tier").notNull().default("new"),
+    emails: jsonb("emails").$type<EmailEntry[]>().notNull().default([]),
+    phones: jsonb("phones").$type<PhoneEntry[]>().notNull().default([]),
+    preferredLanguage: language("preferred_language").notNull().default("en"),
+    ownerUserId: uuid("owner_user_id").references(() => user.id),
+    /** Team-recorded relationship facts. */
+    lastTouchAt: timestamp("last_touch_at", { withTimezone: true }),
+    notesSummary: text("notes_summary"),
+    doNotContact: boolean("do_not_contact").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  (t) => [index("partner_tenant_owner_idx").on(t.tenantId, t.ownerUserId)],
+);
+
+/** Links a partner to the people/opportunities they sent. */
+export const partnerRelationship = pgTable(
+  "partner_relationship",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenant.id),
+    partnerId: uuid("partner_id")
+      .notNull()
+      .references(() => partner.id),
+    personId: uuid("person_id").references(() => person.id),
+    loanId: uuid("loan_id").references(() => loan.id),
+    role: text("role").notNull().default("referred"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("partner_rel_tenant_partner_idx").on(t.tenantId, t.partnerId)],
+);
+
+// ---------------------------------------------------------------------------
+// Conversations — every thread and message, all channels
+// ---------------------------------------------------------------------------
+
+export const channel = pgEnum("channel", ["email", "sms", "call", "note"]);
+export const direction = pgEnum("direction", ["inbound", "outbound"]);
+export const messageStatus = pgEnum("message_status", [
+  "received",
+  "draft",
+  "awaiting_approval",
+  "approved",
+  "sent",
+  "failed",
+]);
+
+export const conversation = pgTable(
+  "conversation",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenant.id),
+    subject: text("subject"),
+    channel: channel("channel").notNull().default("email"),
+    personId: uuid("person_id").references(() => person.id),
+    partnerId: uuid("partner_id").references(() => partner.id),
+    loanId: uuid("loan_id").references(() => loan.id),
+    ownerUserId: uuid("owner_user_id").references(() => user.id),
+    lastMessageAt: timestamp("last_message_at", { withTimezone: true }).notNull().defaultNow(),
+    /** Set when the newest inbound message has no outbound reply after it. */
+    awaitingReply: boolean("awaiting_reply").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("conversation_tenant_last_idx").on(t.tenantId, t.lastMessageAt)],
+);
+
+export const message = pgTable(
+  "message",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenant.id),
+    conversationId: uuid("conversation_id")
+      .notNull()
+      .references(() => conversation.id),
+    channel: channel("channel").notNull(),
+    direction: direction("direction").notNull(),
+    status: messageStatus("status").notNull().default("received"),
+    subject: text("subject"),
+    body: text("body").notNull(),
+    /** Set when Ally drafted it. A human still has to approve the send. */
+    preparedByAlly: boolean("prepared_by_ally").notNull().default(false),
+    templateRef: text("template_ref"),
+    languageCode: language("language_code").notNull().default("en"),
+    authorUserId: uuid("author_user_id").references(() => user.id),
+    approvedByUserId: uuid("approved_by_user_id").references(() => user.id),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
+    /** Call metadata: duration and outcome, when channel = call. */
+    meta: jsonb("meta").$type<Record<string, unknown>>().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("message_tenant_conversation_idx").on(t.tenantId, t.conversationId)],
+);
+
+// ---------------------------------------------------------------------------
+// Marketing — the EMT template library, audiences, campaigns
+// ---------------------------------------------------------------------------
+
+/** Governs whether Ally may draft/queue this template at all. */
+export const templatePolicy = pgEnum("template_policy", [
+  "fully_automated",
+  "semi_automated",
+  "manual_only",
+  "never_automate",
+]);
+
+export const template = pgTable(
+  "template",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenant.id),
+    /** EMT-001..135 from the committed communication framework. */
+    ref: text("ref").notNull(),
+    name: text("name").notNull(),
+    category: text("category").notNull(),
+    channel: channel("channel").notNull().default("email"),
+    subject: text("subject"),
+    body: text("body").notNull(),
+    policy: templatePolicy("policy").notNull().default("semi_automated"),
+    /** The lifecycle stage this template belongs to, when it has one. */
+    stage: loanStage("stage"),
+    languageCode: language("language_code").notNull().default("en"),
+    mergeFields: text("merge_fields").array(),
+    complianceNotes: text("compliance_notes"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("template_tenant_ref_idx").on(t.tenantId, t.ref)],
+);
+
+export const campaignStatus = pgEnum("campaign_status", [
+  "draft",
+  "scheduled",
+  "running",
+  "paused",
+  "finished",
+]);
+
+export const campaign = pgTable(
+  "campaign",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenant.id),
+    name: text("name").notNull(),
+    status: campaignStatus("status").notNull().default("draft"),
+    templateId: uuid("template_id").references(() => template.id),
+    /** Plain-language audience rule, e.g. { type: 'past_clients' }. */
+    audience: jsonb("audience").$type<Record<string, unknown>>().default({}),
+    audienceSize: integer("audience_size").notNull().default(0),
+    scheduledFor: timestamp("scheduled_for", { withTimezone: true }),
+    ownerUserId: uuid("owner_user_id").references(() => user.id),
+    sentCount: integer("sent_count").notNull().default(0),
+    openCount: integer("open_count").notNull().default(0),
+    replyCount: integer("reply_count").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  (t) => [index("campaign_tenant_status_idx").on(t.tenantId, t.status)],
+);
+
+// ---------------------------------------------------------------------------
+// Automations — plain-language trigger → action rules
+// ---------------------------------------------------------------------------
+
+export const automationStatus = pgEnum("automation_status", ["active", "paused", "draft"]);
+
+export const automation = pgTable(
+  "automation",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenant.id),
+    /** A-01, B-02… the Automation_Catalog row this implements. */
+    ref: text("ref"),
+    name: text("name").notNull(),
+    description: text("description"),
+    /** Plain language, never developer terminology. */
+    triggerText: text("trigger_text").notNull(),
+    audienceText: text("audience_text").notNull(),
+    actionText: text("action_text").notNull(),
+    /** The approval ceiling for this automation (Automation_Catalog §1). */
+    tier: autonomyTier("tier").notNull().default("t2"),
+    status: automationStatus("status").notNull().default("draft"),
+    templateId: uuid("template_id").references(() => template.id),
+    runCount: integer("run_count").notNull().default(0),
+    lastRunAt: timestamp("last_run_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  (t) => [index("automation_tenant_status_idx").on(t.tenantId, t.status)],
+);
+
+export const automationRunStatus = pgEnum("automation_run_status", [
+  "queued_for_approval",
+  "approved",
+  "completed",
+  "skipped",
+  "failed",
+]);
+
+export const automationRun = pgTable(
+  "automation_run",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenant.id),
+    automationId: uuid("automation_id")
+      .notNull()
+      .references(() => automation.id),
+    personId: uuid("person_id").references(() => person.id),
+    loanId: uuid("loan_id").references(() => loan.id),
+    status: automationRunStatus("status").notNull().default("queued_for_approval"),
+    /** Plain-language account of what happened, shown in run history. */
+    outcome: text("outcome").notNull(),
+    /** Why it stopped, when a stop condition fired at execution time. */
+    stoppedReason: text("stopped_reason"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("automation_run_tenant_auto_idx").on(t.tenantId, t.automationId)],
+);
+
 /** Append-only record of every mutation (Technical_Architecture §5). */
 export const auditLog = pgTable(
   "audit_log",

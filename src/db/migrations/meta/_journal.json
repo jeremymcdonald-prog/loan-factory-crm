@@ -15,6 +15,20 @@
       "when": 1784286511207,
       "tag": "0001_rls_and_auth",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1784289005236,
+      "tag": "0002_partners_conversations_marketing",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1784289005237,
+      "tag": "0003_rls_new_tables",
+      "breakpoints": true
     }
   ]
 }

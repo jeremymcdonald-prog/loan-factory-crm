@@ -13,36 +13,36 @@ export default async function LoginPage({
 
   return (
     <main className="grid min-h-dvh lg:grid-cols-[1fr_minmax(420px,480px)]">
-      {/* Command-center panel: graphite in both themes, like the sidebar. */}
-      <section className="relative hidden flex-col justify-between bg-sidebar p-10 text-[#E8EDF4] lg:flex">
-        <Wordmark className="text-[#E8EDF4]" />
+      {/* Brand panel: charcoal in both themes, like the sidebar. */}
+      <section className="relative hidden flex-col justify-between bg-sidebar p-10 text-sidebar-fg lg:flex">
+        <Wordmark className="text-sidebar-fg" />
 
         <div className="max-w-md">
           <p className="text-[1.75rem] leading-[2.375rem] font-semibold tracking-tight">
             Your day, already prioritised.
           </p>
-          <p className="mt-3 text-body leading-6 text-[#A8B3C2]">
+          <p className="mt-3 text-body leading-6 text-sidebar-fg-muted">
             Loan Factory CRM opens on what needs you now — the locks about to expire, the
             leads still waiting, the follow-ups Ally has drafted for your approval.
           </p>
 
-          <dl className="mt-8 grid grid-cols-3 gap-4 border-t border-[#232B37] pt-6">
+          <dl className="mt-8 grid grid-cols-3 gap-4 border-t border-sidebar-border pt-6">
             {[
               { k: "Prioritised", v: "One queue" },
               { k: "Prepared", v: "Ally drafts" },
               { k: "Approved", v: "By you" },
             ].map((item) => (
               <div key={item.k}>
-                <dt className="text-label font-semibold uppercase tracking-wide text-[#8593A6]">
+                <dt className="text-label font-semibold uppercase tracking-wide text-sidebar-fg-muted">
                   {item.k}
                 </dt>
-                <dd className="mt-1 text-body font-semibold text-[#E8EDF4]">{item.v}</dd>
+                <dd className="mt-1 text-body font-semibold text-sidebar-fg">{item.v}</dd>
               </div>
             ))}
           </dl>
         </div>
 
-        <p className="text-small text-[#8593A6]">
+        <p className="text-small text-sidebar-fg-dim">
           Loan Factory · NMLS #320841 · Equal Housing Opportunity
         </p>
       </section>

@@ -13,6 +13,14 @@ import { sql } from "drizzle-orm";
 import * as schema from "./schema";
 import { hashPassword } from "../lib/password";
 import { PEOPLE, TASKS, APPOINTMENTS, NOTES } from "./seed-data";
+import {
+  PARTNERS,
+  THREADS,
+  INSIGHTS,
+  CAMPAIGNS,
+  AUTOMATIONS,
+} from "./seed-modules";
+import { parseTemplates } from "./import-templates";
 import { STAGES, phaseOf } from "../lib/stages";
 
 config({ path: ".env.local" });
@@ -61,6 +69,14 @@ async function main() {
   // node-postgres prepares each query, and a prepared statement cannot carry
   // multiple commands.
   for (const table of [
+    "automation_run",
+    "automation",
+    "campaign",
+    "message",
+    "conversation",
+    "partner_relationship",
+    "partner",
+    "template",
     "ai_action_log",
     "ai_insight",
     "audit_log",
@@ -335,19 +351,216 @@ async function main() {
     });
   }
 
-  const counts = {
-    people: personIds.size,
-    opportunities: loanIds.size,
-    tasks: TASKS.length,
-    appointments: APPOINTMENTS.length,
-    notes: NOTES.length,
-  };
+  // --- Template library (imported from the committed source assets) --------
+  const parsed = parseTemplates(process.cwd());
+  const templateIds = new Map<string, string>();
+
+  for (const t of parsed) {
+    const [row] = await db
+      .insert(schema.template)
+      .values({
+        tenantId: TENANT_ID,
+        ref: t.ref,
+        name: t.name,
+        category: t.category,
+        channel: "email",
+        subject: t.subject,
+        body: t.body,
+        policy: t.policy,
+        stage: t.stage,
+        languageCode: "en",
+        mergeFields: t.mergeFields.length ? t.mergeFields : null,
+        complianceNotes: t.complianceNotes,
+      })
+      .returning({ id: schema.template.id });
+    templateIds.set(t.ref, row.id);
+  }
+
+  // --- Partners ------------------------------------------------------------
+  const partnerIds = new Map<string, string>();
+
+  for (const p of PARTNERS) {
+    const [row] = await db
+      .insert(schema.partner)
+      .values({
+        tenantId: TENANT_ID,
+        firstName: p.firstName,
+        lastName: p.lastName,
+        company: p.company,
+        kind: p.kind,
+        tier: p.tier,
+        emails: [{ address: p.email, label: "work" }],
+        phones: [{ number: p.phone, label: "mobile", smsCapable: true }],
+        ownerUserId: U.minh,
+        lastTouchAt: daysFromNow(-p.lastTouchDaysAgo),
+        notesSummary: p.notesSummary,
+      })
+      .returning({ id: schema.partner.id });
+
+    partnerIds.set(p.key, row.id);
+
+    for (const personKey of p.referred) {
+      const personId = personIds.get(personKey);
+      if (!personId) continue;
+      await db.insert(schema.partnerRelationship).values({
+        tenantId: TENANT_ID,
+        partnerId: row.id,
+        personId,
+        loanId: loanIds.get(personKey) ?? null,
+        role: "referred",
+      });
+    }
+  }
+
+  // --- Conversations -------------------------------------------------------
+  for (const thread of THREADS) {
+    const newest = Math.min(...thread.messages.map((m) => m.hoursAgo));
+    const lastMessage = thread.messages.reduce((a, b) => (a.hoursAgo < b.hoursAgo ? a : b));
+
+    const [conv] = await db
+      .insert(schema.conversation)
+      .values({
+        tenantId: TENANT_ID,
+        subject: thread.subject,
+        channel: thread.channel,
+        personId: thread.personKey ? (personIds.get(thread.personKey) ?? null) : null,
+        partnerId: thread.partnerKey ? (partnerIds.get(thread.partnerKey) ?? null) : null,
+        loanId: thread.personKey ? (loanIds.get(thread.personKey) ?? null) : null,
+        ownerUserId: U.minh,
+        lastMessageAt: hoursFromNow(-newest),
+        awaitingReply: lastMessage.direction === "inbound",
+      })
+      .returning({ id: schema.conversation.id });
+
+    for (const m of thread.messages) {
+      await db.insert(schema.message).values({
+        tenantId: TENANT_ID,
+        conversationId: conv.id,
+        channel: thread.channel,
+        direction: m.direction,
+        status: m.status ?? (m.direction === "inbound" ? "received" : "sent"),
+        subject: thread.channel === "email" ? thread.subject : null,
+        body: m.body,
+        preparedByAlly: m.preparedByAlly ?? false,
+        templateRef: m.templateRef ?? null,
+        authorUserId: m.direction === "outbound" ? U.minh : null,
+        sentAt: m.direction === "outbound" ? hoursFromNow(-m.hoursAgo) : null,
+        occurredAt: hoursFromNow(-m.hoursAgo),
+        meta: m.meta ?? {},
+      });
+    }
+  }
+
+  // --- Ally's pending drafts ----------------------------------------------
+  for (const insight of INSIGHTS) {
+    const personId = personIds.get(insight.personKey);
+    if (!personId) continue;
+
+    const [row] = await db
+      .insert(schema.aiInsight)
+      .values({
+        tenantId: TENANT_ID,
+        kind: insight.kind,
+        status: "pending",
+        // Borrower-facing drafts cap at T2: prepared, never sent, until a human approves.
+        tier: insight.kind === "next_best_action" ? "t1" : "t2",
+        forUserId: U.minh,
+        personId,
+        loanId: loanIds.get(insight.personKey) ?? null,
+        title: insight.title,
+        body: insight.body,
+        rationale: insight.rationale,
+        factors: insight.factors,
+        templateRef: insight.templateRef ?? null,
+        languageCode: insight.language ?? "en",
+      })
+      .returning({ id: schema.aiInsight.id });
+
+    // Every model call is logged, including the one that produced this draft.
+    await db.insert(schema.aiActionLog).values({
+      tenantId: TENANT_ID,
+      insightId: row.id,
+      action: "insight.generated",
+      model: "mock-ally-v1",
+      promptVersion: "seed",
+      detail: { kind: insight.kind, mode: "seeded fixture" },
+    });
+  }
+
+  // --- Campaigns -----------------------------------------------------------
+  for (const c of CAMPAIGNS) {
+    await db.insert(schema.campaign).values({
+      tenantId: TENANT_ID,
+      name: c.name,
+      status: c.status,
+      templateId: templateIds.get(c.templateRef) ?? null,
+      audience: c.audience,
+      audienceSize: c.audienceSize,
+      scheduledFor: c.scheduledInDays !== undefined ? daysFromNow(c.scheduledInDays) : null,
+      ownerUserId: U.minh,
+      sentCount: c.sentCount ?? 0,
+      openCount: c.openCount ?? 0,
+      replyCount: c.replyCount ?? 0,
+    });
+  }
+
+  // --- Automations ---------------------------------------------------------
+  for (const a of AUTOMATIONS) {
+    const [row] = await db
+      .insert(schema.automation)
+      .values({
+        tenantId: TENANT_ID,
+        ref: a.ref,
+        name: a.name,
+        description: a.description,
+        triggerText: a.triggerText,
+        audienceText: a.audienceText,
+        actionText: a.actionText,
+        tier: a.tier,
+        status: a.status,
+        templateId: a.templateRef ? (templateIds.get(a.templateRef) ?? null) : null,
+        runCount: a.runCount,
+        lastRunAt: a.lastRunDaysAgo !== undefined ? daysFromNow(-a.lastRunDaysAgo) : null,
+      })
+      .returning({ id: schema.automation.id });
+
+    for (const run of a.runs) {
+      await db.insert(schema.automationRun).values({
+        tenantId: TENANT_ID,
+        automationId: row.id,
+        personId: personIds.get(run.personKey) ?? null,
+        loanId: loanIds.get(run.personKey) ?? null,
+        status: run.status,
+        outcome: run.outcome,
+        stoppedReason: run.stoppedReason ?? null,
+        createdAt: daysFromNow(-run.daysAgo),
+      });
+    }
+  }
+
+  const policyCounts = parsed.reduce<Record<string, number>>((acc, t) => {
+    acc[t.policy] = (acc[t.policy] ?? 0) + 1;
+    return acc;
+  }, {});
 
   console.log(`  tenant:        Loan Factory (NMLS 320841)`);
   console.log(`  users:         5 across 5 roles`);
-  console.log(`  people:        ${counts.people}`);
-  console.log(`  opportunities: ${counts.opportunities} across the 20 stages`);
-  console.log(`  tasks:         ${counts.tasks}   appointments: ${counts.appointments}   notes: ${counts.notes}`);
+  console.log(`  people:        ${personIds.size}`);
+  console.log(`  opportunities: ${loanIds.size} across the 20 stages`);
+  console.log(
+    `  tasks:         ${TASKS.length}   appointments: ${APPOINTMENTS.length}   notes: ${NOTES.length}`,
+  );
+  console.log(`  partners:      ${partnerIds.size}`);
+  console.log(`  conversations: ${THREADS.length}`);
+  console.log(`  Ally drafts:   ${INSIGHTS.length} pending approval`);
+  console.log(`  campaigns:     ${CAMPAIGNS.length}   automations: ${AUTOMATIONS.length}`);
+  console.log(
+    `  templates:     ${parsed.length} imported from source_assets ` +
+      `(${policyCounts.fully_automated ?? 0} fully automated, ` +
+      `${policyCounts.semi_automated ?? 0} semi, ` +
+      `${policyCounts.manual_only ?? 0} manual only, ` +
+      `${policyCounts.never_automate ?? 0} never automate)`,
+  );
   console.log("");
   console.log("Sign in with:  minh@loanfactory.com  /  Demo1234!");
 
