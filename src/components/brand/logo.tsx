@@ -1,51 +1,70 @@
 /**
- * Brand mark — Design_System.md §2 (calm authority).
+ * Brand marks — the official Loan Factory logo, used as supplied.
  *
- * A geometric mark, not an emoji or a mascot: three ascending bars read as a
- * pipeline advancing through stages, boxed to suggest the "factory" floor.
- * Renders in currentColor so it inherits sidebar/canvas context.
+ * These render the real asset files in public/brand/. Nothing here redraws or
+ * approximates the logo:
+ *   loan-factory-wordmark.png        the supplied logo, cropped to its own
+ *                                    bounding box, white background removed
+ *   loan-factory-wordmark-light.png  the same file with only the dark
+ *                                    letterforms lightened for the navy
+ *                                    sidebar; the orange marks are untouched
+ *   loan-factory-mark.png            the "O" glyph lifted from the logo, for
+ *                                    square placements
  */
+import Image from "next/image";
 import { cn } from "@/lib/cn";
 
+import wordmark from "../../../public/brand/loan-factory-wordmark.png";
+import wordmarkLight from "../../../public/brand/loan-factory-wordmark-light.png";
+import mark from "../../../public/brand/loan-factory-mark.png";
+
+/** The square "O" mark. Use where a wordmark won't fit. */
 export function LogoMark({ className }: { className?: string }) {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
+    <Image
+      src={mark}
+      alt=""
       aria-hidden
-      className={cn("size-6", className)}
-    >
-      <rect
-        x="1.25"
-        y="1.25"
-        width="21.5"
-        height="21.5"
-        rx="5"
-        stroke="currentColor"
-        strokeOpacity="0.32"
-        strokeWidth="1.5"
-      />
-      <rect x="6" y="14" width="3" height="4.5" rx="1" fill="currentColor" fillOpacity="0.5" />
-      <rect x="10.5" y="10" width="3" height="8.5" rx="1" fill="currentColor" fillOpacity="0.75" />
-      <rect x="15" y="5.5" width="3" height="13" rx="1" fill="currentColor" />
-    </svg>
+      priority
+      className={cn("size-6 shrink-0 object-contain", className)}
+    />
   );
 }
 
+/**
+ * The full wordmark.
+ *
+ * `onDark` selects the light-letter variant for the navy sidebar and the
+ * sign-in panel. The product name is set beside it rather than baked into the
+ * image, so "CRM" never distorts the logo itself.
+ */
 export function Wordmark({
   className,
-  subdued = false,
+  onDark = false,
+  showProduct = true,
 }: {
   className?: string;
-  subdued?: boolean;
+  onDark?: boolean;
+  showProduct?: boolean;
 }) {
   return (
-    <span className={cn("inline-flex items-center gap-2", className)}>
-      <LogoMark className={subdued ? "text-action" : "text-action"} />
-      <span className="text-h3 font-semibold tracking-tight">
-        Loan Factory
-        <span className="ml-1 font-medium text-muted">CRM</span>
-      </span>
+    <span className={cn("inline-flex items-baseline gap-2", className)}>
+      <Image
+        src={onDark ? wordmarkLight : wordmark}
+        alt="Loan Factory"
+        priority
+        className="h-[18px] w-auto shrink-0 object-contain"
+      />
+      {showProduct ? (
+        <span
+          className={cn(
+            "text-body font-semibold tracking-tight",
+            onDark ? "text-sidebar-fg-muted" : "text-muted",
+          )}
+        >
+          CRM
+        </span>
+      ) : null}
     </span>
   );
 }

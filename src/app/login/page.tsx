@@ -13,9 +13,9 @@ export default async function LoginPage({
 
   return (
     <main className="grid min-h-dvh lg:grid-cols-[1fr_minmax(420px,480px)]">
-      {/* Brand panel: charcoal in both themes, like the sidebar. */}
-      <section className="relative hidden flex-col justify-between bg-sidebar p-10 text-sidebar-fg lg:flex">
-        <Wordmark className="text-sidebar-fg" />
+      {/* Brand panel: the navy rail, carrying the official wordmark. */}
+      <section className="relative hidden flex-col justify-between bg-sidebar p-12 text-sidebar-fg lg:flex">
+        <Wordmark onDark />
 
         <div className="max-w-md">
           <p className="text-[1.75rem] leading-[2.375rem] font-semibold tracking-tight">
@@ -50,7 +50,7 @@ export default async function LoginPage({
       <section className="flex flex-col justify-center bg-canvas px-6 py-12 sm:px-10">
         <div className="mx-auto w-full max-w-sm">
           <div className="lg:hidden">
-            <Wordmark className="text-primary" />
+            <Wordmark />
           </div>
 
           <div className="mt-8 lg:mt-0">

@@ -1,6 +1,6 @@
 /**
- * Card / panel primitives — Design_System.md §9.
- * Depth comes from layered neutrals and borders. No decorative gradients.
+ * Card / panel primitives — the rounded white cards of Loan Factory IQ.
+ * Depth comes from a soft cool shadow and a subtle border, never a gradient.
  */
 import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
@@ -15,7 +15,12 @@ export function Card({
   as?: "section" | "div" | "article";
 }) {
   return (
-    <Tag className={cn("rounded-lg border border-subtle bg-surface", className)}>
+    <Tag
+      className={cn(
+        "rounded-card border border-subtle bg-surface shadow-e1",
+        className,
+      )}
+    >
       {children}
     </Tag>
   );
@@ -35,7 +40,7 @@ export function CardHeader({
   return (
     <header
       className={cn(
-        "flex items-center justify-between gap-3 border-b border-subtle px-4 py-3",
+        "flex items-center justify-between gap-3 border-b border-subtle px-5 py-4",
         className,
       )}
     >
@@ -48,7 +53,7 @@ export function CardHeader({
   );
 }
 
-/** Section label — Design_System §5.2 `type/label`. */
+/** Section label — the small uppercase key used throughout Loan Factory IQ. */
 export function SectionLabel({
   children,
   className,

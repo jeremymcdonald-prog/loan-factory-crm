@@ -12,11 +12,13 @@ import {
 } from "react";
 import { cn } from "@/lib/cn";
 
+// White wells on white cards, as in Loan Factory IQ — the border does the
+// work, and the brand orange marks focus.
 const CONTROL =
-  "h-9 w-full rounded-md border border-strong bg-sunken px-3 text-body text-primary " +
+  "h-10 w-full rounded-control border border-strong bg-surface px-3 text-body text-primary " +
   "placeholder:text-disabled transition-colors " +
-  "focus:border-action focus:outline-none focus-visible:outline-none " +
-  "disabled:opacity-50";
+  "focus:border-brand focus:outline-none focus-visible:outline-none " +
+  "disabled:bg-sunken disabled:opacity-60";
 
 export function Field({
   label,

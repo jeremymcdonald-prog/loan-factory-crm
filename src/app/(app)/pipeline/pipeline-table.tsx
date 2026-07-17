@@ -4,7 +4,7 @@ import { personUrgency } from "@/lib/person-urgency";
 import { money, shortDate, relativeTime } from "@/lib/format";
 import { stageLabel, stageNumber, phaseOf, type Stage } from "@/lib/stages";
 import { LanguageBadge } from "@/components/crm/language-badge";
-import { UrgencyDot } from "@/components/ui/badge";
+import { UrgencyDot, type Urgency } from "@/components/ui/badge";
 import { cn } from "@/lib/cn";
 
 /**
@@ -16,8 +16,17 @@ export function PipelineTable({ cards }: { cards: PipelineCard[] }) {
   const now = new Date();
 
   // Most urgent first: the table's default sort is the LO's real question.
+  // Typed against Urgency so a new tone can't be added without ranking it.
   const ranked = [...cards].sort((a, b) => {
-    const rank = { critical: 0, warning: 1, info: 2, ally: 3, healthy: 4, neutral: 5 };
+    const rank: Record<Urgency, number> = {
+      critical: 0,
+      warning: 1,
+      info: 2,
+      ally: 3,
+      brand: 4,
+      healthy: 5,
+      neutral: 6,
+    };
     const ua = personUrgency(a, now);
     const ub = personUrgency(b, now);
     const ra = rank[ua?.level ?? "neutral"];

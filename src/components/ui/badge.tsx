@@ -1,22 +1,31 @@
 /**
- * Badge / status chip — Design_System.md §4.4, §9.
+ * Badge / status chip — the pill vocabulary of Loan Factory IQ: a soft tint,
+ * a matching border, and a legible label.
  *
- * Status is never colour-only: every chip carries a label, and callers pass an
- * icon where the status drives urgency. Hue answers exactly one question —
- * how urgently does this need a human?
+ * Status is never colour-only: every chip carries a word. Hue answers exactly
+ * one question — how urgently does this need a human? Green, amber and red
+ * mean status; orange means action; violet means Ally.
  */
 import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
 
-export type Urgency = "critical" | "warning" | "healthy" | "info" | "neutral" | "ally";
+export type Urgency =
+  | "critical"
+  | "warning"
+  | "healthy"
+  | "info"
+  | "neutral"
+  | "ally"
+  | "brand";
 
 const TONES: Record<Urgency, string> = {
-  critical: "bg-critical-bg text-critical border-critical/25",
-  warning: "bg-warning-bg text-warning border-warning/25",
-  healthy: "bg-healthy-bg text-healthy border-healthy/25",
-  info: "bg-info-bg text-info border-info/25",
-  neutral: "bg-neutral-bg text-neutral border-strong/60",
+  critical: "bg-critical-bg text-critical border-critical-border",
+  warning: "bg-warning-bg text-warning border-warning-border",
+  healthy: "bg-healthy-bg text-healthy border-healthy-border",
+  info: "bg-info-bg text-info border-info-border",
+  neutral: "bg-neutral-bg text-neutral border-neutral-border",
   ally: "bg-ally-bg text-ally border-ally-border",
+  brand: "bg-action-tint text-action border-action-tint-border",
 };
 
 export function Badge({
@@ -33,7 +42,7 @@ export function Badge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded border px-1.5 py-0.5",
+        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5",
         "text-label font-semibold whitespace-nowrap tnum",
         TONES[tone],
         className,
@@ -54,6 +63,7 @@ export function UrgencyDot({ tone, className }: { tone: Urgency; className?: str
     info: "bg-info",
     neutral: "bg-neutral",
     ally: "bg-ally",
+    brand: "bg-brand",
   };
   return (
     <span

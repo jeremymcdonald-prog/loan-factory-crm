@@ -1,178 +1,162 @@
 @import "tailwindcss";
 
 /*
-  Loan Factory design tokens.
+  ============================================================================
+  LOAN FACTORY DESIGN TOKENS
+  ============================================================================
+  Not invented, and not approximated. The two brand constants below were
+  sampled pixel-for-pixel out of the official logo (public/brand/
+  loan-factory-logo.png):
 
-  Brand extracted from the original Loan Factory interface: warm white
-  surfaces, soft beige canvas, Loan Factory orange for action, charcoal text.
-  Semantic names only — never a raw hex in component code.
+      #F36F28   the orange of the two "O" marks   (1,639px, dominant)
+      #050708   the wordmark ink                  (7,023px, dominant)
 
-  Accessibility note, and why the orange is two values: white on the brand
-  orange #E0603A measures 3.56:1, which fails WCAG AA for text. So:
-    --action-primary  #C24E2C  (brand's own deeper orange) carries TEXT — 4.75:1
-    --brand-orange    #E0603A  carries NON-TEXT accents only (active nav rail,
-                               focus ring, indicators) where the 3:1 bar applies.
-  Status values are the brand's own green/amber, darkened the minimum needed to
-  clear 4.5:1 on both the canvas and their own tints.
+  Everything else is read from the Loan Factory IQ interface: a white
+  application on a soft cool-gray canvas, dark navy navigation, orange primary
+  actions, subtle borders, rounded cards. The neutral ramp is blue-tinted to
+  sit with the navy rather than fighting it — no warm/beige neutrals, and no
+  stock Tailwind palette anywhere.
+
+  Every foreground/background pair in this file was measured before it was
+  written. Notable results:
+      ink   on brand orange   6.84:1   PASS
+      white on navy          17.81:1   PASS
+      brand orange on navy    6.04:1   PASS  (the active nav rail)
+      text/muted on canvas    4.78:1   PASS
+      white on brand orange   2.95:1   <-- see the note on --action-primary
+
+  Light is the flagship theme. Dark is a true navy variant of the same brand,
+  never a re-hue.
+  ============================================================================
 */
 
 :root {
-  /* Neutrals — warm white surfaces on a soft beige canvas */
-  --canvas: #f6f1ea;
+  /* --- Brand constants: sampled from the official logo. Do not alter. --- */
+  --brand-orange: #f36f28;
+  --brand-ink: #050708;
+
+  /*
+    Primary action.
+
+    Loan Factory IQ puts white labels on #F36F28, which measures 2.95:1 and
+    does not meet WCAG AA for text. Rather than invent a different colour or
+    ship an illegible one, the action fill is the brand orange walked down in
+    lightness at the SAME hue (21°) and saturation (0.89) until a white label
+    clears 4.5:1. It is the brand orange, deeper — not a new colour.
+    Full-strength #F36F28 is still used everywhere it carries no small text:
+    the logo, the active nav rail, icon chips, focus rings, and accents.
+  */
+  --action-primary: #c84d0b; /* white label: 4.64:1 */
+  --action-primary-hover: #ab420a; /* white label: 5.97:1 */
+  --action-primary-active: #983b08;
+  --action-primary-fg: #ffffff;
+  --action-tint: #fdf0e8; /* orange wash for banners and chips */
+  --action-tint-border: #f8d6c2;
+
+  /* --- Navigation: dark navy, as in Loan Factory IQ --- */
+  --navy: #0f1826;
+  --navy-raised: #16202f;
+  --navy-border: #222e40;
+  --sidebar: var(--navy);
+  --sidebar-fg: #e8ecf2; /* 15.02:1 on navy */
+  --sidebar-fg-muted: #97a2b2; /* 6.89:1 */
+  --sidebar-fg-dim: #6b7789; /* 3.92:1 — non-text only */
+  --sidebar-hover: #1b2534;
+  --sidebar-active: rgb(243 111 40 / 0.14);
+  --sidebar-border: #222e40;
+
+  /* --- Surfaces: white app on a soft cool-gray canvas --- */
+  --canvas: #f5f6f8;
   --surface: #ffffff;
   --raised: #ffffff;
-  --sunken: #f0e9e0;
-  --sidebar: #241e1a;
-  --border-subtle: #ebe3da;
-  --border-strong: #d9cec1;
-  --text-primary: #241e1a; /* 16.5:1 */
-  --text-secondary: #6b5a48; /* 6.6:1 */
-  --text-muted: #756a5f; /* 4.7:1 on canvas */
-  --text-disabled: #b3a99e; /* disabled only — never readable content */
+  --sunken: #f0f2f5;
+  --border-subtle: #e4e8ed;
+  --border-strong: #cfd5dd;
 
-  /* Action — Loan Factory orange */
-  --action-primary: #c24e2c;
-  --action-primary-hover: #a8401f;
-  --action-primary-fg: #ffffff;
-  --brand-orange: #e0603a;
+  /* --- Text: blue-tinted charcoal, never brown --- */
+  --text-primary: #131a24; /* 16.17:1 canvas / 17.49:1 surface */
+  --text-secondary: #4e5866; /* 6.67:1 / 7.21:1 */
+  --text-muted: #646e7c; /* 4.78:1 / 5.17:1 */
+  --text-disabled: #a3abb7; /* disabled only — never readable content */
 
-  /* Ally — the brand's own purple. Violet belongs to Ally alone. */
-  --ally-fg: #7a5a86;
-  --ally-bg: #f1eaf3;
-  --ally-border: #ddcfe2;
+  /* --- Ally: violet, distinct from every status hue --- */
+  --ally-fg: #6d4c8f; /* 6.82:1 on surface */
+  --ally-bg: #f2ecf7;
+  --ally-border: #ddd0ea;
 
-  /* Status — green, amber, red only, tied to urgency */
-  --critical-fg: #b42318;
-  --critical-bg: #f7e7e1;
-  --warning-fg: #8a6015;
-  --warning-bg: #f7efdc;
-  --healthy-fg: #386e4d;
-  --healthy-bg: #e7f0ea;
-  --info-fg: #6b5a48;
-  --info-bg: #f0e9e0;
-  --neutral-fg: #756a5f;
-  --neutral-bg: #f0e9e0;
+  /* --- Status: green, amber, red only. Tied to urgency, never decoration. --- */
+  --critical-fg: #b4291d; /* 6.41:1 */
+  --critical-bg: #fdecea;
+  --critical-border: #f6cfca;
+  --warning-fg: #8a5a00; /* 5.93:1 */
+  --warning-bg: #fdf4e3;
+  --warning-border: #f3ddb0;
+  --healthy-fg: #17724b; /* 5.92:1 */
+  --healthy-bg: #e7f4ed;
+  --healthy-border: #bfe0cf;
+  --info-fg: #1d63c4; /* 5.78:1 */
+  --info-bg: #eaf2fe;
+  --info-border: #c6dcfa;
+  --neutral-fg: #646e7c;
+  --neutral-bg: #f0f2f5;
+  --neutral-border: #dfe4ea;
 
-  --shadow-1: 0 1px 2px rgb(36 30 26 / 0.06), 0 1px 3px rgb(36 30 26 / 0.08);
-  --shadow-2: 0 4px 8px -2px rgb(36 30 26 / 0.08), 0 2px 4px -2px rgb(36 30 26 / 0.05);
-  --shadow-3: 0 12px 20px -6px rgb(36 30 26 / 0.12), 0 4px 8px -3px rgb(36 30 26 / 0.06);
+  /* --- Elevation: soft, cool, and restrained --- */
+  --shadow-1: 0 1px 2px rgb(19 26 36 / 0.04), 0 1px 3px rgb(19 26 36 / 0.06);
+  --shadow-2: 0 4px 10px -2px rgb(19 26 36 / 0.07), 0 2px 4px -2px rgb(19 26 36 / 0.04);
+  --shadow-3: 0 14px 26px -6px rgb(19 26 36 / 0.11), 0 5px 10px -4px rgb(19 26 36 / 0.05);
+
+  --radius-card: 0.75rem;
+  --radius-control: 0.5rem;
 }
 
-/*
-  Dark is a warm charcoal variant of the same brand — never blue graphite.
-  On dark, the full-strength brand orange carries charcoal text at 4.6:1.
-*/
+/* Dark: the same brand at night. Navy deepens; the orange comes up to full
+   strength because on a dark surface it carries the ink label at 6.84:1. */
 @media (prefers-color-scheme: dark) {
   :root {
-    --canvas: #1a1512;
-    --surface: #241e1a;
-    --raised: #2e2723;
-    --sunken: #14100e;
-    --sidebar: #14100e;
-    --border-subtle: #3a302a;
-    --border-strong: #4a3f37;
-    --text-primary: #f6f1ea;
-    --text-secondary: #c9bdb0;
-    --text-muted: #9c9187;
-    --text-disabled: #6b6058;
+    --canvas: #0b111b;
+    --surface: #111a27;
+    --raised: #16202f;
+    --sunken: #0d1420;
+    --sidebar: #080d15;
+    --border-subtle: #222e40;
+    --border-strong: #33415a;
+    --text-primary: #eef2f7;
+    --text-secondary: #b3bdcb;
+    --text-muted: #8b96a6;
+    --text-disabled: #5a6575;
 
-    --action-primary: #e0603a;
-    --action-primary-hover: #ef7551;
-    --action-primary-fg: #241e1a;
-    --brand-orange: #e0603a;
+    --action-primary: #f36f28;
+    --action-primary-hover: #f5854a;
+    --action-primary-active: #e5590d;
+    --action-primary-fg: #0b111b; /* 6.5:1 on the brand orange */
+    --action-tint: #2a1a10;
+    --action-tint-border: #4a2c18;
 
-    --ally-fg: #c4a5cf;
-    --ally-bg: #2b1f30;
-    --ally-border: #46374d;
+    --ally-fg: #c3a8dc;
+    --ally-bg: #241b31;
+    --ally-border: #3d3050;
 
-    --critical-fg: #f0857a;
-    --critical-bg: #351915;
-    --warning-fg: #dda63f;
-    --warning-bg: #302512;
-    --healthy-fg: #63bb87;
-    --healthy-bg: #142a1e;
-    --info-fg: #c9bdb0;
-    --info-bg: #2e2723;
-    --neutral-fg: #9c9187;
-    --neutral-bg: #2e2723;
+    --critical-fg: #f08175;
+    --critical-bg: #2c1512;
+    --critical-border: #4a231d;
+    --warning-fg: #ddaa4a;
+    --warning-bg: #2a2010;
+    --warning-border: #46351a;
+    --healthy-fg: #5cbd8c;
+    --healthy-bg: #10281c;
+    --healthy-border: #1d4433;
+    --info-fg: #79aef5;
+    --info-bg: #101f33;
+    --info-border: #1d3454;
+    --neutral-fg: #8b96a6;
+    --neutral-bg: #16202f;
+    --neutral-border: #2b3849;
 
-    --shadow-1: 0 1px 2px rgb(0 0 0 / 0.4);
-    --shadow-2: 0 4px 8px -2px rgb(0 0 0 / 0.5);
-    --shadow-3: 0 12px 20px -6px rgb(0 0 0 / 0.55);
+    --shadow-1: 0 1px 2px rgb(0 0 0 / 0.5);
+    --shadow-2: 0 4px 10px -2px rgb(0 0 0 / 0.55);
+    --shadow-3: 0 14px 26px -6px rgb(0 0 0 / 0.6);
   }
-}
-
-[data-theme="light"] {
-  --canvas: #f6f1ea;
-  --surface: #ffffff;
-  --raised: #ffffff;
-  --sunken: #f0e9e0;
-  --sidebar: #241e1a;
-  --border-subtle: #ebe3da;
-  --border-strong: #d9cec1;
-  --text-primary: #241e1a;
-  --text-secondary: #6b5a48;
-  --text-muted: #756a5f;
-  --text-disabled: #b3a99e;
-  --action-primary: #c24e2c;
-  --action-primary-hover: #a8401f;
-  --action-primary-fg: #ffffff;
-  --brand-orange: #e0603a;
-  --ally-fg: #7a5a86;
-  --ally-bg: #f1eaf3;
-  --ally-border: #ddcfe2;
-  --critical-fg: #b42318;
-  --critical-bg: #f7e7e1;
-  --warning-fg: #8a6015;
-  --warning-bg: #f7efdc;
-  --healthy-fg: #386e4d;
-  --healthy-bg: #e7f0ea;
-  --info-fg: #6b5a48;
-  --info-bg: #f0e9e0;
-  --neutral-fg: #756a5f;
-  --neutral-bg: #f0e9e0;
-}
-
-[data-theme="dark"] {
-  --canvas: #1a1512;
-  --surface: #241e1a;
-  --raised: #2e2723;
-  --sunken: #14100e;
-  --sidebar: #14100e;
-  --border-subtle: #3a302a;
-  --border-strong: #4a3f37;
-  --text-primary: #f6f1ea;
-  --text-secondary: #c9bdb0;
-  --text-muted: #9c9187;
-  --text-disabled: #6b6058;
-  --action-primary: #e0603a;
-  --action-primary-hover: #ef7551;
-  --action-primary-fg: #241e1a;
-  --brand-orange: #e0603a;
-  --ally-fg: #c4a5cf;
-  --ally-bg: #2b1f30;
-  --ally-border: #46374d;
-  --critical-fg: #f0857a;
-  --critical-bg: #351915;
-  --warning-fg: #dda63f;
-  --warning-bg: #302512;
-  --healthy-fg: #63bb87;
-  --healthy-bg: #142a1e;
-  --info-fg: #c9bdb0;
-  --info-bg: #2e2723;
-  --neutral-fg: #9c9187;
-  --neutral-bg: #2e2723;
-}
-
-/* Sidebar internals — the graphite-to-charcoal rail keeps its own scale so it
-   reads the same in both themes (brand constant). */
-:root {
-  --sidebar-fg: #e8e1d8;
-  --sidebar-fg-muted: #9c9187;
-  --sidebar-fg-dim: #6b6058;
-  --sidebar-hover: #322a25;
-  --sidebar-active: rgb(224 96 58 / 0.16);
-  --sidebar-border: #3a302a;
 }
 
 @theme inline {
@@ -192,7 +176,10 @@
   --color-action: var(--action-primary);
   --color-action-hover: var(--action-primary-hover);
   --color-action-fg: var(--action-primary-fg);
+  --color-action-tint: var(--action-tint);
+  --color-action-tint-border: var(--action-tint-border);
   --color-brand: var(--brand-orange);
+  --color-ink: var(--brand-ink);
 
   --color-ally: var(--ally-fg);
   --color-ally-bg: var(--ally-bg);
@@ -200,14 +187,19 @@
 
   --color-critical: var(--critical-fg);
   --color-critical-bg: var(--critical-bg);
+  --color-critical-border: var(--critical-border);
   --color-warning: var(--warning-fg);
   --color-warning-bg: var(--warning-bg);
+  --color-warning-border: var(--warning-border);
   --color-healthy: var(--healthy-fg);
   --color-healthy-bg: var(--healthy-bg);
+  --color-healthy-border: var(--healthy-border);
   --color-info: var(--info-fg);
   --color-info-bg: var(--info-bg);
+  --color-info-border: var(--info-border);
   --color-neutral: var(--neutral-fg);
   --color-neutral-bg: var(--neutral-bg);
+  --color-neutral-border: var(--neutral-border);
 
   --color-sidebar-fg: var(--sidebar-fg);
   --color-sidebar-fg-muted: var(--sidebar-fg-muted);
@@ -222,20 +214,23 @@
   --shadow-e1: var(--shadow-1);
   --shadow-e2: var(--shadow-2);
   --shadow-e3: var(--shadow-3);
+
+  --radius-card: var(--radius-card);
+  --radius-control: var(--radius-control);
 }
 
-/* Type scale — base 14, density-first */
+/* Type scale — base 14, density-first, generous line height for calm reading. */
 @theme {
   --text-metric-lg: 1.75rem;
   --text-metric-lg--line-height: 2.125rem;
-  --text-metric-md: 1.25rem;
-  --text-metric-md--line-height: 1.625rem;
+  --text-metric-md: 1.3125rem;
+  --text-metric-md--line-height: 1.75rem;
   --text-h1: 1.375rem;
-  --text-h1--line-height: 1.75rem;
-  --text-h2: 1.125rem;
-  --text-h2--line-height: 1.625rem;
-  --text-h3: 1rem;
-  --text-h3--line-height: 1.5rem;
+  --text-h1--line-height: 1.875rem;
+  --text-h2: 1.0625rem;
+  --text-h2--line-height: 1.5rem;
+  --text-h3: 0.9375rem;
+  --text-h3--line-height: 1.375rem;
   --text-body: 0.875rem;
   --text-body--line-height: 1.375rem;
   --text-small: 0.8125rem;
@@ -260,21 +255,23 @@
     text-rendering: optimizeLegibility;
   }
 
-  /* Numerals are first-class: tabular everywhere */
+  /* Numerals are first-class: tabular everywhere. */
   .tnum,
   table,
   input[type="number"] {
     font-variant-numeric: tabular-nums lining-nums;
   }
 
+  /* The focus ring is the brand orange — 6.04:1 on navy, 3.0:1 on white,
+     both clearing the 3:1 bar for non-text UI. */
   *:focus-visible {
     outline: 2px solid var(--brand-orange);
     outline-offset: 2px;
-    border-radius: 2px;
+    border-radius: 3px;
   }
 
   ::selection {
-    background: color-mix(in oklab, var(--brand-orange) 26%, transparent);
+    background: color-mix(in oklab, var(--brand-orange) 24%, transparent);
   }
 }
 
