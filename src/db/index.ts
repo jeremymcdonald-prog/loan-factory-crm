@@ -53,6 +53,12 @@ if (process.env.NODE_ENV !== "production") {
  *
  * `set_config(..., true)` makes the setting transaction-local, so a pooled
  * connection can never leak one request's tenant context into the next.
+ *
+ * Queries inside `fn` must be SEQUENTIAL. They all share this one client and
+ * one transaction, so `Promise.all` would issue overlapping statements on a
+ * single connection — node-postgres deprecates that and the results can
+ * interleave. Await each query in turn; if a page genuinely needs concurrency,
+ * use separate withTenant() calls, which take separate clients.
  */
 export async function withTenant<T>(
   ctx: TenantContext,

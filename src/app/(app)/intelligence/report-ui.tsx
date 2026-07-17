@@ -65,6 +65,31 @@ export function StatTile({
   );
 }
 
+/** A single number inside a panel. Belongs in a `<dl>`. */
+export function Figure({
+  label,
+  value,
+  urgent = false,
+}: {
+  label: string;
+  value: string;
+  urgent?: boolean;
+}) {
+  return (
+    <div>
+      <dt className="text-label font-semibold uppercase tracking-wide text-muted">{label}</dt>
+      <dd
+        className={cn(
+          "mt-1 text-metric-md font-semibold tnum",
+          urgent ? "text-warning" : "text-primary",
+        )}
+      >
+        {value}
+      </dd>
+    </div>
+  );
+}
+
 /**
  * One row of a distribution. The bar is decoration — the count sits next to it
  * as text, so the row still reads with no colour at all.

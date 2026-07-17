@@ -52,8 +52,8 @@ export default async function MarketingPage({
     async (db) => ({
       campaigns: await listCampaigns(db, user),
       totals: await campaignTotals(db, user),
-      templates: await listTemplateChoices(db, user),
-      policyCounts: await templatePolicyCounts(db, user),
+      templates: await listTemplateChoices(db),
+      policyCounts: await templatePolicyCounts(db),
       sizes: await audienceSizes(db, user, AUDIENCE_TYPES),
       nmls: await companyNmls(db, user),
     }),

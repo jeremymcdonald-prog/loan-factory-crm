@@ -89,7 +89,16 @@ export default async function ConversationsPage({
         title="Conversations"
         subtitle="Every email, text, and call in one place — yours and your team's."
         action={
-          counts.waiting > 0 ? (
+          counts.waiting === 0 ? (
+            <span className="text-small text-healthy">You&rsquo;re caught up.</span>
+          ) : filter === "waiting" ? (
+            // Already looking at them — a button back to this page would do nothing.
+            <span className="inline-flex items-center gap-1.5 text-small font-semibold text-warning">
+              <Clock className="size-3.5" aria-hidden />
+              {counts.waiting} {counts.waiting === 1 ? "person is" : "people are"} waiting on a
+              reply
+            </span>
+          ) : (
             <Link
               href="/conversations?filter=waiting"
               className="inline-flex h-9 items-center gap-2 rounded-md bg-action px-3.5 text-body font-semibold text-action-fg shadow-e1 hover:bg-action-hover"
@@ -97,10 +106,6 @@ export default async function ConversationsPage({
               <Clock className="size-3.5" aria-hidden />
               Answer {counts.waiting} waiting
             </Link>
-          ) : (
-            <span className="inline-flex items-center gap-1.5 text-small text-healthy">
-              You&rsquo;re caught up.
-            </span>
           )
         }
       />

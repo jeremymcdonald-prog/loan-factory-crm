@@ -264,7 +264,18 @@ export default async function ThreadPage({ params }: { params: Promise<{ id: str
   const now = new Date();
   const contact = thread.with;
   const firstName = contact.name.split(" ")[0] ?? contact.name;
-  const canCompose = thread.channel === "email" || thread.channel === "sms";
+  // A local const so the composable check narrows the channel for the reply box.
+  const channel = thread.channel;
+  const canCompose = channel === "email" || channel === "sms";
+  // A reply is only on the table for a channel you can write on, to someone
+  // who hasn't asked you to stop.
+  const canReply = canCompose && !contact.doNotContact;
+
+  const panelTitle = !canCompose
+    ? `About this ${CHANNEL_LABELS[channel].toLowerCase()}`
+    : contact.doNotContact
+      ? `No contact with ${firstName}`
+      : `Reply to ${firstName}`;
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -280,14 +291,11 @@ export default async function ThreadPage({ params }: { params: Promise<{ id: str
 
       <PageHeader
         title={contact.name}
-        subtitle={thread.subject ?? `${CHANNEL_LABELS[thread.channel]} thread`}
+        subtitle={thread.subject ?? `${CHANNEL_LABELS[channel]} thread`}
         meta={
           <div className="flex flex-wrap items-center gap-2">
-            <Badge
-              tone="neutral"
-              icon={<ChannelIcon channel={thread.channel} className="size-3" />}
-            >
-              {CHANNEL_LABELS[thread.channel]}
+            <Badge tone="neutral" icon={<ChannelIcon channel={channel} className="size-3" />}>
+              {CHANNEL_LABELS[channel]}
             </Badge>
             <LanguageBadge language={contact.language} />
             {contact.company ? (
@@ -337,10 +345,11 @@ export default async function ThreadPage({ params }: { params: Promise<{ id: str
       <div className="px-4 pb-6 sm:px-6">
         <Card>
           <div className="border-b border-subtle px-4 py-3">
-            <h2 className="text-h3 font-semibold text-primary">
-              {canCompose ? `Reply to ${firstName}` : `About this ${CHANNEL_LABELS[thread.channel].toLowerCase()}`}
-            </h2>
-            <ConsentLine contact={contact} channel={thread.channel} fromEmail={user.email} />
+            <h2 className="text-h3 font-semibold text-primary">{panelTitle}</h2>
+            {/* Only where a send would actually originate. */}
+            {canReply ? (
+              <ConsentLine contact={contact} channel={channel} fromEmail={user.email} />
+            ) : null}
           </div>
 
           <div className="p-4">
@@ -355,16 +364,10 @@ export default async function ThreadPage({ params }: { params: Promise<{ id: str
                 </p>
               </div>
             ) : canCompose ? (
-              <ReplyBox
-                conversationId={thread.id}
-                channel={thread.channel}
-                toName={firstName}
-              />
+              <ReplyBox conversationId={thread.id} channel={channel} toName={firstName} />
             ) : (
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="max-w-xl text-small text-secondary">
-                  {NOT_COMPOSABLE[thread.channel]}
-                </p>
+                <p className="max-w-xl text-small text-secondary">{NOT_COMPOSABLE[channel]}</p>
                 {contact.href ? (
                   <Link
                     href={contact.href}

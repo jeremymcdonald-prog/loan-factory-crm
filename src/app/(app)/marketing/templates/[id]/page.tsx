@@ -27,7 +27,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { id } = await params;
   const user = await requireUser();
-  const record = await queryAs(user, (db) => getTemplate(db, user, id));
+  const record = await queryAs(user, (db) => getTemplate(db, id));
   if (!record) return { title: "Not found" };
   return { title: `${record.ref} · ${record.name}` };
 }
@@ -73,11 +73,11 @@ export default async function TemplatePage({ params }: { params: Promise<{ id: s
   const user = await requireUser();
 
   const data = await queryAs(user, async (db) => {
-    const record = await getTemplate(db, user, id);
+    const record = await getTemplate(db, id);
     if (!record) return null;
     return {
       record,
-      templates: await listTemplateChoices(db, user),
+      templates: await listTemplateChoices(db),
       sizes: await audienceSizes(db, user, AUDIENCE_TYPES),
       nmls: await companyNmls(db, user),
     };

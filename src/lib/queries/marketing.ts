@@ -6,7 +6,9 @@
  * campaigns they own, a leader sees the team's.
  *
  * The template library is deliberately NOT book-scoped. It is the tenant's
- * shared compliance-reviewed library — the same 135 templates for everybody.
+ * shared compliance-reviewed library — the same templates for everybody — so
+ * RLS alone is the whole of its scoping and the library reads below take no
+ * user at all. Their siblings here take one because they genuinely narrow by it.
  */
 import "server-only";
 import { and, or, eq, ilike, isNull, desc, asc, sql, count } from "drizzle-orm";
@@ -122,7 +124,6 @@ export type TemplateFilter = {
  */
 export async function listTemplates(
   db: Db,
-  _u: CurrentUser,
   filter: TemplateFilter = {},
 ): Promise<TemplateRow[]> {
   const conditions = [];
@@ -172,11 +173,7 @@ export type TemplateRecord = TemplateRow & {
   complianceNotes: string | null;
 };
 
-export async function getTemplate(
-  db: Db,
-  _u: CurrentUser,
-  id: string,
-): Promise<TemplateRecord | null> {
+export async function getTemplate(db: Db, id: string): Promise<TemplateRecord | null> {
   const [row] = await db.select().from(template).where(eq(template.id, id)).limit(1);
   return (row as TemplateRecord | undefined) ?? null;
 }
@@ -184,7 +181,6 @@ export async function getTemplate(
 /** Category names with how many templates each holds — drives the filter. */
 export async function templateCategories(
   db: Db,
-  _u: CurrentUser,
 ): Promise<{ category: string; count: number }[]> {
   return db
     .select({ category: template.category, count: count() })
@@ -194,10 +190,7 @@ export async function templateCategories(
 }
 
 /** How many templates sit under each policy, plus the total. */
-export async function templatePolicyCounts(
-  db: Db,
-  _u: CurrentUser,
-): Promise<Record<string, number>> {
+export async function templatePolicyCounts(db: Db): Promise<Record<string, number>> {
   const rows = await db
     .select({ policy: template.policy, count: count() })
     .from(template)
@@ -220,7 +213,7 @@ export type TemplateChoice = {
 };
 
 /** Every template, for the New campaign picker. The dialog explains the policy. */
-export async function listTemplateChoices(db: Db, _u: CurrentUser): Promise<TemplateChoice[]> {
+export async function listTemplateChoices(db: Db): Promise<TemplateChoice[]> {
   return db
     .select({
       id: template.id,
@@ -317,14 +310,25 @@ export async function audienceSize(
   return Number(row?.n ?? 0);
 }
 
-/** Live size of every audience, so the picker can show what each one reaches. */
+/**
+ * Live size of every audience, so the picker can show what each one reaches.
+ *
+ * Sequential on purpose. Everything inside queryAs() shares one pooled client
+ * and one transaction, so concurrent queries (Promise.all) would issue
+ * overlapping statements on that single connection — node-postgres deprecates
+ * it and the results can interleave. There are a handful of audiences; the
+ * round-trips are cheap.
+ */
 export async function audienceSizes(
   db: Db,
   u: CurrentUser,
   types: readonly AudienceType[],
 ): Promise<Record<string, number>> {
-  const sizes = await Promise.all(types.map((t) => audienceSize(db, u, t)));
-  return Object.fromEntries(types.map((t, i) => [t, sizes[i]]));
+  const sizes: Record<string, number> = {};
+  for (const t of types) {
+    sizes[t] = await audienceSize(db, u, t);
+  }
+  return sizes;
 }
 
 /**

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { and, eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { ShieldCheck } from "lucide-react";
 import { requireUser, queryAs } from "@/lib/auth";
 import { aiInsight, template } from "@/db/schema";

@@ -38,10 +38,10 @@ export default async function TemplateLibraryPage({
   const { rows, categories, policyCounts, templates, sizes, nmls } = await queryAs(
     user,
     async (db) => ({
-      rows: await listTemplates(db, user, { q, category, policy }),
-      categories: await templateCategories(db, user),
-      policyCounts: await templatePolicyCounts(db, user),
-      templates: await listTemplateChoices(db, user),
+      rows: await listTemplates(db, { q, category, policy }),
+      categories: await templateCategories(db),
+      policyCounts: await templatePolicyCounts(db),
+      templates: await listTemplateChoices(db),
       sizes: await audienceSizes(db, user, AUDIENCE_TYPES),
       nmls: await companyNmls(db, user),
     }),
