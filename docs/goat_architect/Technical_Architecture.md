@@ -24,8 +24,8 @@ Purpose: this document is the implementation team's contract for how Loan Factor
 
 1. **One team can ship it.** Next.js + Supabase is the highest-leverage combination available to a small team: authentication, database, security rules, file storage, and background scheduling come from one vendor with one bill, and the front end deploys with a git push. No DevOps hire required for Phases 1–2.
 2. **Tenant safety lives in the database, not in developer discipline.** Row-level security means the database itself refuses to return another tenant's rows even if application code has a bug. For a product holding borrower information, this is the single most important architectural property (details in §4 and [[Data_Model]] §RLS).
-3. **AI memory without a second database.** pgvector lets Ally's semantic search (find the right template, recall past conversations, match a lead to a playbook) live in the same Postgres as the CRM data — same backups, same security rules, no sync pipeline between two stores.
-4. **Claude behind a gateway, not sprinkled through the code.** Every AI call goes through one first-party module (§6.4). That is where we enforce the Ally contract — every output lands in an approval queue, every call is logged to `ai_action_log`, every prompt treats retrieved content as untrusted input (prompt-injection posture), and per-tenant spend is capped. Swapping or adding models later is a one-file change.
+3. **AI memory without a second database.** pgvector lets AI's semantic search (find the right template, recall past conversations, match a lead to a playbook) live in the same Postgres as the CRM data — same backups, same security rules, no sync pipeline between two stores.
+4. **Claude behind a gateway, not sprinkled through the code.** Every AI call goes through one first-party module (§6.4). That is where we enforce the AI contract — every output lands in an approval queue, every call is logged to `ai_action_log`, every prompt treats retrieved content as untrusted input (prompt-injection posture), and per-tenant spend is capped. Swapping or adding models later is a one-file change.
 5. **n8n is a proven asset, hidden on purpose.** Jeremy already runs n8n. It handles the fiddly integration work (webhooks in, third-party APIs out, retries, scheduling) far cheaper than hand-writing it. But n8n's UI is a developer tool, and CANON's "toddler simple" standard bans developer terminology — so LOs configure automations in Loan Factory CRM's own plain-language Automations screens, and the CRM provisions/updates the corresponding n8n workflows behind the scenes (§6.3).
 6. **Serverless matches the traffic shape.** A mortgage CRM's load is spiky (Monday mornings, month-end closings) and modest in absolute terms. Serverless scales to zero cost at night and to Monday morning without capacity planning.
 7. **The existing prototype constrains nothing.** Per [[Current_State_Audit]] and D-01, the HTML prototype is replaced; nothing in this architecture inherits from it.
@@ -84,7 +84,7 @@ flowchart TB
 
 Two rules the diagram encodes, worth stating in words:
 
-- **n8n never talks to the database directly.** It calls the CRM's own service API with a scoped service credential, so every automation write passes the same validation, RLS context, audit logging, and Ally approval gates as a human action.
+- **n8n never talks to the database directly.** It calls the CRM's own service API with a scoped service credential, so every automation write passes the same validation, RLS context, audit logging, and AI approval gates as a human action.
 - **The model gateway is the only door to Claude.** No screen, job, or n8n workflow calls Anthropic directly.
 
 ## 4. Multi-tenancy model
@@ -97,7 +97,7 @@ Loan Factory CRM is **one application, one Postgres database, many tenants** —
 | How is isolation enforced? | Every table carries `tenant_id`. RLS policies compare it to the `tenant_id` claim baked into the user's session JWT at login. A query without a valid tenant context returns zero rows — by database policy, not by application code. |
 | Can a user belong to two tenants? | Not in v1. One user → one tenant (simplest choice consistent with CANON; logged for [[Decisions]]). Cross-tenant needs are solved by separate accounts. |
 | What about roles inside a tenant? | RBAC ships as **7 staff role presets + admin in Phases 1–2** (LO, LO assistant, processing/ops, team leader, branch leader, agent relationship manager, marketing coordinator, plus admin) — matching the `user.role` enum in [[Data_Model]]. The 8th CANON persona, the borrower, is **not** an RBAC preset — and not a user at all: borrowers exist only as CRM contact records (see [[Data_Model]]), so no borrower authentication surface, role, or JWT audience exists anywhere in the product. Tenant isolation is the RLS hard wall; **role visibility** (an LO sees their own book, a team leader sees the team's) is enforced by a second layer of RLS policies on ownership/assignment columns plus application checks. Full matrix in [[Data_Model]] and [[Information_Architecture]]. |
-| Where do AI and vector data live? | Same database, same `tenant_id`, same RLS. Ally can never retrieve another tenant's memory because the retrieval query runs under the caller's tenant context. |
+| Where do AI and vector data live? | Same database, same `tenant_id`, same RLS. AI can never retrieve another tenant's memory because the retrieval query runs under the caller's tenant context. |
 | Service-role access | Background jobs and n8n use scoped service credentials that **must** set an explicit tenant context per job. No "god-mode" query path exists in application code; the Supabase service key is confined to the job runner and never shipped to the browser or to n8n. |
 
 ## 5. Service boundaries
@@ -109,8 +109,8 @@ Loan Factory CRM is a **modular monolith**: one deployable app, but the code is 
 | **Core CRM** | Tenants, users/roles, people, leads, CRM opportunity records + the 20-stage lifecycle (stage and milestone facts team-entered in v1; later optionally synced read-only from external systems — the CRM never owns loan-of-record data), tasks, notes, partners, segments | CRUD + stage-transition API (stage moves fire domain events) | Send messages; call models; perform loan work (no origination, underwriting, pricing, disclosure, or document collection) |
 | **Comms** | Conversations, messages, templates (the 135-template EMT library + variants), campaigns, **consent** enforcement, provider adapters (email/SMS) | `send(message)` — which refuses to send without recorded consent, a resolved template/merge-field set, and (for AI-drafted content) an approval record | Bypass consent or the approval queue — there is deliberately no back door |
 | **Automation engine** | Automation definitions (plain-language triggers/conditions/actions), the event catalog from the communication framework, execution runs, the n8n provisioning layer | `on(event) → enqueue actions`; run history for the Automations UX | Auto-send anything policy-tiered Manual Only / Never Automate (hard block per [[Automation_Catalog]]); show n8n to users |
-| **AI services (Ally)** | Model gateway, prompt/version registry, retrieval (pgvector), insight generation (briefing, next best action, stall detection, drafts), scoring + `score_snapshot`s, compliance lint (deterministic rules + AI review) | `prepare(draft/insight) → approval queue`; `explain(score)` | Act autonomously; use protected-class or proxy features in scoring (D-11); treat retrieved text as instructions (prompt-injection posture: all retrieved/ingested content is untrusted data) |
-| **Analytics** | Read models for Intelligence: pipeline metrics, conversion, partner scorecards, Ally acceptance rates | Query endpoints + materialized views | Write to operational tables |
+| **AI services (AI)** | Model gateway, prompt/version registry, retrieval (pgvector), insight generation (briefing, next best action, stall detection, drafts), scoring + `score_snapshot`s, compliance lint (deterministic rules + AI review) | `prepare(draft/insight) → approval queue`; `explain(score)` | Act autonomously; use protected-class or proxy features in scoring (D-11); treat retrieved text as instructions (prompt-injection posture: all retrieved/ingested content is untrusted data) |
+| **Analytics** | Read models for Intelligence: pipeline metrics, conversion, partner scorecards, AI acceptance rates | Query endpoints + materialized views | Write to operational tables |
 
 Cross-cutting and owned by the platform layer, not any one service: `audit_log` (append-only, every mutation), `ai_action_log` (every model call), feature flags, i18n (EN/VI first-class per D-08).
 
@@ -125,7 +125,7 @@ Serverless request handlers must return in seconds; everything slower runs as a 
 | Tier | Runs on | Examples | Latency target |
 |---|---|---|---|
 | **Inline** | Request handler | CRUD, stage move + event insert, reading approval queue | < 1s |
-| **Queue jobs** | Postgres-backed queue, worker invoked serverlessly | Ally draft generation, scoring runs, embedding refresh, compliance lint, merge-field resolution, send-time delivery via provider adapter | seconds–minutes |
+| **Queue jobs** | Postgres-backed queue, worker invoked serverlessly | AI draft generation, scoring runs, embedding refresh, compliance lint, merge-field resolution, send-time delivery via provider adapter | seconds–minutes |
 | **Scheduled** | Supabase cron → queue | Morning briefing build (per user, pre-computed before 7am local), stall sweeps, "going quiet" partner sweeps, annual-review/birthday date triggers, retention purges, disparate-impact scoring review extracts (D-11) | daily/hourly |
 | **Integration workflows** | n8n | Facebook/website/widget lead intake webhooks, provider status callbacks (delivered/opened/bounced), future read-only LOS/POS stage/milestone sync (Phase 3) | event-driven |
 
@@ -133,7 +133,7 @@ Rules:
 
 1. **Every job is idempotent and retried with backoff**; poison jobs land in a dead-letter table surfaced on an internal ops dashboard, and user-visible automations show failures in the Automations run history in plain language ("This step failed twice; we'll retry at 2:15pm").
 2. **Jobs carry tenant context explicitly** and run under RLS like everything else (§4).
-3. **AI jobs end at the approval queue, never at a send.** The only path from a Claude output to a borrower is a human tapping Approve (CANON Ally contract).
+3. **AI jobs end at the approval queue, never at a send.** The only path from a Claude output to a borrower is a human tapping Approve (CANON AI contract).
 4. **Stop conditions override timing** — queued automation sends re-check stop conditions (stage advanced, item received, opt-out, complaint) at execution time, not just at enqueue time, matching the communication framework's governance rule.
 
 ## 7. Environments
@@ -152,7 +152,7 @@ Secrets live in the platform's secret manager per environment; never in the repo
 Three audiences, three layers:
 
 1. **Engineers:** Sentry for exceptions (front and back), structured JSON logs with request/tenant/job IDs, queue depth + dead-letter alerts, Postgres slow-query and connection metrics from Supabase. Page-level web vitals from the host.
-2. **The product (Ally accountability):** the `ai_action_log` doubles as AI observability — per-tenant token spend and cost, model latency, and the three numbers that tell us whether Ally is actually good: **approval rate, edit-before-approve rate, rejection rate** per insight/draft type. These feed the Intelligence module and the [[QA_Plan]] AI-review-safety criteria.
+2. **The product (AI accountability):** the `ai_action_log` doubles as AI observability — per-tenant token spend and cost, model latency, and the three numbers that tell us whether AI is actually good: **approval rate, edit-before-approve rate, rejection rate** per insight/draft type. These feed the Intelligence module and the [[QA_Plan]] AI-review-safety criteria.
 3. **Compliance:** every outbound message queryable by consent status at send time; automation run history immutable; scheduled export of `score_snapshot`s for the periodic disparate-impact review (D-11). Alert (not just log) on: any send attempt blocked for missing consent, any attempt to auto-execute a Manual Only/Never Automate template, repeated compliance-lint blocks from one user.
 
 Alerting starts simple: error-rate spike, queue stall > 10 min, briefing job not completed by 7am, provider webhook silence > 1 hour, model gateway error rate. Route to the team's existing channels; no on-call tooling purchase in Phases 1–2.

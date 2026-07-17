@@ -43,7 +43,7 @@ Proven: a built-in Facebook Ads tool at `loanfactory.com/facebook_ads` with Meta
 
 | Field | Detail |
 |---|---|
-| Purpose | Capture Meta lead-form leads with real attribution instead of the flat "Automatically Created" tag; give Ally the first-touch context ("this lead came from the HELOC ad 4 minutes ago"). |
+| Purpose | Capture Meta lead-form leads with real attribution instead of the flat "Automatically Created" tag; give AI the first-touch context ("this lead came from the HELOC ad 4 minutes ago"). |
 | Data in | Lead contact fields, ad/campaign/form identity, timestamp, assigned LO. Later (Phase 2–3, via Meta Marketing API directly): spend, impressions, cost-per-lead for the Intelligence screen. |
 | Data out | Possibly offline conversion events back to Meta (Phase 3, improves ad optimization) — unproven, optional. |
 | Direction | Inbound (conversions-out is a future option). |
@@ -84,11 +84,11 @@ Proven: three Custom GPTs (Marketing, Compliance reviewer, Image Prompt) with in
 
 | Field | Detail |
 |---|---|
-| Purpose | This is a **migration, not a runtime integration**. Ally absorbs these workflows: the prompts, guardrails, output contracts, and knowledge files become Ally's Marketing and compliance-review capabilities inside Loan Factory CRM. No production dependency on OpenAI/ChatGPT is planned. |
+| Purpose | This is a **migration, not a runtime integration**. AI absorbs these workflows: the prompts, guardrails, output contracts, and knowledge files become AI's Marketing and compliance-review capabilities inside Loan Factory CRM. No production dependency on OpenAI/ChatGPT is planned. |
 | Data in | One-time content import: system prompts, compliance rules, brand voice, 70+ finished content artifacts, the compliance-reviewer output contract (risk level → blockers → warnings → missing disclosures → safer rewrite → status). |
 | Data out | None. |
 | Direction | Inbound, one-time. |
-| Phase | Phase 1 (Ally guardrails) and Phase 2 (Marketing module content). |
+| Phase | Phase 1 (AI guardrails) and Phase 2 (Marketing module content). |
 | Risk | **Low.** The only risk is organizational: LOs keep using the GPTs after Loan Factory CRM ships, forking the content. Plan a sunset message once parity exists. |
 | Open questions | None material. |
 
@@ -102,7 +102,7 @@ Proven: three Custom GPTs (Marketing, Compliance reviewer, Image Prompt) with in
 
 | Field | Detail |
 |---|---|
-| Purpose | Two-way email sync so Conversations shows real borrower threads and Ally can draft replies in context; calendar sync so consultations (lifecycle stages 3–4) and closings appear in Today. |
+| Purpose | Two-way email sync so Conversations shows real borrower threads and AI can draft replies in context; calendar sync so consultations (lifecycle stages 3–4) and closings appear in Today. |
 | Data in | Message threads (matched to People records), calendar events, availability. |
 | Data out | Sent emails (human-approved drafts), calendar events (consultation bookings). |
 | Direction | Two-way. |
@@ -189,7 +189,7 @@ These are gates, not phases. No build starts, and no vendor sandbox account gets
 2. **Phase 1 (paperwork only): Gmail CASA verification (2.1).** OAuth verification starts day one because the timeline is Google's, not ours; the transactional-provider fallback is selected and integrated early so a slipped review never gates Phase 2 email.
 3. **Phase 1 (discovery only, zero code): Loan Factory platform lead streams (1.1 + 1.2).** Open the conversation with LF IT immediately, because the mechanism (webhook vs. export vs. email-parse) is the biggest unknown and costs calendar time, not build time. The one Phase 1 build item here is UTM/gclid attribution fields on lead records (1.3) — free, just store what arrives.
 4. **Phase 1 (in parallel, paperwork only): start the remaining gates.** File 10DLC registration; ask counsel for the call-recording state matrix. These cost weeks of calendar time and near-zero build time.
-5. **Phase 1 content import: Custom GPT migration (1.5).** Ally's guardrails and Marketing knowledge, imported once.
+5. **Phase 1 content import: Custom GPT migration (1.5).** AI's guardrails and Marketing knowledge, imported once.
 6. **Phase 2 (first): Google Workspace sync (2.1).** Gmail threads into Conversations, sends via the LO's real Gmail, Calendar into Today — on the CASA clearance secured during Phase 1, or on the transactional-provider fallback until it clears.
 7. **Phase 2: lead ingestion build from the Loan Factory platform (1.1 + 1.2).** One n8n pathway that captures widget leads, QM Pricer actions, and "Automatically Created" Facebook leads with structured source attribution — the highest-value, lowest-legal-risk integration in the map, built as soon as Phase 2 opens on whatever mechanism the Phase 1 discovery surfaced.
 8. **Phase 2: SMS (2.2)** once 10DLC clears — consent-gated, blocked-topics enforced in code.
@@ -200,4 +200,4 @@ These are gates, not phases. No build starts, and no vendor sandbox account gets
 
 ## Anti-pattern: never gate Phase 1 on an external system
 
-The Phase 1 walking skeleton — Today, People, leads, CRM opportunity records with mortgage stages, tasks, notes and activity history, responsive desktop and mobile web layouts, foundational Ally recommendation cards with the approval workflow shell — ships with **no external connection at all**, so nothing external can slip it: leads entered manually or via CSV import; stage and milestone facts entered by the team; Ally cards running on controlled mock output. Every integration in this map is additive; none is load-bearing for launch. This is a lesson written into the discovery materials twice over: the old CRM prototype displayed "Encompass ✓ Connected" as a static decoration for an integration that never existed (see [[Current_State_Audit]]), and the LF platform integrations, while real, have no documented API and could change shape at any time. Loan Factory CRM never shows an integration as connected unless it is verifiably exchanging data, degrades gracefully when a connection drops, and treats every inbound payload — like every AI output — as untrusted until validated.
+The Phase 1 walking skeleton — Today, People, leads, CRM opportunity records with mortgage stages, tasks, notes and activity history, responsive desktop and mobile web layouts, foundational AI recommendation cards with the approval workflow shell — ships with **no external connection at all**, so nothing external can slip it: leads entered manually or via CSV import; stage and milestone facts entered by the team; AI cards running on controlled mock output. Every integration in this map is additive; none is load-bearing for launch. This is a lesson written into the discovery materials twice over: the old CRM prototype displayed "Encompass ✓ Connected" as a static decoration for an integration that never existed (see [[Current_State_Audit]]), and the LF platform integrations, while real, have no documented API and could change shape at any time. Loan Factory CRM never shows an integration as connected unless it is verifiably exchanging data, degrades gracefully when a connection drops, and treats every inbound payload — like every AI output — as untrusted until validated.

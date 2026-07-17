@@ -41,7 +41,7 @@ function wordsFrom(formData: FormData) {
 /**
  * Build a new automation.
  *
- * It is born switched off, and at t2 — Ally prepares, a human approves. A rule
+ * It is born switched off, and at t2 — AI prepares, a human approves. A rule
  * somebody just typed has not earned the right to act on its own, and nothing
  * on the form can grant it: the tier is deliberately not a field.
  */

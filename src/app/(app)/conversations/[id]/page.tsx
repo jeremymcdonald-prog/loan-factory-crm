@@ -184,11 +184,11 @@ function MessageBubble({
 
         <p className="mt-1.5 whitespace-pre-wrap text-body text-primary">{m.body}</p>
 
-        {m.preparedByAlly || note || m.templateRef ? (
+        {m.preparedByAi || note || m.templateRef ? (
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
-            {m.preparedByAlly ? (
-              <Badge tone="ally" icon={<Sparkles className="size-3" aria-hidden />}>
-                Prepared by Ally
+            {m.preparedByAi ? (
+              <Badge tone="ai" icon={<Sparkles className="size-3" aria-hidden />}>
+                Prepared by AI
               </Badge>
             ) : null}
             {note ? <Badge tone={note.tone}>{note.label}</Badge> : null}

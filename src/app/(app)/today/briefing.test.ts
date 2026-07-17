@@ -50,10 +50,10 @@ describe("the morning briefing", () => {
     expect(lockIndex).toBeLessThan(leadIndex);
   });
 
-  it("states the approval contract whenever Ally has drafts waiting", () => {
+  it("states the approval contract whenever AI has drafts waiting", () => {
     const b = buildBriefing(
       "Minh",
-      [item({ id: "insight-1", cls: "ally_approval", urgency: "ally" })],
+      [item({ id: "insight-1", cls: "ai_approval", urgency: "ai" })],
       STATS,
       NOW,
     );
@@ -110,7 +110,7 @@ describe("the morning briefing", () => {
       item({ id: "closing-1", cls: "deadline" }),
       item({ id: "lead-1", cls: "new_lead" }),
       item({ id: "lead-2", cls: "new_lead" }),
-      item({ id: "insight-1", cls: "ally_approval" }),
+      item({ id: "insight-1", cls: "ai_approval" }),
       item({ id: "task-1", cls: "overdue_task" }),
       item({ id: "appt-1", cls: "appointment" }),
       item({ id: "stall-1", cls: "stalled" }),
@@ -123,7 +123,7 @@ describe("the morning briefing", () => {
       "Minh",
       [
         item({ id: "lock-1", cls: "deadline", headline: "Thanh — rate lock expires in 2d" }),
-        item({ id: "insight-1", cls: "ally_approval" }),
+        item({ id: "insight-1", cls: "ai_approval" }),
       ],
       STATS,
       NOW,

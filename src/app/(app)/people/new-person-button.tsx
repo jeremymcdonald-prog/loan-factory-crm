@@ -85,7 +85,7 @@ export function NewPersonButton() {
           <Field
             label="Preferred language"
             htmlFor="preferredLanguage"
-            hint="Ally drafts in this language."
+            hint="AI drafts in this language."
           >
             <Select id="preferredLanguage" name="preferredLanguage" defaultValue="en">
               {LANGUAGES.map((l) => (

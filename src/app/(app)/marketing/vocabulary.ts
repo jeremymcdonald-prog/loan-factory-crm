@@ -25,7 +25,7 @@ export type PolicyRead = {
   /**
    * Hue answers the one question colour is allowed to answer here, the same one
    * it answers everywhere else: how much of a human does this need? Green none,
-   * violet Ally drafts and a human approves, amber a human writes it, red never
+   * violet AI drafts and a human approves, amber a human writes it, red never
    * a machine at all.
    */
   tone: Urgency;
@@ -44,17 +44,17 @@ export const POLICY: Record<TemplatePolicy, PolicyRead> = {
     campaignBlock: null,
   },
   semi_automated: {
-    label: "Ally can prepare",
-    tone: "ally",
+    label: "AI can prepare",
+    tone: "ai",
     sentence:
-      "Ally can write the first draft of this one. Nothing reaches the borrower until you have read it and approved it yourself.",
+      "AI can write the first draft of this one. Nothing reaches the borrower until you have read it and approved it yourself.",
     campaignBlock: null,
   },
   manual_only: {
     label: "Write it yourself",
     tone: "warning",
     sentence:
-      "This one is yours to write. It turns on the details of one borrower's situation, so neither Ally nor a campaign will draft it for you.",
+      "This one is yours to write. It turns on the details of one borrower's situation, so neither AI nor a campaign will draft it for you.",
     campaignBlock:
       "This template is one you write yourself, one borrower at a time. It turns on the details of their situation, so it cannot go out to a list.",
   },

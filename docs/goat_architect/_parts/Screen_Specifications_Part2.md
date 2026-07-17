@@ -1,6 +1,6 @@
 ## Screens 9-15
 
-This part specifies screens 9–15 of the Loan Factory CRM screen inventory: Conversations, Referral Partner Profile, Agent Relationship Dashboard, Campaign Builder, Template Library, Automation Builder, and the AI Intelligence Center. Each screen follows the same 12-field structure as its siblings in [[Screen_Specifications]] (Purpose · Primary user · Primary action · Information hierarchy · Components · Empty state · Loading state · Error state · Mobile · AI behavior · Permissions · Acceptance criteria) and is bound by the product CANON: Ally prepares, the human approves; plain mortgage language; one obvious primary action per screen; status color tied to loan urgency, not decoration. Throughout, **Mobile** means the responsive mobile-browser layout of the same web app — Loan Factory CRM ships as responsive web on desktop and mobile browsers; there is no native app. Related: [[Design_System]] · [[Data_Model]] · [[Automation_Catalog]] · [[AI_Product_Architecture]] · [[Mortgage_Compliance]] · [[Communication_Templates]].
+This part specifies screens 9–15 of the Loan Factory CRM screen inventory: Conversations, Referral Partner Profile, Agent Relationship Dashboard, Campaign Builder, Template Library, Automation Builder, and the AI Intelligence Center. Each screen follows the same 12-field structure as its siblings in [[Screen_Specifications]] (Purpose · Primary user · Primary action · Information hierarchy · Components · Empty state · Loading state · Error state · Mobile · AI behavior · Permissions · Acceptance criteria) and is bound by the product CANON: AI prepares, the human approves; plain mortgage language; one obvious primary action per screen; status color tied to loan urgency, not decoration. Throughout, **Mobile** means the responsive mobile-browser layout of the same web app — Loan Factory CRM ships as responsive web on desktop and mobile browsers; there is no native app. Related: [[Design_System]] · [[Data_Model]] · [[Automation_Catalog]] · [[AI_Product_Architecture]] · [[Mortgage_Compliance]] · [[Communication_Templates]].
 
 ---
 
@@ -10,13 +10,13 @@ This part specifies screens 9–15 of the Loan Factory CRM screen inventory: Con
 
 **Primary user.** Loan officer. Secondary: LO assistant and processor (threads on files they own), marketing coordinator (campaign reply triage).
 
-**Primary action.** **Reply** — specifically, *approve and send an Ally-prepared reply draft*. The send button is the single dominant control in an open thread.
+**Primary action.** **Reply** — specifically, *approve and send an AI-prepared reply draft*. The send button is the single dominant control in an open thread.
 
 **Information hierarchy.**
 1. Needs-reply queue (unanswered inbound, sorted by loan urgency then wait time — a borrower at stage 14 Clear to Close outranks a stage 1 New Lead at equal wait time)
 2. Open thread: contact name, loan stage chip (one of the 20 locked stages), language preference flag, consent status
 3. Message history with channel badges (Email / SMS) interleaved chronologically
-4. Ally draft panel (reply draft + template provenance + compliance lint result)
+4. AI draft panel (reply draft + template provenance + compliance lint result)
 5. Thread metadata rail: linked loan, assigned owner, related tasks, opt-out state
 
 **Components.**
@@ -26,12 +26,12 @@ This part specifies screens 9–15 of the Loan Factory CRM screen inventory: Con
 | Thread list | Grouped by contact; unread + needs-reply badges; filter by owner, stage macro-phase (ENGAGE/QUALIFY/TRANSACT/RETAIN/GROW), channel, language |
 | Loan context header | Stage chip, days-in-stage, next milestone, property address; click-through to the loan record (the CRM opportunity record — stage and milestone facts entered by the team in v1, read-only synced from external systems later) |
 | Composer | Rich text for email, plain text for SMS; merge fields resolve live from the contact/loan record (the 17-token vocabulary from the template library — `{{BorrowerName}}`, `{{PropertyAddress}}`, etc.); unresolved fields render as a named blocker, never send blank |
-| Ally draft card | Draft + "why this draft" line citing the source template EMT ID and stage; one-tap **Approve & send**, **Edit first**, **Dismiss** |
+| AI draft card | Draft + "why this draft" line citing the source template EMT ID and stage; one-tap **Approve & send**, **Edit first**, **Dismiss** |
 | Compliance lint strip | Deterministic pre-send check (do-not-say list, required NMLS/Equal Housing footer for applicable content, trigger-term detection, opt-out/consent state) — blockers stop send, warnings require an explicit "send anyway" with reason logged |
 | SMS policy guard (Phase 2) | SMS composer refuses blocked topics (rate locks, payment changes, cash-to-close, closing delays, problem files, adverse outcomes) and offers "move to email" — mirrors the communication framework's SMS cross-reference rules |
-| Language toggle | When the contact's preferred language is Vietnamese (or other supported locale), Ally drafts in that language from the lifecycle localization modules and flags "human translation review required" until per-template variants exist |
+| Language toggle | When the contact's preferred language is Vietnamese (or other supported locale), AI drafts in that language from the lifecycle localization modules and flags "human translation review required" until per-template variants exist |
 
-**Empty state.** "No conversations yet. Messages to and from your contacts will appear here the moment your email account is connected." Primary CTA: **Connect email** (Settings deep link). If email is connected but the queue is clear: "Inbox zero — nothing needs a reply. Ally will surface the next inbound here." with a subdued link to browse all threads.
+**Empty state.** "No conversations yet. Messages to and from your contacts will appear here the moment your email account is connected." Primary CTA: **Connect email** (Settings deep link). If email is connected but the queue is clear: "Inbox zero — nothing needs a reply. AI will surface the next inbound here." with a subdued link to browse all threads.
 
 **Loading state.** Skeleton thread list (8 rows) + skeleton message bubbles; loan context header loads first (cached from the contact record) so the user always knows *who* before *what*.
 
@@ -39,16 +39,16 @@ This part specifies screens 9–15 of the Loan Factory CRM screen inventory: Con
 
 **Mobile.** Thread list and open thread are separate full-screen views. Needs-reply queue is the mobile landing view. Approve & send works one-handed: draft card, two buttons, done. Voice-to-text dictation supported in the composer. Swipe actions: assign, snooze, mark done.
 
-**AI behavior.** Ally (1) triages every inbound: classifies intent (question, docs-needed follow-up, scheduling, complaint, rate question), links it to the right opportunity, and re-ranks the needs-reply queue; (2) prepares a reply draft grounded in the stage-appropriate template and the thread history, always with source attribution; (3) detects escalation triggers (complaint, possible denial language, fair-lending or RESPA concern, pricing dispute) and routes to a human review task instead of drafting a casual reply; (4) deflects rate questions with the approved compliant pattern ("rates depend on the full scenario") rather than quoting numbers. Nothing sends without a human tap — no exceptions in v1.
+**AI behavior.** AI (1) triages every inbound: classifies intent (question, docs-needed follow-up, scheduling, complaint, rate question), links it to the right opportunity, and re-ranks the needs-reply queue; (2) prepares a reply draft grounded in the stage-appropriate template and the thread history, always with source attribution; (3) detects escalation triggers (complaint, possible denial language, fair-lending or RESPA concern, pricing dispute) and routes to a human review task instead of drafting a casual reply; (4) deflects rate questions with the approved compliant pattern ("rates depend on the full scenario") rather than quoting numbers. Nothing sends without a human tap — no exceptions in v1.
 
 **Permissions.** LOs see their own threads plus threads on loans they own. Assistants/processors see threads on assigned files. Team leaders see their team's threads read-only by default, with reply-as-self allowed. Marketing coordinators see campaign-reply threads only. No role can delete a message (audit trail); archive only.
 
 **Acceptance criteria.**
 - A not-tech-savvy LO can find the oldest unanswered borrower message and send an approved reply in ≤ 3 taps from landing (per the [[QA_Plan]] NTS thresholds).
-- Every outbound message stores: sender, approver, timestamp, source template ID (if any), Ally involvement flag, and compliance lint result.
+- Every outbound message stores: sender, approver, timestamp, source template ID (if any), AI involvement flag, and compliance lint result.
 - A thread with an opted-out contact hard-blocks marketing sends and visibly labels transactional-only status.
 - SMS composer (Phase 2) cannot send any blocked-topic content; test with all six blocked categories.
-- Vietnamese-preference contact receives an Ally draft in Vietnamese with the translation-review flag set.
+- Vietnamese-preference contact receives an AI draft in Vietnamese with the translation-review flag set.
 - Send failure never loses composed text (kill the tab mid-send; draft survives).
 
 ---
@@ -59,7 +59,7 @@ This part specifies screens 9–15 of the Loan Factory CRM screen inventory: Con
 
 **Primary user.** Loan officer. Secondary: agent relationship manager (works these profiles all day), team leader.
 
-**Primary action.** **Log a touch / send an update** — the partner-facing equivalent of "reply." One button that opens Ally's suggested next outreach (status update on a shared file, monthly nurture, congratulations, re-engagement).
+**Primary action.** **Log a touch / send an update** — the partner-facing equivalent of "reply." One button that opens AI's suggested next outreach (status update on a shared file, monthly nurture, congratulations, re-engagement).
 
 **Information hierarchy.**
 1. Partner identity: name, brokerage, photo, tier (A/B/C), relationship owner, preferred contact channel and language
@@ -79,7 +79,7 @@ This part specifies screens 9–15 of the Loan Factory CRM screen inventory: Con
 | Referral ledger | Table: date, direction, borrower (name only), outcome, loan amount if funded; totals row |
 | Cadence panel | Which automations this partner is enrolled in (Realtor monthly nurture, birthday, closing anniversary co-celebration); pause/resume per partner |
 | Co-marketing shelf | Co-branded pieces produced (Phase 2, from Marketing module); RESPA-aware note that co-marketing cost sharing must be fair-market-value documented — surfaced as a persistent reminder, not buried |
-| Ally next-touch card | "It's been 34 days since your last touch with Maria and her buyer just went Clear to Close — send the CTC update?" One-tap approve |
+| AI next-touch card | "It's been 34 days since your last touch with Maria and her buyer just went Clear to Close — send the CTC update?" One-tap approve |
 
 **Empty state.** New partner with no history: profile shell + "Start the relationship" checklist (log how you met, set tier, enroll in monthly nurture, add birthday). No fake charts — the reciprocity meter shows "No referral history yet" rather than zeros pretending to be data.
 
@@ -87,9 +87,9 @@ This part specifies screens 9–15 of the Loan Factory CRM screen inventory: Con
 
 **Error state.** If shared-loan stage facts can't load: "We can't confirm the latest recorded milestone right now — last recorded: Processing as of {timestamp}." Status-update sending is disabled while stale (never let an LO send a partner an outdated milestone). Ledger load failure retries inline without collapsing the rest of the profile.
 
-**Mobile.** Card-stack layout: identity → health strip → Ally next-touch → shared files. Tap-to-call/text/email from the header. Log-a-touch is a floating action with voice note support (Ally transcribes and files the note).
+**Mobile.** Card-stack layout: identity → health strip → AI next-touch → shared files. Tap-to-call/text/email from the header. Log-a-touch is a floating action with voice note support (AI transcribes and files the note).
 
-**AI behavior.** Ally computes relationship health (recency, frequency, reciprocity, shared-file activity — documented factors only, per [[AI_Product_Architecture]]); drafts every partner-facing update from the partner template set with the privacy wall enforced at draft time (it cannot include borrower financial detail because the CRM holds none — draft context is limited to stage, milestone, timeline, and owner facts); suggests re-engagement when a producing partner goes quiet; flags anniversary/birthday touches. All outreach lands in the approval queue.
+**AI behavior.** AI computes relationship health (recency, frequency, reciprocity, shared-file activity — documented factors only, per [[AI_Product_Architecture]]); drafts every partner-facing update from the partner template set with the privacy wall enforced at draft time (it cannot include borrower financial detail because the CRM holds none — draft context is limited to stage, milestone, timeline, and owner facts); suggests re-engagement when a producing partner goes quiet; flags anniversary/birthday touches. All outreach lands in the approval queue.
 
 **Permissions.** Partner profiles are visible team-wide by default (partners are a team asset), but relationship ownership gates outreach: only the owner and their assistant send touches unless the team leader reassigns. Agent relationship managers have edit rights across all partner profiles in their branch. Borrower data inside shared-file cards is role-trimmed at the API layer, not the UI layer.
 
@@ -108,11 +108,11 @@ This part specifies screens 9–15 of the Loan Factory CRM screen inventory: Con
 
 **Primary user.** Agent relationship manager. Secondary: loan officer (their own partner book), team leader / branch leader (roll-up).
 
-**Primary action.** **Work the outreach list** — a prioritized queue of Ally-suggested partner touches, approved one at a time or in a reviewed batch.
+**Primary action.** **Work the outreach list** — a prioritized queue of AI-suggested partner touches, approved one at a time or in a reviewed batch.
 
 **Information hierarchy.**
 1. Headline numbers: active partners, referrals this month, funded-from-referral volume, partners at risk (tabular numerals, period comparators)
-2. Ally outreach queue (ranked: at-risk A-tier first, then time-sensitive touches like CTC updates and birthdays)
+2. AI outreach queue (ranked: at-risk A-tier first, then time-sensitive touches like CTC updates and birthdays)
 3. Partner tier board: A/B/C columns with movement indicators (rising/falling production)
 4. Referral flow chart: referrals in → funded loans out, by month, with source attribution
 5. Coverage map: partners by brokerage/geography (Phase 2+)
@@ -122,7 +122,7 @@ This part specifies screens 9–15 of the Loan Factory CRM screen inventory: Con
 | Component | Behavior |
 |---|---|
 | At-risk list | Partners whose touch recency or referral cadence dropped below their tier's threshold; each row shows the *reason* in plain language ("A-tier, no referral in 90 days, last touch 41 days ago") |
-| Outreach queue | Ally cards, each with drafted message + one-tap approve; batch-review mode shows drafts sequentially, never a blind "approve all" |
+| Outreach queue | AI cards, each with drafted message + one-tap approve; batch-review mode shows drafts sequentially, never a blind "approve all" |
 | Tier board | Drag between tiers allowed (with reason prompt); tier definitions visible on hover — no hidden scoring |
 | Referral trend chart | 12-month referrals received/funded; click any bar to the underlying ledger rows |
 | Leaderboard (team view) | Partners ranked by funded volume; toggle to "most improved" to avoid pure recency bias |
@@ -134,9 +134,9 @@ This part specifies screens 9–15 of the Loan Factory CRM screen inventory: Con
 
 **Error state.** If referral attribution data is incomplete (e.g., a loan lacks a referral source), the dashboard shows an explicit "N loans missing referral source" chip that opens a fix-it list — data-quality problems become visible tasks, not silent miscounts.
 
-**Mobile.** Outreach queue is the entire mobile experience: swipe through Ally cards, approve/edit/skip. Headline numbers in a compact strip. Charts collapse to sparklines with tap-to-expand.
+**Mobile.** Outreach queue is the entire mobile experience: swipe through AI cards, approve/edit/skip. Headline numbers in a compact strip. Charts collapse to sparklines with tap-to-expand.
 
-**AI behavior.** Ally ranks the outreach queue using documented, fair-lending-irrelevant factors (recency, tier, referral cadence, active-file events); explains every ranking in a sentence; drafts each touch from the partner template set; detects "referral imbalance" (an agent sending consistently while receiving nothing) and suggests a reciprocity action (send a buyer lead, co-marketing offer, review request). No autonomous sending — the ARM taps every approval.
+**AI behavior.** AI ranks the outreach queue using documented, fair-lending-irrelevant factors (recency, tier, referral cadence, active-file events); explains every ranking in a sentence; drafts each touch from the partner template set; detects "referral imbalance" (an agent sending consistently while receiving nothing) and suggests a reciprocity action (send a buyer lead, co-marketing offer, review request). No autonomous sending — the ARM taps every approval.
 
 **Permissions.** ARMs and team leaders see all partners in their branch. LOs see their own book plus team-shared partners. Branch leaders see roll-ups across teams. The queue only offers outreach for partners the viewer owns or has been delegated.
 
@@ -168,10 +168,10 @@ This part specifies screens 9–15 of the Loan Factory CRM screen inventory: Con
 | Component | Behavior |
 |---|---|
 | Audience picker | Segment library with plain-English rules and live counts; exclusion preview ("14 excluded: 9 opted out, 3 active problem files, 2 missing email"); consent state filters applied automatically and non-removably |
-| Content composer | Start from the stage-aware Template Library (Screen 13), an Ally-generated draft from a brief, or blank; risk tier auto-classified (Standard / Medium / High — High = anything touching rates, payments, fees, savings, guarantees, government programs, qualification) |
+| Content composer | Start from the stage-aware Template Library (Screen 13), an AI-generated draft from a brief, or blank; risk tier auto-classified (Standard / Medium / High — High = anything touching rates, payments, fees, savings, guarantees, government programs, qualification) |
 | Sequence editor | Linear steps with waits ("Step 2: wait 3 days, then…"); stop conditions displayed on every step, not hidden in settings |
 | Language variant tabs | EN primary; VI (and later ZH/ES/RU) variants side-by-side; missing variants route those contacts to the EN version with an explicit choice, never silently |
-| Compliance panel | Deterministic lint (trigger terms, do-not-say list, required footer "This is not a commitment to lend. All loans subject to approval. Terms and conditions apply.", NMLS #320841 + LO NMLS, Equal Housing where required, state-rule checks for the audience's states, Best Price Guarantee terms-link + Washington exclusion) + Ally compliance review (blockers → warnings → safer rewrite suggestion) |
+| Compliance panel | Deterministic lint (trigger terms, do-not-say list, required footer "This is not a commitment to lend. All loans subject to approval. Terms and conditions apply.", NMLS #320841 + LO NMLS, Equal Housing where required, state-rule checks for the audience's states, Best Price Guarantee terms-link + Washington exclusion) + AI compliance review (blockers → warnings → safer rewrite suggestion) |
 | Approval routing | Standard risk → self-approve (logged); Medium → team leader; High → compliance reviewer; statuses Draft / Needs Review / Changes Requested / Approved / Rejected |
 | Launch summary | Recipients, steps, duration, estimated sends against the team's allowance meter, first-send time |
 
@@ -183,7 +183,7 @@ This part specifies screens 9–15 of the Loan Factory CRM screen inventory: Con
 
 **Mobile.** Campaign *building* is desktop-first; mobile supports review-and-approve (the approval routing notifications open a mobile review screen with full preview and approve/request-changes), plus pause/resume of running campaigns.
 
-**AI behavior.** Ally suggests the audience for a chosen goal (and vice versa); generates drafts from a structured brief (content family, audience, channel, tone) using the brand-voice rules as its system layer; runs the compliance review pass and proposes safer rewrites rather than just rejecting; predicts send-volume against the allowance meter; and after launch, summarizes performance in plain language. Ally never launches, resumes, or edits a live campaign on its own.
+**AI behavior.** AI suggests the audience for a chosen goal (and vice versa); generates drafts from a structured brief (content family, audience, channel, tone) using the brand-voice rules as its system layer; runs the compliance review pass and proposes safer rewrites rather than just rejecting; predicts send-volume against the allowance meter; and after launch, summarizes performance in plain language. AI never launches, resumes, or edits a live campaign on its own.
 
 **Permissions.** Marketing coordinators and LOs create campaigns for audiences they own. Team-wide audiences require team-leader launch approval regardless of risk tier. Compliance reviewers can hard-stop any campaign (kill switch writes an audit entry). High-risk content cannot be self-approved by its author under any role.
 
@@ -216,7 +216,7 @@ This part specifies screens 9–15 of the Loan Factory CRM screen inventory: Con
 | Component | Behavior |
 |---|---|
 | Stage navigator | Macro-phase → stage drill-down; per-stage template counts; stages with no coverage (3 Consultation Scheduled, 4 Consultation Completed, 7 Searching for Home, 8 Under Contract — the known gaps) show a "commission this template" placeholder rather than hiding the gap |
-| Automation policy badge | **Fully automatable** (44) / **Semi — Ally drafts, human approves** (71) / **Manual only — never auto-send** (20), taken from the authoritative policy column, not tags; Manual-only templates are visually distinct and cannot be attached to automations in Screen 14 |
+| Automation policy badge | **Fully automatable** (44) / **Semi — AI drafts, human approves** (71) / **Manual only — never auto-send** (20), taken from the authoritative policy column, not tags; Manual-only templates are visually distinct and cannot be attached to automations in Screen 14 |
 | Merge-field checklist | The template's required fields from the 17-token vocabulary, each showing resolved/missing state for the selected contact — a template is "ready" only when all required fields resolve |
 | Language variants | EN master + locale variants keyed to the same EMT ID; where only lifecycle-module localization exists (VI/ZH/ES-CO/RU), the variant is labeled "module-based — human translation review required" |
 | Related-templates rail | The framework's cross-reference graph rendered as "usually sent before / after" — powers next-best-message without guessing |
@@ -232,7 +232,7 @@ This part specifies screens 9–15 of the Loan Factory CRM screen inventory: Con
 
 **Mobile.** Read-and-use only: stage navigator as an accordion, template detail full-screen, Use-this-template hands off to the mobile composer. Authoring and gap management are desktop.
 
-**AI behavior.** Ally recommends templates using the framework's retrieval order (exact ID → stage → audience → situation → product → trigger → language → sensitivity) and always returns the ID, match reason, required placeholders, compliance note, and human-review requirement — the RAG output contract from the source framework, verbatim as Loan Factory CRM's recommendation format. Ally may propose *parameterizing* near-duplicate specialty templates (e.g., the eight "submitted to underwriting" product variants) into one template with a `{{LoanProgram}}` variable, as a suggested edit for human approval. Ally never edits a compliance-approved template in place.
+**AI behavior.** AI recommends templates using the framework's retrieval order (exact ID → stage → audience → situation → product → trigger → language → sensitivity) and always returns the ID, match reason, required placeholders, compliance note, and human-review requirement — the RAG output contract from the source framework, verbatim as Loan Factory CRM's recommendation format. AI may propose *parameterizing* near-duplicate specialty templates (e.g., the eight "submitted to underwriting" product variants) into one template with a `{{LoanProgram}}` variable, as a suggested edit for human approval. AI never edits a compliance-approved template in place.
 
 **Permissions.** Everyone reads the company library. Personal templates are private to their author. Team templates: team leader + marketing coordinator edit, compliance reviewer approves. Only compliance-approved templates are eligible for automations; Draft templates are usable in one-off manual sends with a visible Draft watermark.
 
@@ -258,7 +258,7 @@ This part specifies screens 9–15 of the Loan Factory CRM screen inventory: Con
 1. Active automations: cards grouped by lifecycle macro-phase (mirroring the trigger taxonomy: Lead & referral / Application & documents / Underwriting & conditions / Closing & funding / Post-close & nurture / Team & ops)
 2. Each card reads as one sentence: **When** {trigger} · **Wait** {timing} · **Then** {action} · **Stop if** {stop conditions} · **Who approves** {approval mode}
 3. Health strip per card: runs this month, drafts awaiting approval, skips with reasons
-4. Suggested automations (Ally, from the catalog of not-yet-enabled patterns)
+4. Suggested automations (AI, from the catalog of not-yet-enabled patterns)
 5. Run log (per card drill-in): every execution with outcome and attribution
 
 **Components.**
@@ -269,7 +269,7 @@ This part specifies screens 9–15 of the Loan Factory CRM screen inventory: Con
 | Timing picker | The framework's timing grammar only: Send immediately / Wait 1 day / Wait 3 days / Wait until trigger / Manual only — no arbitrary cron expressions in the UI |
 | Action picker | Send template (compliance-approved, policy-eligible only) / Create task / Notify teammate / Update field / Enroll in cadence; multi-action allowed as an ordered "then… then…" sentence extension |
 | Stop-conditions block | Pre-checked defaults per trigger family (responded / item received / stage advanced / opted out / milestone changed / relationship-owner suppression); users can add stop conditions but **cannot remove** the consent/opt-out stop — "Stop conditions always override timing rules" is enforced in the engine, displayed on the card |
-| Approval-mode selector | Governed by the template's policy tier: Fully-automatable templates may run auto-queued *sends of transactional updates* only after explicit activation and remain consent/stop gated (and in v1, borrower-facing sends still land in a one-tap approval queue per CANON); Semi = Ally drafts → approval queue; Manual-only templates are not selectable |
+| Approval-mode selector | Governed by the template's policy tier: Fully-automatable templates may run auto-queued *sends of transactional updates* only after explicit activation and remain consent/stop gated (and in v1, borrower-facing sends still land in a one-tap approval queue per CANON); Semi = AI drafts → approval queue; Manual-only templates are not selectable |
 | Health checks | Pre-activation validation with named blockers and one-tap fixes ("3 contacts in this audience have no email — they'll be skipped · Review list"), the pattern promoted from the prototype's scheduled-send health warnings |
 | Suggested-automation cards | "You mark files Funded but have no post-close thank-you running — turn on EMT-043?" with the full card pre-built for review |
 | Run log | Per-execution rows: trigger event, contact, action taken/drafted, approver, outcome, stop-condition hits; exportable for audit |
@@ -282,7 +282,7 @@ This part specifies screens 9–15 of the Loan Factory CRM screen inventory: Con
 
 **Mobile.** Cards are read-and-toggle plus approval-queue processing. Building/editing clauses is desktop-first, though the suggested-card review (read sentence → turn on) works fully on mobile.
 
-**AI behavior.** Ally proposes automations from observed manual repetition ("you've sent this same reminder manually 6 times"); pre-assembles every suggested card with trigger, timing, template, and stop conditions from the framework's automation map; drafts each message execution for Semi-tier flows; explains every skip ("skipped: borrower replied 2 hours after trigger"); and monitors for automation collisions (two cards targeting the same contact in the same window → warns and proposes priority). Ally cannot activate, deactivate, or modify a card — humans toggle.
+**AI behavior.** AI proposes automations from observed manual repetition ("you've sent this same reminder manually 6 times"); pre-assembles every suggested card with trigger, timing, template, and stop conditions from the framework's automation map; drafts each message execution for Semi-tier flows; explains every skip ("skipped: borrower replied 2 hours after trigger"); and monitors for automation collisions (two cards targeting the same contact in the same window → warns and proposes priority). AI cannot activate, deactivate, or modify a card — humans toggle.
 
 **Permissions.** LOs create/toggle personal automations over their own contacts. Team automations require team-leader activation. Compliance reviewers see all cards read-only and hold a global and per-card kill switch. Every activation, deactivation, and edit is audit-logged with actor and before/after card sentence.
 
@@ -298,7 +298,7 @@ This part specifies screens 9–15 of the Loan Factory CRM screen inventory: Con
 
 ### Screen 15 — AI Intelligence Center
 
-**Purpose.** The Intelligence nav destination: where production analytics and AI oversight live together. One half answers "how is my business doing?" (pipeline conversion, source attribution, production trends); the other answers "what has Ally been doing, and can I trust it?" (activity log, approval statistics, scoring factor documentation, fair-lending review posture). Putting reporting and AI accountability on the same screen is deliberate — the audit trail is a product feature, not a settings page.
+**Purpose.** The Intelligence nav destination: where production analytics and AI oversight live together. One half answers "how is my business doing?" (pipeline conversion, source attribution, production trends); the other answers "what has AI been doing, and can I trust it?" (activity log, approval statistics, scoring factor documentation, fair-lending review posture). Putting reporting and AI accountability on the same screen is deliberate — the audit trail is a product feature, not a settings page.
 
 **Primary user.** Loan officer (own book), team leader / branch leader (roll-ups). Secondary: compliance reviewer (AI oversight panels), marketing coordinator (campaign analytics).
 
@@ -308,8 +308,8 @@ This part specifies screens 9–15 of the Loan Factory CRM screen inventory: Con
 1. Production snapshot: funded volume and units (MTD/QTD/YTD with comparators), active pipeline value by macro-phase, projected closings
 2. Conversion funnel: the 20-stage lifecycle rendered as macro-phase conversion rates with drill-in to stage-level (where do deals stall, average days-in-stage vs. team baseline)
 3. Source attribution: leads → funded by source (LF website widgets, QM Pricer rate alerts, Facebook "Automatically Created" leads, agent referrals, manual) — structured source as a first-class dimension
-4. Ally accountability panel: actions prepared / approved / edited-then-approved / dismissed this period; approval rate trend; time saved estimate (drafting minutes reclaimed, labeled as an estimate)
-5. AI activity log: every Ally action, filterable and exportable
+4. AI accountability panel: actions prepared / approved / edited-then-approved / dismissed this period; approval rate trend; time saved estimate (drafting minutes reclaimed, labeled as an estimate)
+5. AI activity log: every AI action, filterable and exportable
 6. Scoring transparency: the documented factor list behind lead priority and relationship health, with plain-language weight descriptions and the date of last fair-lending disparate-impact review
 
 **Components.**
@@ -319,13 +319,13 @@ This part specifies screens 9–15 of the Loan Factory CRM screen inventory: Con
 | Metric tiles | Tabular numerals, explicit period + comparator, freshness timestamp on every tile; no metric renders without its as-of time |
 | Funnel view | Macro-phase bars → stage drill-down; each stage shows count, value, median days, and a "stalled here" list linking to the actual loans |
 | Source table | Source → leads → conversations started → applications → funded, with cost-per-funded when ad-spend data exists (Phase 2, Facebook/Google); rows with unattributed leads shown honestly as "Unknown source" with a fix-it link |
-| Ask Intelligence box | Natural-language query → Ally translates to a query over permitted data, returns answer + the numbers + "how I calculated this"; refuses questions outside the user's permission scope with a plain explanation |
-| Ally activity log | Row per action: timestamp, action type (draft, ranking, classification, suggestion), subject, model-input summary, human decision, actor; export to CSV; retention per [[Mortgage_Compliance]] |
-| Approval analytics | Where humans most often edit or reject Ally drafts (by template, stage, action type) — the feedback loop that tells us where Ally is weak |
+| Ask Intelligence box | Natural-language query → AI translates to a query over permitted data, returns answer + the numbers + "how I calculated this"; refuses questions outside the user's permission scope with a plain explanation |
+| AI activity log | Row per action: timestamp, action type (draft, ranking, classification, suggestion), subject, model-input summary, human decision, actor; export to CSV; retention per [[Mortgage_Compliance]] |
+| Approval analytics | Where humans most often edit or reject AI drafts (by template, stage, action type) — the feedback loop that tells us where AI is weak |
 | Factor documentation card | For each AI ranking (lead priority, partner health, next best action): the factor list, in plain language, with an explicit statement that protected-class attributes and proxies are excluded, and the last disparate-impact review date; links to [[AI_Product_Architecture]] |
 | Report scheduler | Weekly/monthly digest email of selected tiles (to self or team leader), built on the same approval-visible pipeline |
 
-**Empty state.** New account (< 2 weeks of data): the snapshot shows real small numbers, and Ally frames it honestly — "Not enough history for trends yet. Here's what's true so far." Funnel and source views appear with data thresholds noted, never simulated placeholder charts. The activity log is populated from day one (Ally acts from day one).
+**Empty state.** New account (< 2 weeks of data): the snapshot shows real small numbers, and AI frames it honestly — "Not enough history for trends yet. Here's what's true so far." Funnel and source views appear with data thresholds noted, never simulated placeholder charts. The activity log is populated from day one (AI acts from day one).
 
 **Loading state.** Tiles load independently; slow aggregates show per-tile skeletons, never a full-page spinner. Ask Intelligence streams its answer with the computation note appended at the end.
 
@@ -333,18 +333,18 @@ This part specifies screens 9–15 of the Loan Factory CRM screen inventory: Con
 
 **Mobile.** Snapshot tiles + Ask Intelligence + approval-queue counts. Funnel and log views are simplified read-only; export and scheduling are desktop.
 
-**AI behavior.** Ally powers Ask Intelligence (query translation with permission-scoped data access and shown work); writes a weekly plain-language narrative ("Your QUALIFY→TRANSACT conversion rose 8 points; the 3 stalled Processing files are the biggest risk to this month"); flags anomalies (stage-time regressions, source quality drops) as cards routed to Today; and self-reports — the accountability panel is Ally reporting on itself from the immutable log, not a marketing surface. Ally never mutates data from this screen and never presents an estimate as a measurement (estimates are labeled).
+**AI behavior.** AI powers Ask Intelligence (query translation with permission-scoped data access and shown work); writes a weekly plain-language narrative ("Your QUALIFY→TRANSACT conversion rose 8 points; the 3 stalled Processing files are the biggest risk to this month"); flags anomalies (stage-time regressions, source quality drops) as cards routed to Today; and self-reports — the accountability panel is AI reporting on itself from the immutable log, not a marketing surface. AI never mutates data from this screen and never presents an estimate as a measurement (estimates are labeled).
 
 **Permissions.** LOs: own book only. Team leaders: team roll-up + per-LO drill-in. Branch leaders: cross-team roll-ups. Compliance reviewers: full AI activity log and factor documentation across the tenant, without borrower financial detail beyond what oversight requires. Ask Intelligence enforces the same row-level security as every other surface — it cannot be used to escalate visibility.
 
 **Acceptance criteria.**
 - Every displayed metric carries an as-of timestamp; the stale-data banner triggers at the defined lag threshold (SCN-EDGE-003 equivalent passes).
-- The Ally activity log accounts for 100% of AI actions — verified by reconciling log rows against action-emitting services in integration tests; no unlogged path exists.
+- The AI activity log accounts for 100% of AI actions — verified by reconciling log rows against action-emitting services in integration tests; no unlogged path exists.
 - Ask Intelligence answers respect RLS: a crafted question about another LO's borrower returns a permission-scoped refusal, not data (adversarial test set).
 - Factor documentation renders for every live AI ranking, and the disparate-impact review date is required, displayed, and alert-flagged when overdue per the cadence in [[Mortgage_Compliance]].
 - Funnel counts reconcile with Pipeline screen counts for the same filters (single source of truth test).
-- The leadership readout question from the usability framework — "Can AI-assisted workflows be reviewed against source evidence before a human acts?" — is demonstrably yes from this screen: any Ally draft in the approval analytics links back to its source template, input context, and approver.
+- The leadership readout question from the usability framework — "Can AI-assisted workflows be reviewed against source evidence before a human acts?" — is demonstrably yes from this screen: any AI draft in the approval analytics links back to its source template, input context, and approver.
 
 ---
 
-Continue to [[Screen_Specifications]] siblings for screens 1–8 and 16+. Cross-cutting patterns used above (Ally card anatomy, approval queue, compliance lint strip, freshness timestamps, health-check blockers with one-tap fixes) are defined once in [[Design_System]] and referenced here rather than redefined.
+Continue to [[Screen_Specifications]] siblings for screens 1–8 and 16+. Cross-cutting patterns used above (AI card anatomy, approval queue, compliance lint strip, freshness timestamps, health-check blockers with one-tap fixes) are defined once in [[Design_System]] and referenced here rather than redefined.

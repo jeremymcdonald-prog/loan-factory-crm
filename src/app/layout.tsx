@@ -19,7 +19,7 @@ export const metadata: Metadata = {
     template: "%s · Loan Factory CRM",
   },
   description:
-    "An AI-powered mortgage CRM: leads, contacts, referral partners, opportunity stages, and follow-up that Ally prepares and you approve.",
+    "An AI-powered mortgage CRM: leads, contacts, referral partners, opportunity stages, and follow-up that AI prepares and you approve.",
 };
 
 export default function RootLayout({

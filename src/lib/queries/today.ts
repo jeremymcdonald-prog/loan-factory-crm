@@ -6,7 +6,7 @@
  * items sort by deadline proximity then loan amount.
  *
  * Phase 1 feeds classes 1, 2, 4, 5 and 6 (deadline blockers from team-entered
- * lock/closing dates, speed-to-lead, Ally approvals, overdue tasks, and today's
+ * lock/closing dates, speed-to-lead, AI approvals, overdue tasks, and today's
  * appointments), plus 8 (stalled files) which the stall sweep already supports.
  * The queue architecture ships complete; later phases only add signal sources.
  */
@@ -144,7 +144,7 @@ export async function buildQueue(
     });
   }
 
-  // --- Class 4: Ally approvals --------------------------------------------
+  // --- Class 4: AI approvals --------------------------------------------
   const insightRows = await db
     .select({
       id: aiInsight.id,
@@ -176,8 +176,8 @@ export async function buildQueue(
     const isDraft = row.kind === "draft_email" || row.kind === "draft_sms";
     items.push({
       id: `insight-${row.id}`,
-      cls: "ally_approval",
-      urgency: "ally",
+      cls: "ai_approval",
+      urgency: "ai",
       headline: row.title,
       detail: null,
       personId: row.personId,

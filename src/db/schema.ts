@@ -118,7 +118,7 @@ export const appointmentKind = pgEnum("appointment_kind", [
   "other",
 ]);
 
-/** Ally proposes; a human disposes. Never "sent" without a human verdict. */
+/** AI proposes; a human disposes. Never "sent" without a human verdict. */
 export const insightKind = pgEnum("insight_kind", [
   "briefing",
   "next_best_action",
@@ -187,6 +187,25 @@ export const user = pgTable(
     websiteUrl: text("website_url"),
     status: userStatus("status").notNull().default("active"),
     lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
+    // --- Personal profile (Settings → My profile) ---
+    /** Job title shown on the profile and available to signatures. */
+    title: text("title"),
+    /** IANA timezone, e.g. America/Los_Angeles. */
+    timezone: text("timezone"),
+    /**
+     * Profile photo as a validated data URL (jpeg/png/webp, ≤512KB source).
+     * Stored in-row so RLS tenant-scopes it like every other user field; moves
+     * to object storage when a provider is connected.
+     */
+    photoData: text("photo_data"),
+    /** Plain-text email signature, merged into campaigns and approved sends. */
+    signature: text("signature"),
+    defaultSenderName: text("default_sender_name"),
+    replyToEmail: text("reply_to_email"),
+    /** Social/website links: { website?, linkedin?, facebook?, instagram? } */
+    links: jsonb("links").$type<Record<string, string>>(),
+    /** Notification preferences: { dailySummary?, taskReminders?, approvalAlerts?, teamActivity? } */
+    notificationPrefs: jsonb("notification_prefs").$type<Record<string, boolean>>(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
@@ -404,8 +423,8 @@ export const note = pgTable(
       .references(() => user.id),
     personId: uuid("person_id").references(() => person.id),
     loanId: uuid("loan_id").references(() => loan.id),
-    /** Set when Ally drafted the note; a human still saved it. */
-    preparedByAlly: boolean("prepared_by_ally").notNull().default(false),
+    /** Set when AI drafted the note; a human still saved it. */
+    preparedByAi: boolean("prepared_by_ai").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
@@ -456,7 +475,7 @@ export const event = pgTable(
 );
 
 // ---------------------------------------------------------------------------
-// Ally — everything Ally proposes and every call it makes
+// AI — everything AI proposes and every call it makes
 // ---------------------------------------------------------------------------
 
 export const aiInsight = pgTable(
@@ -475,7 +494,7 @@ export const aiInsight = pgTable(
       .references(() => user.id),
     personId: uuid("person_id").references(() => person.id),
     loanId: uuid("loan_id").references(() => loan.id),
-    /** Card face: what Ally prepared. */
+    /** Card face: what AI prepared. */
     title: text("title").notNull(),
     body: text("body"),
     /** Plain-language "why is this here?" — source evidence, never a black box. */
@@ -484,7 +503,7 @@ export const aiInsight = pgTable(
     factors: jsonb("factors").$type<string[]>().default([]),
     templateRef: text("template_ref"),
     languageCode: language("language_code").notNull().default("en"),
-    /** Populated on a human verdict — never by Ally itself. */
+    /** Populated on a human verdict — never by AI itself. */
     decidedByUserId: uuid("decided_by_user_id").references(() => user.id),
     decidedAt: timestamp("decided_at", { withTimezone: true }),
     decisionReason: text("decision_reason"),
@@ -632,8 +651,8 @@ export const message = pgTable(
     status: messageStatus("status").notNull().default("received"),
     subject: text("subject"),
     body: text("body").notNull(),
-    /** Set when Ally drafted it. A human still has to approve the send. */
-    preparedByAlly: boolean("prepared_by_ally").notNull().default(false),
+    /** Set when AI drafted it. A human still has to approve the send. */
+    preparedByAi: boolean("prepared_by_ai").notNull().default(false),
     templateRef: text("template_ref"),
     languageCode: language("language_code").notNull().default("en"),
     authorUserId: uuid("author_user_id").references(() => user.id),
@@ -652,7 +671,7 @@ export const message = pgTable(
 // Marketing — the EMT template library, audiences, campaigns
 // ---------------------------------------------------------------------------
 
-/** Governs whether Ally may draft/queue this template at all. */
+/** Governs whether AI may draft/queue this template at all. */
 export const templatePolicy = pgEnum("template_policy", [
   "fully_automated",
   "semi_automated",
@@ -781,6 +800,96 @@ export const automationRun = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("automation_run_tenant_auto_idx").on(t.tenantId, t.automationId)],
+);
+
+// ---------------------------------------------------------------------------
+// AI persona — per-user context for the assistant (Settings → My profile)
+// ---------------------------------------------------------------------------
+
+export const personaStatus = pgEnum("persona_status", ["ready", "failed"]);
+
+/**
+ * One persona per user: an uploaded document (PDF/DOCX/MD/TXT) whose extracted
+ * text personalises how the assistant drafts for that user.
+ *
+ * Security posture: persona text is UNTRUSTED CONTENT. It is data the
+ * assistant may read for tone and background — never instructions. Nothing in
+ * a persona can override system rules, permissions, compliance controls,
+ * approval requirements, or security boundaries. RLS additionally pins each
+ * row to its owner (user_id = app.user_id), so one user's persona can never be
+ * read by another — not even a teammate in the same tenant.
+ */
+export const aiPersona = pgTable(
+  "ai_persona",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenant.id),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => user.id)
+      .unique(),
+    filename: text("filename").notNull(),
+    mime: text("mime").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    status: personaStatus("status").notNull().default("ready"),
+    extractedText: text("extracted_text"),
+    /** Plain-language reason when extraction failed. */
+    error: text("error"),
+    enabled: boolean("enabled").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("ai_persona_tenant_user_idx").on(t.tenantId, t.userId)],
+);
+
+// ---------------------------------------------------------------------------
+// How-to videos — the in-product training library
+// ---------------------------------------------------------------------------
+
+export const video = pgTable(
+  "video",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenant.id),
+    title: text("title").notNull(),
+    description: text("description"),
+    category: text("category").notNull(),
+    durationSeconds: integer("duration_seconds"),
+    /** Null = no real recording yet; the UI must say "Video coming soon". */
+    url: text("url"),
+    featured: boolean("featured").notNull().default(false),
+    published: boolean("published").notNull().default(true),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdByUserId: uuid("created_by_user_id").references(() => user.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  (t) => [index("video_tenant_category_idx").on(t.tenantId, t.category)],
+);
+
+/** Per-user watch state; progress is a placeholder until real playback exists. */
+export const videoWatch = pgTable(
+  "video_watch",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenant.id),
+    videoId: uuid("video_id")
+      .notNull()
+      .references(() => video.id),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => user.id),
+    watchedAt: timestamp("watched_at", { withTimezone: true }),
+    progressPct: integer("progress_pct").notNull().default(0),
+  },
+  (t) => [index("video_watch_tenant_user_idx").on(t.tenantId, t.userId, t.videoId)],
 );
 
 /** Append-only record of every mutation (Technical_Architecture §5). */

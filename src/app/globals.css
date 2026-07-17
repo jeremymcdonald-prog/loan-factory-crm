@@ -82,10 +82,10 @@
   --text-muted: #646e7c; /* 4.78:1 / 5.17:1 */
   --text-disabled: #a3abb7; /* disabled only — never readable content */
 
-  /* --- Ally: violet, distinct from every status hue --- */
-  --ally-fg: #6d4c8f; /* 6.82:1 on surface */
-  --ally-bg: #f2ecf7;
-  --ally-border: #ddd0ea;
+  /* --- AI: violet, distinct from every status hue --- */
+  --ai-fg: #6d4c8f; /* 6.82:1 on surface */
+  --ai-bg: #f2ecf7;
+  --ai-border: #ddd0ea;
 
   /* --- Status: green, amber, red only. Tied to urgency, never decoration. --- */
   --critical-fg: #b4291d; /* 6.41:1 */
@@ -136,9 +136,9 @@
     --action-tint: #2a1a10;
     --action-tint-border: #4a2c18;
 
-    --ally-fg: #c3a8dc;
-    --ally-bg: #241b31;
-    --ally-border: #3d3050;
+    --ai-fg: #c3a8dc;
+    --ai-bg: #241b31;
+    --ai-border: #3d3050;
 
     --critical-fg: #f08175;
     --critical-bg: #2c1512;
@@ -184,9 +184,9 @@
   --color-brand: var(--brand-orange);
   --color-ink: var(--brand-ink);
 
-  --color-ally: var(--ally-fg);
-  --color-ally-bg: var(--ally-bg);
-  --color-ally-border: var(--ally-border);
+  --color-ai: var(--ai-fg);
+  --color-ai-bg: var(--ai-bg);
+  --color-ai-border: var(--ai-border);
 
   --color-critical: var(--critical-fg);
   --color-critical-bg: var(--critical-bg);

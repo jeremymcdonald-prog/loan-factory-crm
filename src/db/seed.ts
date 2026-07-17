@@ -69,6 +69,9 @@ async function main() {
   // node-postgres prepares each query, and a prepared statement cannot carry
   // multiple commands.
   for (const table of [
+    "video_watch",
+    "video",
+    "ai_persona",
     "automation_run",
     "automation",
     "campaign",
@@ -441,7 +444,7 @@ async function main() {
         status: m.status ?? (m.direction === "inbound" ? "received" : "sent"),
         subject: thread.channel === "email" ? thread.subject : null,
         body: m.body,
-        preparedByAlly: m.preparedByAlly ?? false,
+        preparedByAi: m.preparedByAi ?? false,
         templateRef: m.templateRef ?? null,
         authorUserId: m.direction === "outbound" ? U.minh : null,
         sentAt: m.direction === "outbound" ? hoursFromNow(-m.hoursAgo) : null,
@@ -451,7 +454,7 @@ async function main() {
     }
   }
 
-  // --- Ally's pending drafts ----------------------------------------------
+  // --- AI's pending drafts ----------------------------------------------
   for (const insight of INSIGHTS) {
     const personId = personIds.get(insight.personKey);
     if (!personId) continue;
@@ -481,7 +484,7 @@ async function main() {
       tenantId: TENANT_ID,
       insightId: row.id,
       action: "insight.generated",
-      model: "mock-ally-v1",
+      model: "mock-ai-v1",
       promptVersion: "seed",
       detail: { kind: insight.kind, mode: "seeded fixture" },
     });
@@ -538,6 +541,51 @@ async function main() {
     }
   }
 
+  // --- How-to video library ------------------------------------------------
+  // Seeded placeholders: none has a real recording yet, so url stays null and
+  // the UI labels every one "Video coming soon" — never a fake player.
+  const VIDEO_SEED: {
+    title: string;
+    category: string;
+    description: string;
+    minutes: number;
+    featured?: boolean;
+    published?: boolean;
+  }[] = [
+    { title: "Your first day in Loan Factory CRM", category: "Getting Started", description: "Sign in, find your way around the ten sections, and run your day from Today.", minutes: 6, featured: true },
+    { title: "Reading the Today queue", category: "Today", description: "How the queue ranks deadlines, new leads, approvals, and overdue work — and what to do first.", minutes: 4, featured: true },
+    { title: "Working the pipeline board", category: "Pipeline", description: "The five phases, moving a file to its next stage, and what the urgency colors mean.", minutes: 5 },
+    { title: "Adding people and opening opportunities", category: "People", description: "Contacts versus leads, and how capturing a lead opens a stage-1 opportunity.", minutes: 4 },
+    { title: "Logging a touch", category: "People", description: "Why the log-a-touch button is the most important habit in the CRM.", minutes: 3 },
+    { title: "Keeping referral partners warm", category: "Partners", description: "Tiers, quiet-partner flags, and logging partner check-ins.", minutes: 4 },
+    { title: "The unified inbox", category: "Conversations", description: "Email, text, and call history in one place — and what 'Waiting on you' means.", minutes: 4 },
+    { title: "Running a compliant campaign", category: "Marketing", description: "Pick a template, choose an audience, and understand the compliance warnings.", minutes: 6 },
+    { title: "The template library", category: "Marketing", description: "135 mortgage templates, what the policy badges mean, and when AI may prepare one.", minutes: 5 },
+    { title: "Automations in plain language", category: "Automations", description: "WHEN, WHO, THEN — and why rate locks are never automated.", minutes: 5, featured: true },
+    { title: "Reading your numbers", category: "Intelligence", description: "Speed-to-lead, follow-up completion, and files that have gone quiet.", minutes: 5 },
+    { title: "Team workload at a glance", category: "Team", description: "Who is carrying what, and how view-as works for leaders.", minutes: 3 },
+    { title: "Setting up your profile and signature", category: "Settings", description: "Photo, signature, sender details, and notification preferences.", minutes: 4 },
+    { title: "Meet your AI assistant", category: "AI Assistant", description: "What the assistant can read, what it prepares, and why a human always approves.", minutes: 5, featured: true },
+    { title: "Set up your custom AI persona", category: "Custom AI Persona", description: "Upload a document that teaches the assistant your voice — and what it will never override.", minutes: 6 },
+    { title: "Approving AI drafts", category: "AI Assistant", description: "The approval queue: read the draft, check the evidence, approve or skip.", minutes: 4 },
+  ];
+
+  let sort = 0;
+  for (const v of VIDEO_SEED) {
+    await db.insert(schema.video).values({
+      tenantId: TENANT_ID,
+      title: v.title,
+      description: v.description,
+      category: v.category,
+      durationSeconds: v.minutes * 60,
+      url: null,
+      featured: v.featured ?? false,
+      published: v.published ?? true,
+      sortOrder: sort++,
+      createdByUserId: U.james,
+    });
+  }
+
   const policyCounts = parsed.reduce<Record<string, number>>((acc, t) => {
     acc[t.policy] = (acc[t.policy] ?? 0) + 1;
     return acc;
@@ -552,7 +600,7 @@ async function main() {
   );
   console.log(`  partners:      ${partnerIds.size}`);
   console.log(`  conversations: ${THREADS.length}`);
-  console.log(`  Ally drafts:   ${INSIGHTS.length} pending approval`);
+  console.log(`  AI drafts:   ${INSIGHTS.length} pending approval`);
   console.log(`  campaigns:     ${CAMPAIGNS.length}   automations: ${AUTOMATIONS.length}`);
   console.log(
     `  templates:     ${parsed.length} imported from source_assets ` +

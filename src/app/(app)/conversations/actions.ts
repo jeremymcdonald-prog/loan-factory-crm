@@ -103,8 +103,8 @@ export async function sendReply(_prev: ReplyState, formData: FormData): Promise<
         status: "draft",
         subject: thread.channel === "email" ? replySubject(thread.subject) : null,
         body,
-        // A person typed this. Ally had nothing to do with it.
-        preparedByAlly: false,
+        // A person typed this. AI had nothing to do with it.
+        preparedByAi: false,
         authorUserId: user.userId,
         sentAt: null,
         occurredAt: now,

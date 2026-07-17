@@ -16,7 +16,7 @@ import { StageChip } from "@/components/crm/stage-chip";
 import { LanguageBadge, languageName } from "@/components/crm/language-badge";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { AllyCard, AllyAttribution } from "@/components/ally/ally-card";
+import { AICard, AIAttribution } from "@/components/ai/ai-card";
 import { LogTouchButton } from "./log-touch-button";
 import { PartnerNotesForm } from "./partner-notes-form";
 import { CheckinActions } from "./checkin-actions";
@@ -51,7 +51,7 @@ export default async function PartnerPage({ params }: { params: Promise<{ id: st
   const referredVolume = referrals.reduce((sum, r) => sum + Number(r.amount ?? 0), 0);
   const withoutAmount = referrals.filter((r) => r.loanId && !r.amount).length;
 
-  // Ally's suggestion is settled once you've given it a verdict on this stretch
+  // AI's suggestion is settled once you've given it a verdict on this stretch
   // of silence. Logging a touch moves the clock, and the question starts over.
   const settled =
     verdict !== null &&
@@ -273,7 +273,7 @@ export default async function PartnerPage({ params }: { params: Promise<{ id: st
                         >
                           {relativeTime(m.occurredAt, now)}
                         </time>
-                        {m.preparedByAlly ? <Badge tone="ally">Ally drafted</Badge> : null}
+                        {m.preparedByAi ? <Badge tone="ai">AI drafted</Badge> : null}
                       </p>
                     </li>
                   ))}
@@ -292,30 +292,30 @@ export default async function PartnerPage({ params }: { params: Promise<{ id: st
           </Card>
         </div>
 
-        {/* Right rail: what Ally noticed, and what you know about them */}
+        {/* Right rail: what AI noticed, and what you know about them */}
         <div className="space-y-4">
           {suggestion && quietDays !== null ? (
-            <AllyCard
+            <AICard
               title={suggestion.title}
               rationale={suggestion.rationale}
               factors={suggestion.factors}
               actions={<CheckinActions partnerId={partner.id} quietDays={quietDays} />}
             >
               <p className="text-small text-secondary">
-                Ally hasn&rsquo;t written anything to send. Approving puts the reach-out on your
+                AI hasn&rsquo;t written anything to send. Approving puts the reach-out on your
                 task list so you can make it in your own words.
               </p>
-            </AllyCard>
+            </AICard>
           ) : null}
 
           {settled && verdict ? (
             <Card>
               <div className="px-4 py-3">
-                <AllyAttribution />
+                <AIAttribution />
                 <p className="mt-1.5 text-small text-secondary">
                   {verdict.kind === CHECKIN_APPROVED
-                    ? `You approved Ally's check-in suggestion ${relativeTime(verdict.createdAt, now)} and it went on your task list.`
-                    : `You skipped Ally's check-in suggestion ${relativeTime(verdict.createdAt, now)}.`}
+                    ? `You approved AI's check-in suggestion ${relativeTime(verdict.createdAt, now)} and it went on your task list.`
+                    : `You skipped AI's check-in suggestion ${relativeTime(verdict.createdAt, now)}.`}
                 </p>
               </div>
             </Card>
@@ -398,10 +398,10 @@ function referralOutcome(r: PartnerReferral, now: Date): string | null {
 }
 
 /**
- * Ally noticing a partner has gone quiet.
+ * AI noticing a partner has gone quiet.
  *
  * Every sentence is assembled from what the database actually holds — the days
- * of silence, the last person they sent, and what became of that file. Ally
+ * of silence, the last person they sent, and what became of that file. AI
  * does not speculate, and there is nothing here to send.
  */
 function buildCheckin(

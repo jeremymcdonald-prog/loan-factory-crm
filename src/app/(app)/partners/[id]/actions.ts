@@ -209,7 +209,7 @@ const CheckinSchema = z.object({
 });
 
 /**
- * The human's verdict on Ally's check-in suggestion.
+ * The human's verdict on AI's check-in suggestion.
  *
  * Approving is not a send, and this action never pretends otherwise: it puts
  * the reach-out on the user's task list so they can make it in their own words.
@@ -254,7 +254,7 @@ export async function decidePartnerCheckin(
         await db.insert(task).values({
           tenantId: user.tenantId,
           title: target.company ? `Reach out to ${who} at ${target.company}` : `Reach out to ${who}`,
-          detail: `Ally flagged this referral partner: no contact logged in ${quietDays} days.`,
+          detail: `AI flagged this referral partner: no contact logged in ${quietDays} days.`,
           ownerUserId: user.userId,
           dueAt: new Date(),
           priority: "normal",

@@ -15,7 +15,7 @@ If a request appears to cross this boundary, stop and flag it against `docs/goat
 
 ## Non-negotiable rules
 
-1. **Ally prepares, the human approves.** No AI-generated communication reaches a borrower or partner without explicit human approval. Autonomy tiers T0–T3 are defined once in `docs/goat_architect/Automation_Catalog.md` §1 — never invent a new ladder.
+1. **AI prepares, the human approves.** No AI-generated communication reaches a borrower or partner without explicit human approval. Autonomy tiers T0–T3 are defined once in `docs/goat_architect/Automation_Catalog.md` §1 — never invent a new ladder.
 2. **Compliance guardrails** in `docs/goat_architect/Mortgage_Compliance.md` are product requirements, not suggestions: no guaranteed-approval language, no unsupported rate claims, consent supremacy, unsubscribe handling, audit trails on every AI action.
 3. **No secrets** in code, docs, or commits. `.env.example` carries variable names only.
 4. **Tenancy and RLS from the first migration** — see `docs/goat_architect/Data_Model.md`.

@@ -6,9 +6,9 @@
 
 Loan Factory CRM is a **CRM only**. It may display loan stages and relationship context, but it does **not** originate, underwrite, approve, price, disclose, process, or service loans. It is not an LOS, a POS, a borrower portal, a loan application platform, an underwriting platform, a document collection system, a pricing engine, or a mobile application suite. Loan facts shown in the CRM are visibility data — entered by the team in v1, read-only synced from external systems later.
 
-## The AI layer: Ally
+## The AI layer: AI
 
-Ally is embedded across the product (not a chatbot bolted on). The contract is absolute: **Ally prepares, the human approves.** Nothing borrower-facing ever sends itself. Every AI action is tiered (T0 never-automated → T3 internal-only automation), gated, and audit-logged.
+AI is embedded across the product (not a chatbot bolted on). The contract is absolute: **AI prepares, the human approves.** Nothing borrower-facing ever sends itself. Every AI action is tiered (T0 never-automated → T3 internal-only automation), gated, and audit-logged.
 
 ## Repository layout
 
@@ -22,7 +22,7 @@ Provenance for all source material is documented in `docs/goat_architect/Asset_I
 
 ## Status
 
-Planning baseline complete (2026-07-16). Next step: the Phase 1 walking skeleton — authentication, tenancy, People, Leads, opportunity records with mortgage stages, Tasks, notes/activity history, the Today command center, seeded demo data, responsive web layouts, mock-AI Ally recommendation cards, the approval workflow shell, and audit logging. See `docs/goat_architect/Next_Actions.md`.
+Planning baseline complete (2026-07-16). Next step: the Phase 1 walking skeleton — authentication, tenancy, People, Leads, opportunity records with mortgage stages, Tasks, notes/activity history, the Today command center, seeded demo data, responsive web layouts, mock-AI AI recommendation cards, the approval workflow shell, and audit logging. See `docs/goat_architect/Next_Actions.md`.
 
 ## Working agreements
 

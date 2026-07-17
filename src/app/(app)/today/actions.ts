@@ -36,10 +36,10 @@ const VerdictSchema = z.object({
 });
 
 /**
- * Record a human verdict on something Ally prepared.
+ * Record a human verdict on something AI prepared.
  *
- * This is the enforcement point of the Ally contract (D-05): an insight only
- * ever leaves `pending` because a person decided. Ally cannot call this.
+ * This is the enforcement point of the AI contract (D-05): an insight only
+ * ever leaves `pending` because a person decided. AI cannot call this.
  *
  * Honest about sending: no email/SMS provider is connected (Integration_Map —
  * nothing is confirmed), so approving a draft records the approval and files
@@ -108,7 +108,7 @@ export async function decideInsight(
         tenantId: user.tenantId,
         insightId,
         action: `insight.${verdict}`,
-        model: "mock-ally-v1",
+        model: "mock-ai-v1",
         actorUserId: user.userId,
         detail: {
           verdict,
@@ -120,14 +120,14 @@ export async function decideInsight(
       });
 
       await recordAudit(db, user, {
-        action: `ally.${verdict}`,
+        action: `ai.${verdict}`,
         entity: "ai_insight",
         entityId: insightId,
         changes: { status: { from: "pending", to: status } },
       });
 
       if (verdict === "skip") {
-        return { ok: "Skipped. Ally will learn from that." };
+        return { ok: "Skipped. AI will learn from that." };
       }
 
       const finalBody = verdict === "edit_approve" ? (editedBody ?? insight.body) : insight.body;
@@ -159,7 +159,7 @@ export async function decideInsight(
           status: "approved",
           subject: insight.title,
           body: finalBody,
-          preparedByAlly: true,
+          preparedByAi: true,
           templateRef: insight.templateRef,
           languageCode: insight.languageCode,
           authorUserId: user.userId,
@@ -205,7 +205,7 @@ export async function decideInsight(
           authorUserId: user.userId,
           personId: insight.personId,
           loanId: insight.loanId,
-          preparedByAlly: true,
+          preparedByAi: true,
         });
       }
 

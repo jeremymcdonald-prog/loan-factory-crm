@@ -1,6 +1,6 @@
 # QA Plan
 
-Purpose: the complete test strategy for Loan Factory CRM — how we prove, before anything reaches a real loan officer, that every feature meets [[Acceptance_Criteria]], that the "toddler simple" standard is measurably true, that English/Vietnamese both work as first-class experiences, that the compliance guardrails hold under adversarial pressure, and that Ally's outputs are accurate enough to trust. The backbone is the adopted TERA+ persona framework ([[Decisions]] D-15): 111 personas and 259 test scenarios purpose-built for mortgage humans, plus its usability scorecard — which converts "toddler simple" from a slogan into a numeric ship gate. This plan tells the implementation team what to test, with whom, against what thresholds, and what blocks a release.
+Purpose: the complete test strategy for Loan Factory CRM — how we prove, before anything reaches a real loan officer, that every feature meets [[Acceptance_Criteria]], that the "toddler simple" standard is measurably true, that English/Vietnamese both work as first-class experiences, that the compliance guardrails hold under adversarial pressure, and that AI's outputs are accurate enough to trust. The backbone is the adopted TERA+ persona framework ([[Decisions]] D-15): 111 personas and 259 test scenarios purpose-built for mortgage humans, plus its usability scorecard — which converts "toddler simple" from a slogan into a numeric ship gate. This plan tells the implementation team what to test, with whom, against what thresholds, and what blocks a release.
 
 ---
 
@@ -13,7 +13,7 @@ Purpose: the complete test strategy for Loan Factory CRM — how we prove, befor
 | 3. Persona-based usability | Real-role humans (or persona-scripted testers) complete real tasks under friction thresholds | TERA+ scenario suites + usability scorecard (§3) | NTS thresholds pass; zero critical-fail conditions |
 | 4. Toddler-simple protocol | A brand-new LO finds the next action in under 10 seconds | The <10s protocol (§4), run on every new screen | Pass required per screen |
 | 5. Multilingual QA | EN/VI parity, translation integrity, placeholder safety | Bilingual review passes (§5.3) | VI reviewer sign-off per release |
-| 6. AI eval harness | Ally briefings, drafts, and scores are accurate, safe, and stable across model/prompt changes | Golden sets + adversarial sets, scored automatically + human-sampled (§6) | Thresholds in §6; regression run on every model or prompt change |
+| 6. AI eval harness | AI briefings, drafts, and scores are accurate, safe, and stable across model/prompt changes | Golden sets + adversarial sets, scored automatically + human-sampled (§6) | Thresholds in §6; regression run on every model or prompt change |
 | 7. Performance & accessibility | Fast under real volume; usable by everyone | Load/perf budgets + WCAG audits (§7) | Budgets and WCAG 2.1 AA pass |
 
 **Data-safety rules (adopted wholesale from the persona framework, non-negotiable):** fake data only — no real borrower PII, NPI, income documents, credit data, or lender credentials in any test environment; no external sends ever (outbound email/SMS in test environments routes to a sink); no production writes during testing. A tester being *prompted* to use real data is itself a critical fail.
@@ -33,11 +33,11 @@ The framework's 259 scenarios were written for TERA+; ~200 port to Loan Factory 
 | TERA-NOTIF | Today / notifications | Port now (Phase 1) |
 | TERA-RBAC | Auth / roles / Settings | Port now (Phase 1) |
 | TERA-MARKETING | Marketing | Port for Phase 2 |
-| TERA-AI | Ally (all surfaces) | Port now — see §6 |
+| TERA-AI | AI (all surfaces) | Port now — see §6 |
 | TERA-CONDITIONS / TERA-DOCS | Phase 2 milestone visibility + docs-needed follow-up communication — port only the visibility and communication scenarios; document-collection and condition-management scenarios stay out (the CRM never collects loan documents or manages conditions) | Port selectively for Phase 2 |
 | TERA-APP / 1003 / PRICING / AUS / DISCLOSURES (~50–60 scenarios) | LOS/POS territory — permanently outside the CRM's boundary; the CRM never originates, prices, or discloses | **Reference material only** — they inform borrower-communication QA context; never scheduled against the product |
 
-Also ported whole: all **13 stress scenarios** (Friday-afternoon closing blocker, expiring rate lock, duplicate lead, low appraisal, overwhelmed new LO…), all **14 edge cases** (save-state ambiguity, stale dashboard, same-name borrowers, DNC/opt-out, AI-vs-label conflict, concurrent edits…), the **6 high-volume workflows**, and the **9 AI-assisted tests** (SCN-AI-001..009 — Ally's pre-written acceptance suite, §6.1). Discarded: the TERA ID crosswalk (dangling references), TERA status labels, and TERA-specific concept names.
+Also ported whole: all **13 stress scenarios** (Friday-afternoon closing blocker, expiring rate lock, duplicate lead, low appraisal, overwhelmed new LO…), all **14 edge cases** (save-state ambiguity, stale dashboard, same-name borrowers, DNC/opt-out, AI-vs-label conflict, concurrent edits…), the **6 high-volume workflows**, and the **9 AI-assisted tests** (SCN-AI-001..009 — AI's pre-written acceptance suite, §6.1). Discarded: the TERA ID crosswalk (dangling references), TERA status labels, and TERA-specific concept names.
 
 **Persona coverage plan.** The 55 English personas cover 6 of the 8 CANON user types strongly. Gaps and fixes:
 
@@ -87,7 +87,7 @@ The TERA+ usability scorecard is adopted nearly verbatim as Loan Factory CRM's U
 The operational definition of the CANON UX standard, run on every screen, every release:
 
 1. **Recruit** a tester matching a new-NTS LO persona (LO-NEW-NTS class) who has never seen the screen. Real new Loan Factory LOs are ideal; persona-scripted stand-ins are acceptable between cohorts.
-2. **Seed** the account with realistic fake state (leads, tasks, pending Ally cards, a stalled opportunity).
+2. **Seed** the account with realistic fake state (leads, tasks, pending AI cards, a stalled opportunity).
 3. **Ask exactly one question:** "What should you do next?" — no tour, no hints.
 4. **Pass:** within **10 seconds** the tester points at (or taps) the correct next action, and the action completes with one primary control. **Fail:** hesitation past 10 seconds, wrong item chosen, or the tester asks what a word means (tag JARGON).
 5. Repeat with 5 testers per screen. Gate: **≥ 4 of 5 pass.** Any JARGON or DASHBOARD-NOISE tag from 2+ testers forces a copy/hierarchy fix before re-test.
@@ -108,11 +108,11 @@ Run before every phase gate and every launch stage:
 | Attack class | Test |
 |---|---|
 | Unapproved send (INV-1) | Attempt sends via automations, batch approvals, retries, API calls, and race conditions (approve-then-edit, concurrent approvals). Expected: 0 sends without a named approval. |
-| Privacy wall (PRIVACY-LEAK) | Seed files with credit/income/assets/conditions; inspect every partner-facing artifact, partner digest, and Ally partner draft for leakage. |
+| Privacy wall (PRIVACY-LEAK) | Seed files with credit/income/assets/conditions; inspect every partner-facing artifact, partner digest, and AI partner draft for leakage. |
 | Consent/DNC supremacy (INV-6) | Flag DNC mid-cadence, mid-batch, and mid-send-window; verify instant stop. Unsubscribe during an active newsletter send. |
 | Policy-tier bypass (INV-5) | Attempt to attach Manual Only / Never Automate templates (incl. EMT-060–065) to automations via UI and API. |
 | RBAC probing | API-level access attempts across all 8 roles against every entity type — hidden buttons are not security. |
-| Prompt injection (INV-8) | Seeded hostile inbound emails, form submissions, and imported notes containing instructions to Ally. Expected: 0 executions; injections logged as untrusted content. |
+| Prompt injection (INV-8) | Seeded hostile inbound emails, form submissions, and imported notes containing instructions to AI. Expected: 0 executions; injections logged as untrusted content. |
 | Audit evasion | Attempt actions that could plausibly skip logging (bulk operations, view-as sessions, dismissals). Expected: complete trails. |
 
 ### 5.3 Multilingual QA (EN/VI first-class)
@@ -125,12 +125,12 @@ Run before every phase gate and every launch stage:
 
 ---
 
-## 6. AI eval harness — proving Ally
+## 6. AI eval harness — proving AI
 
-Ally is tested like a product surface, not a demo. **Phase 1 note:** the Phase-1 build runs Ally on the controlled mock recommendation service — deterministic fixture output, zero live model calls — so in Phase 1 the harness verifies the approval workflow shell, card labeling, provenance completeness, and the zero-autonomous-action invariants (AC-AL set in [[Acceptance_Criteria]]). The golden sets below activate when the live model gateway ships in Phase 2; from then on the harness runs automatically on every model version change, prompt change, and guardrail content change, with a sampled human review at every phase gate.
+AI is tested like a product surface, not a demo. **Phase 1 note:** the Phase-1 build runs AI on the controlled mock recommendation service — deterministic fixture output, zero live model calls — so in Phase 1 the harness verifies the approval workflow shell, card labeling, provenance completeness, and the zero-autonomous-action invariants (AC-AL set in [[Acceptance_Criteria]]). The golden sets below activate when the live model gateway ships in Phase 2; from then on the harness runs automatically on every model version change, prompt change, and guardrail content change, with a sampled human review at every phase gate.
 
 ### 6.1 The ported acceptance suite: SCN-AI-001..009
-All nine TERA+ AI-assisted scenarios port nearly as-is and are Ally's baseline acceptance tests. Every one enforces the same three-part contract: AI output is a draft/review aid → source evidence is verifiable → a human confirms. Phase 1 runs the lead-prioritization/recommendation-card and approval-shell scenarios against the controlled mock output; Phase 2 — when the live gateway and drafting ship — runs the borrower-draft, Realtor-draft, and summary scenarios, then adds the marketing-compliance-flag and coaching-recommendation scenarios.
+All nine TERA+ AI-assisted scenarios port nearly as-is and are AI's baseline acceptance tests. Every one enforces the same three-part contract: AI output is a draft/review aid → source evidence is verifiable → a human confirms. Phase 1 runs the lead-prioritization/recommendation-card and approval-shell scenarios against the controlled mock output; Phase 2 — when the live gateway and drafting ship — runs the borrower-draft, Realtor-draft, and summary scenarios, then adds the marketing-compliance-flag and coaching-recommendation scenarios.
 
 ### 6.2 Golden sets
 
@@ -140,7 +140,7 @@ All nine TERA+ AI-assisted scenarios port nearly as-is and are Ally's baseline a
 | **Message drafts** | ≥ 100 draft situations across stages, audiences, sources, and languages (incl. VI), each with the expected EMT family and required merge fields | Correct template family selection; merge-field resolution; language correctness; lint pass; human quality rating (sampled) | 100% lint pass; ≥ 95% correct template family; ≥ 60% human approval rate (G6); 0 sensitive-topic drafts in SMS-blocked classes |
 | **Lead scoring / next-best-action ranking** | ≥ 100 scored lead states with expert-ranked expected ordering, plus matched pairs differing only in non-factor attributes | Ranking agreement; factor explainability; fairness invariance | Top-3 agreement ≥ 80%; every score explainable from documented factors; matched pairs score identically (INV-7) |
 | **Thread/file summaries** | ≥ 50 seeded conversation threads and files | Faithfulness (no invented content); evidence links resolve | 0 fabrications; 100% valid links |
-| **Compliance reviewer (P2)** | The lint corpus (§5.1) run through Ally's AI review layer | Blocker/warning detection; safer-rewrite quality | Catches 100% of deterministic block classes; rewrites pass lint |
+| **Compliance reviewer (P2)** | The lint corpus (§5.1) run through AI's AI review layer | Blocker/warning detection; safer-rewrite quality | Catches 100% of deterministic block classes; rewrites pass lint |
 
 Golden sets are versioned; every production incident that reveals a miss adds a case. Regression rule: **no model or prompt change deploys if any golden-set threshold regresses** — a newer model that writes prettier drafts but fabricates one record loses.
 

@@ -1,6 +1,6 @@
 # User_Personas
 
-Purpose: this document distills the 111 TERA+ usability personas (source: `_product_discovery/ai_personas/ai-personas-master/`, verified counts in the discovery analysis) into the **7 primary product personas** for Loan Factory CRM, locked in [[Vision]] and the product canon — plus a source-material profile of the borrower, who is a **CRM contact, never a product user**. Each persona defines who the CRM must serve, the full tech-comfort spectrum inside that role, their daily jobs, their pains with today's tools, exactly what the Today screen must show them, the Ally moments that win their loyalty, measurable success criteria tied to the TERA+ usability scorecard, and a mapping back to TERA+ persona IDs and scenario families so [[QA_Plan]] can reuse the existing 259 test scenarios instead of writing new ones. Two personas the source pack does not cover (Branch Leader, Agent Relationship Manager) are authored here from adjacent evidence and flagged as hypotheses to validate with Jeremy's team.
+Purpose: this document distills the 111 TERA+ usability personas (source: `_product_discovery/ai_personas/ai-personas-master/`, verified counts in the discovery analysis) into the **7 primary product personas** for Loan Factory CRM, locked in [[Vision]] and the product canon — plus a source-material profile of the borrower, who is a **CRM contact, never a product user**. Each persona defines who the CRM must serve, the full tech-comfort spectrum inside that role, their daily jobs, their pains with today's tools, exactly what the Today screen must show them, the AI moments that win their loyalty, measurable success criteria tied to the TERA+ usability scorecard, and a mapping back to TERA+ persona IDs and scenario families so [[QA_Plan]] can reuse the existing 259 test scenarios instead of writing new ones. Two personas the source pack does not cover (Branch Leader, Agent Relationship Manager) are authored here from adjacent evidence and flagged as hypotheses to validate with Jeremy's team.
 
 Related: [[PRD]] · [[Screen_Specifications]] · [[Mortgage_Workflow_Map]] · [[AI_Product_Architecture]] · [[QA_Plan]] · [[Design_System]] · [[Mortgage_Compliance]] · [[Open_Issues]]
 
@@ -10,8 +10,8 @@ Related: [[PRD]] · [[Screen_Specifications]] · [[Mortgage_Workflow_Map]] · [[
 
 - **Every persona is a spectrum, not a point.** The TERA+ pack's most important finding is that tech comfort varies enormously *within* every role — a brand-new not-tech-savvy LO (Maria Carter) and a veteran power user (Priya Shah) are both "Loan Officers." Each persona below states its spectrum and names the anchor personas at each end. Design for the low-tech end; never cap the high-tech end.
 - **The ship gate is the not-tech-savvy (NTS) user.** Per the TERA+ scorecard, every workflow has a friction threshold for NTS users (1–5 scale, lower is better). We adopt that rule: **a screen ships when its NTS threshold passes.** This is the canon "toddler simple" standard made falsifiable. Thresholds are quoted per persona below.
-- **TERA+ IDs are preserved for QA reuse.** IDs follow `ROLE-[LANG-]LEVEL-TECH-##` (e.g. `LO-VI-VET-NTS-05`); scenarios follow `SCN-<persona>-<functional area>`. Most of the 259 scenarios port to Loan Factory CRM with a terminology remap only (TERA-DASH→Today, TERA-STATUS→Pipeline, TERA-COMMS→Conversations, TERA-AI→Ally). Scenarios that exercise loan work the CRM does not perform — document upload mechanics, condition clearing, borrower portal flows — either port as **communication-QA scenarios** (does the message the team sends make sense to this persona?) or retire; the crosswalk tables below mark them. Treat all personas as **hypotheses authored by AI, to be validated against real Loan Factory staff** — not field research.
-- **Ally's contract applies to every persona:** Ally prepares, the human approves. Each "Ally moments" list below contains only draft/flag/prioritize behaviors — nothing sends autonomously.
+- **TERA+ IDs are preserved for QA reuse.** IDs follow `ROLE-[LANG-]LEVEL-TECH-##` (e.g. `LO-VI-VET-NTS-05`); scenarios follow `SCN-<persona>-<functional area>`. Most of the 259 scenarios port to Loan Factory CRM with a terminology remap only (TERA-DASH→Today, TERA-STATUS→Pipeline, TERA-COMMS→Conversations, TERA-AI→AI). Scenarios that exercise loan work the CRM does not perform — document upload mechanics, condition clearing, borrower portal flows — either port as **communication-QA scenarios** (does the message the team sends make sense to this persona?) or retire; the crosswalk tables below mark them. Treat all personas as **hypotheses authored by AI, to be validated against real Loan Factory staff** — not field research.
+- **AI's contract applies to every persona:** AI prepares, the human approves. Each "AI moments" list below contains only draft/flag/prioritize behaviors — nothing sends autonomously.
 
 ## The 7 product personas at a glance
 
@@ -71,19 +71,19 @@ Design consequence: one obvious primary action per screen for the NTS end; keybo
 | Top | **Daily briefing** — plain-language, 3–5 lines: what changed overnight, what's at risk, what wins are close | Answers "what matters now" before any hunting |
 | Priority queue | Ranked next actions with **reason attached** ("Rate lock on Nguyen expires Friday" · "New lead from Facebook, 12 min old, untouched") | The scorecard's leadership question — "Does the dashboard show the next right action, or is it another place to hunt?" — is this persona's pass/fail |
 | Urgency strip | Files in danger: expiring locks, stalled stages, closing-week blockers | Sourced from the 13 TERA+ stress scenarios (SCN-STRESS-*) |
-| Approval queue | Ally drafts waiting for one-tap approve/edit/dismiss | Ally prepares, the Producer approves |
+| Approval queue | AI drafts waiting for one-tap approve/edit/dismiss | AI prepares, the Producer approves |
 | Pipeline pulse | Counts per macro-phase (Engage/Qualify/Transact/Retain/Grow) with deltas | Orientation, not analytics |
 
 Every item: clear owner, timestamp, and freshness indicator (STALE-DATA is a critical-fail condition).
 
-### Ally moments that win them over
+### AI moments that win them over
 
 1. **Morning briefing that's actually right** — names the file at risk before the LO remembered it.
-2. **New-lead first touch in 30 seconds:** lead arrives, Ally has a compliant intro draft (from the EMT template library) ready with merge fields filled — one tap to approve.
-3. **"Where is my file?" answered:** Ally assembles a privacy-safe status summary the LO can read to a borrower or forward to a Realtor without checking three screens.
-4. **Stage-change follow-through:** the team marks a file Conditional Approval → Ally drafts a plain-language borrower note explaining what that stage means and what the team still needs, queued for approval.
-5. **Refi radar:** Ally flags a funded client whose rate context has changed (stage 19 Refinance Opportunity) with a Manual-Only review task — never an auto-send.
-6. **Bilingual drafting:** for a Vietnamese-preference contact, Ally drafts in Vietnamese with correct diacriticals and mortgage terms kept precise (see multilingual section).
+2. **New-lead first touch in 30 seconds:** lead arrives, AI has a compliant intro draft (from the EMT template library) ready with merge fields filled — one tap to approve.
+3. **"Where is my file?" answered:** AI assembles a privacy-safe status summary the LO can read to a borrower or forward to a Realtor without checking three screens.
+4. **Stage-change follow-through:** the team marks a file Conditional Approval → AI drafts a plain-language borrower note explaining what that stage means and what the team still needs, queued for approval.
+5. **Refi radar:** AI flags a funded client whose rate context has changed (stage 19 Refinance Opportunity) with a Manual-Only review task — never an auto-send.
+6. **Bilingual drafting:** for a Vietnamese-preference contact, AI drafts in Vietnamese with correct diacriticals and mortgage terms kept precise (see multilingual section).
 
 ### Success metrics
 
@@ -93,7 +93,7 @@ Every item: clear owner, timestamp, and freshness indicator (STALE-DATA is a cri
 | Lead creation friction | ≤ 2.0 TS / ≤ 2.5 NTS; zero unrecoverable duplicates | Scorecard + critical-fail list |
 | Notes/communication friction | ≤ 2.0 TS / ≤ 2.5 NTS; user always distinguishes internal note from outbound message | Scorecard red flag |
 | Time to first touch on a new lead | Measurably down vs. baseline (instrument from day 1) | Product metric |
-| % of Ally drafts approved without edit | Trending up; edits captured as learning signal | Ally quality metric |
+| % of AI drafts approved without edit | Trending up; edits captured as learning signal | AI quality metric |
 | Adoption proxy | Veteran NTS LO completes daily routine without calling ops for navigation | LO-VET-NTS-05 success criteria |
 
 ### TERA+ mapping for QA reuse
@@ -106,7 +106,7 @@ Every item: clear owner, timestamp, and freshness indicator (STALE-DATA is a cri
 | Veteran LO | LO-VET-NTS-05 (Robert Mitchell), LO-VET-TS-06 (Priya Shah) | SCN-LO-VET-*; SCN-HV-001 (25-file prioritization); SCN-STRESS-012 (high-volume LO) |
 | Vietnamese-first LO | LO-VI-NEW-NTS-01 (Linh Tran), LO-VI-NEW-TS-02 (Minh Nguyen), LO-VI-MID-NTS-03 (An Pham), LO-VI-MID-TS-04 (Quang Le), LO-VI-VET-NTS-05 (Hoa Vo), LO-VI-VET-TS-06 (Bao Huynh) | Same functional rows executed in Vietnamese UI/content; translation-ready guidance edge case (SCN-EDGE-014) |
 | Other languages | LO-ZH-*, LO-ES-*, LO-RU-* (6 each) | Localization regression suite |
-| Ally acceptance | — | SCN-AI-009 (lead prioritization explainability), SCN-AI-005 (borrower update draft) |
+| AI acceptance | — | SCN-AI-009 (lead prioritization explainability), SCN-AI-005 (borrower update draft) |
 
 ---
 
@@ -142,14 +142,14 @@ Low end: Hannah Flores (LC-NEW-NTS-01) — "I want to help the LO, but I need th
 - **Docs-needed follow-up view:** every file the team has flagged docs-needed, with age of the flag, last-nudge timestamp, and a ready-to-approve reminder draft — a communication tracker, not a document repository.
 - **Handoff tracker:** files staged for processing, with an open-task completeness check and an explicit "handoff accepted" state.
 - **Role-safe action affordances:** actions outside their permission render as *routed requests* ("Ask Denise to approve stage change"), never dead-end blocks. This is a TERA+ critical-fail condition turned into a design mandate.
-- Ally-drafted follow-up nudges awaiting their (or the LO's, per permission config) approval.
+- AI-drafted follow-up nudges awaiting their (or the LO's, per permission config) approval.
 
-### Ally moments that win them over
+### AI moments that win them over
 
-1. **The trusted reminder:** Ally surfaces "3 docs-needed follow-ups open > 48h" with one-tap re-request drafts (EMT document-collection communication templates) — the moment Angela deletes her spreadsheet.
-2. **Handoff pre-flight:** before routing to processing, Ally lists what's still unresolved on the CRM record — open tasks, a docs-needed flag still set, unanswered borrower nudges — so handoffs stop ping-ponging.
-3. **Lane guardian:** when they attempt an out-of-scope action, Ally explains who owns it and drafts the handoff message instead of just blocking.
-4. **Note hygiene:** Ally suggests standard-format note structure so processors can trust coordinator notes.
+1. **The trusted reminder:** AI surfaces "3 docs-needed follow-ups open > 48h" with one-tap re-request drafts (EMT document-collection communication templates) — the moment Angela deletes her spreadsheet.
+2. **Handoff pre-flight:** before routing to processing, AI lists what's still unresolved on the CRM record — open tasks, a docs-needed flag still set, unanswered borrower nudges — so handoffs stop ping-ponging.
+3. **Lane guardian:** when they attempt an out-of-scope action, AI explains who owns it and drafts the handoff message instead of just blocking.
+4. **Note hygiene:** AI suggests standard-format note structure so processors can trust coordinator notes.
 
 ### Success metrics
 
@@ -205,10 +205,10 @@ Low end: Olivia Grant (PR-NEW-NTS-01) — "make the checklist obvious"; Sandra H
 - **Escalations & stop-conditions:** items where an automation stopped or a reminder needs human judgment ("Notify assigned LO and operations owner" per the communication framework's escalation rule).
 - Freshness timestamps on everything.
 
-### Ally moments that win them over
+### AI moments that win them over
 
-1. **Docs-needed drafts:** when the processor flags a file docs-needed and notes what's outstanding, Ally turns that note into a plain-language borrower follow-up — draft only, with the source note linked (SCN-AI-004's contract, remapped from condition summarization to communication drafting).
-2. **Note-to-update drafts:** Ally turns a processor's shorthand status note into a privacy-safe update the LO or ARM can forward — the "where is my file?" answer, pre-written.
+1. **Docs-needed drafts:** when the processor flags a file docs-needed and notes what's outstanding, AI turns that note into a plain-language borrower follow-up — draft only, with the source note linked (SCN-AI-004's contract, remapped from condition summarization to communication drafting).
+2. **Note-to-update drafts:** AI turns a processor's shorthand status note into a privacy-safe update the LO or ARM can forward — the "where is my file?" answer, pre-written.
 3. **Queue triage:** "These 3 of your 22 files can slip this week's closing" with the reason chain visible.
 4. **Third-party chase drafts:** processor-voiced follow-ups to title/insurance (EMT-052–056) prepared and queued for approval.
 
@@ -266,11 +266,11 @@ Explicitly wide — the source pack deliberately includes an NTS team leader. Hi
 - **Escalation tracker:** what they escalated, current owner, and age.
 - Data-freshness timestamps on every metric (critical-fail condition).
 
-### Ally moments that win them over
+### AI moments that win them over
 
-1. **Stuck-file radar:** Ally flags files whose stage-time exceeds team norms, with the *why* attached — before the Realtor calls.
+1. **Stuck-file radar:** AI flags files whose stage-time exceeds team norms, with the *why* attached — before the Realtor calls.
 2. **Coaching recommendation with receipts:** "Jordan's leads convert to consultation at half the team rate; contact attempts average 1.2 vs team 3.4" — pattern + evidence + suggested action, reviewable per SCN-AI-007; never auto-applied, never generic.
-3. **Quiet-underperformer catch:** Ally surfaces the LO who isn't generating alarms but is trending down.
+3. **Quiet-underperformer catch:** AI surfaces the LO who isn't generating alarms but is trending down.
 4. **Monday team brief:** drafted team performance summary the leader edits and owns.
 
 ### Success metrics
@@ -326,12 +326,12 @@ Moderate to high, but time-poor: will not learn a complex analytics product. Wan
 - **Retention watch:** LOs with declining engagement/production signals — explainable factors only, no black-box risk labels (Jonah Pierce's explicit demand: "Do not just show me risk. Show me what support action should happen next.").
 - **Compliance summary:** open review items, aging approvals, automation exceptions across the branch.
 
-### Ally moments that win them over
+### AI moments that win them over
 
-1. **Weekly branch brief drafted:** production, risks, wins, recommended focus — the leader edits and sends; Ally never sends.
+1. **Weekly branch brief drafted:** production, risks, wins, recommended focus — the leader edits and sends; AI never sends.
 2. **Retention early-warning with a suggested support action** routed to the right team leader or coach — no duplicate follow-ups across coaching and leadership (Jonah's named failure mode).
 3. **Anomaly explanation:** "Team Saigon's conversion dropped 18% — traceable to lead-source mix change, not LO behavior."
-4. **Recruiting research prep:** Ally assembles candidate-facing follow-up drafts, kept fully outside borrower data scope.
+4. **Recruiting research prep:** AI assembles candidate-facing follow-up drafts, kept fully outside borrower data scope.
 
 ### Success metrics
 
@@ -385,12 +385,12 @@ Moderate to high; field-heavy and mobile-heavy (open houses, broker events, coff
 - **Touch queue:** which partners are due contact, with the reason and a drafted opener.
 - **Recruiting pipeline:** candidate agents by stage, kept distinct from active partners.
 
-### Ally moments that win them over
+### AI moments that win them over
 
-1. **Privacy-safe update drafts:** on milestone change, Ally drafts the agent-facing update inside the privacy matrix — approve, personalize, send (SCN-AI-006's exact test).
+1. **Privacy-safe update drafts:** on milestone change, AI drafts the agent-facing update inside the privacy matrix — approve, personalize, send (SCN-AI-006's exact test).
 2. **Cooling alarm:** "Grant Ellis: no referral in 6 weeks vs. a 2/month baseline" plus a suggested re-engagement touch.
 3. **Meeting prep card:** referral history, active files, open promises, last conversation — assembled before the coffee meeting.
-4. **Co-branded content routing:** agent requests flyer support → Ally drafts the request into the Marketing queue with compliance flags pre-checked.
+4. **Co-branded content routing:** agent requests flyer support → AI drafts the request into the Marketing queue with compliance flags pre-checked.
 
 ### Success metrics
 
@@ -443,11 +443,11 @@ Moderate (Elena Scott, IB-MKT-CONTENT-09 — content-focused: "I need to know wh
 - **Content calendar health:** this week's planned content vs. gaps (the weekly cadence system from the social pack).
 - **Escalations:** items awaiting compliance decision, with age against the 2–3 business day SLA.
 
-### Ally moments that win them over
+### AI moments that win them over
 
-1. **Pre-review lint:** every draft arrives pre-scanned — trigger terms, guarantee language, missing NMLS #320841/Equal Housing, state-rule conflicts (deterministic pass + AI review, per [[AI_Product_Architecture]]), with a safer rewrite proposed. The reviewer decides; Ally never approves its own work.
+1. **Pre-review lint:** every draft arrives pre-scanned — trigger terms, guarantee language, missing NMLS #320841/Equal Housing, state-rule conflicts (deterministic pass + AI review, per [[AI_Product_Architecture]]), with a safer rewrite proposed. The reviewer decides; AI never approves its own work.
 2. **Campaign pack generation:** brief in → 5 social drafts + image prompts + video script + compliance notes out, all marked Draft (the agent-task spec that already exists in the kit, productized).
-3. **Best Price Guarantee guard:** Ally flags any BPG mention missing the terms link — and hard-flags Washington distribution (a locked rule).
+3. **Best Price Guarantee guard:** AI flags any BPG mention missing the terms link — and hard-flags Washington distribution (a locked rule).
 4. **Keyword-DM automation drafting:** "comment PLAN" flows drafted end-to-end for approval before anything activates.
 
 ### Success metrics
@@ -457,7 +457,7 @@ Moderate (Elena Scott, IB-MKT-CONTENT-09 — content-focused: "I need to know wh
 | Marketing/compliance review friction | ≤ 2.25 TS / ≤ 2.75 NTS |
 | Red-flag avoidance | Risky content never *appears* approved or sendable (scorecard red flag); zero MARKETING-RISK criticals |
 | Review throughput | Time from draft to decision down vs. email baseline; SLA breaches visible and trending to zero |
-| Lint precision | Ally compliance flags reviewed-and-agreed rate high enough that reviewers trust, not tune out (measure both false-negative escapes and false-positive fatigue) |
+| Lint precision | AI compliance flags reviewed-and-agreed rate high enough that reviewers trust, not tune out (measure both false-negative escapes and false-positive fatigue) |
 | Automation clarity | Ian-profile tester confirms a demo automation cannot send externally (IB-MKT-AUTO-10 success criteria) |
 
 ### TERA+ mapping for QA reuse
@@ -472,7 +472,7 @@ Moderate (Elena Scott, IB-MKT-CONTENT-09 — content-focused: "I need to know wh
 
 ## The Borrower — CRM contact, not a product persona
 
-Borrowers never log into Loan Factory CRM. There is no borrower portal, no borrower login, no borrower-facing surface — borrowers apply, upload documents, and track their loan in the systems built for that work. What borrowers experience of this product is **the communication it produces**: the emails, texts, and milestone updates the loan team sends — drafted by Ally, approved by a human, delivered in the borrower's preferred language. The TERA+ pack's 15 borrower personas therefore stay in this document **explicitly as source material for communication design and QA**, not as a user persona: they define who is on the other end of every EMT template, every Ally draft, and every wording-safety test.
+Borrowers never log into Loan Factory CRM. There is no borrower portal, no borrower login, no borrower-facing surface — borrowers apply, upload documents, and track their loan in the systems built for that work. What borrowers experience of this product is **the communication it produces**: the emails, texts, and milestone updates the loan team sends — drafted by AI, approved by a human, delivered in the borrower's preferred language. The TERA+ pack's 15 borrower personas therefore stay in this document **explicitly as source material for communication design and QA**, not as a user persona: they define who is on the other end of every EMT template, every AI draft, and every wording-safety test.
 
 ### Why the borrower personas still matter
 
@@ -489,10 +489,10 @@ The 15 personas prove the borrower audience has extreme variance across three ax
 
 Their pains with today's communication set the quality bar: hearing nothing after sending documents in (Priya Singh: "I need to know exactly what you received and what is still missing" — the docs-needed follow-up must close that loop when the team clears the flag); jargon and approval-wording confusion — mistaking preapproval or conditional approval for done (a compliance hazard, not just tone); repeated requests for the same item; generic consumer messaging sent to specialists and intimidating language sent to the anxious.
 
-### Communication moments the borrower personas define (Ally drafts, the team approves)
+### Communication moments the borrower personas define (AI drafts, the team approves)
 
-1. **Proactive milestone notices:** the team records a stage change → Ally drafts the borrower update in borrower-safe language mapped from the 20-stage lifecycle — approved and sent before the borrower calls to ask.
-2. **Plain-language explainers:** any draft that mentions a stage or mortgage term (VOE, conditional approval) explains it in the borrower's language. Ally never states approval odds, rates, or promises (hard guardrail per [[Mortgage_Compliance]]), and estimate vs. final wording is never blurred — a TERA+ critical-fail condition carried over verbatim as a message-QA rule.
+1. **Proactive milestone notices:** the team records a stage change → AI drafts the borrower update in borrower-safe language mapped from the 20-stage lifecycle — approved and sent before the borrower calls to ask.
+2. **Plain-language explainers:** any draft that mentions a stage or mortgage term (VOE, conditional approval) explains it in the borrower's language. AI never states approval odds, rates, or promises (hard guardrail per [[Mortgage_Compliance]]), and estimate vs. final wording is never blurred — a TERA+ critical-fail condition carried over verbatim as a message-QA rule.
 3. **Docs-needed follow-ups:** built from the team's flag and note, stating exactly what is still outstanding and why — precise enough for Nadia Kim, plain enough for Harold Evans.
 4. **Closing-week urgency:** when closing is near, drafts carry honest urgency without panic (Ben Carter's test).
 
@@ -530,7 +530,7 @@ The six LO-VI personas (Linh Tran, Minh Nguyen, An Pham, Quang Le, Hoa Vo, Bao H
 | **Mixed-language reality, not full translation.** Vietnamese LOs work in Vietnamese *around* English mortgage terms — "AUS," "1003," "condition" stay English. | LO-VI-NEW-NTS-01: confusion "giữa thuật ngữ tiếng Anh và tiếng Việt"; the ZH personas show the same embedded-English pattern | UI translation must keep canonical mortgage terms in English with Vietnamese explanation on tap — never machine-translate term-for-term. Quang Le, verbatim concern: translation must not "turn mortgage terms into vague sentences." |
 | **Bilingual glossary in the workflow.** | Linh Tran needs acronyms explained "ngay trong workflow" (right inside the workflow), not in a help center | Inline term tooltips (EN term → VI plain-language explanation) shipped as first-class UI, sourced from the communication framework's 5-language terminology table |
 | **Bilingual search.** | LO-VI-NEW-TS-02 needs "search song ngữ" | People/template search matches both the English term and its Vietnamese equivalent |
-| **Safe-wording drafts in Vietnamese.** | An Pham's core worry: explaining status to borrowers "without saying the wrong thing about approval" | Ally's Vietnamese drafts inherit the same compliance guardrails as English — the framework's localization rule is explicit: "Do not soften conditional language in non-English versions" |
+| **Safe-wording drafts in Vietnamese.** | An Pham's core worry: explaining status to borrowers "without saying the wrong thing about approval" | AI's Vietnamese drafts inherit the same compliance guardrails as English — the framework's localization rule is explicit: "Do not soften conditional language in non-English versions" |
 | **Vietnamese-speaking borrowers follow.** | Per-contact language preference is canon; Loan Factory's team model includes Vietnamese teams | Contact records carry language preference from Phase 1 so Conversations, templates, and campaign content render and send accordingly |
 
 ### Content and data facts to build on
@@ -560,4 +560,4 @@ For [[QA_Plan]] — the complete crosswalk in one table:
 | 7 Brand Keeper (Marketing) | IB-MKT-09/10, IB-COMP-11/12 | SCN-IB-MKT-*/SCN-IB-COMP-*; SCN-HV-005; SCN-AI-008; SCN-EDGE-009; SCN-STRESS-011 | None |
 | — Borrower (contact — message QA only) | BOR-01..15 | 10 borrower rows as message-comprehension tests; SCN-EDGE-007; SCN-STRESS-006/-007/-008. SCN-EDGE-006/-011 retire (portal mechanics — no borrower surface exists) | **Yes — 3–4 multilingual borrower message-QA readers** |
 
-Cross-cutting suites that apply to all personas: the 12 critical-fail conditions, the 20 risk tags as defect taxonomy, and the AI-assisted tests (SCN-AI-001..009, minus SCN-AI-003 document classification, which drops out with the CRM-only boundary — documents live in the LOS) as Ally's acceptance suite, plus the data-safety rules (fake data only, no external sends, no production writes during testing). Remap all TERA status labels to the 20-stage lifecycle per [[Mortgage_Workflow_Map]] — in the CRM those stages are relationship/opportunity visibility, entered by the team in v1 and later optionally synced read-only from external systems. Discard the TERA-* ID crosswalk (dangling references, per discovery analysis).
+Cross-cutting suites that apply to all personas: the 12 critical-fail conditions, the 20 risk tags as defect taxonomy, and the AI-assisted tests (SCN-AI-001..009, minus SCN-AI-003 document classification, which drops out with the CRM-only boundary — documents live in the LOS) as AI's acceptance suite, plus the data-safety rules (fake data only, no external sends, no production writes during testing). Remap all TERA status labels to the 20-stage lifecycle per [[Mortgage_Workflow_Map]] — in the CRM those stages are relationship/opportunity visibility, entered by the team in v1 and later optionally synced read-only from external systems. Discard the TERA-* ID crosswalk (dangling references, per discovery analysis).

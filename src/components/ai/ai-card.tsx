@@ -1,9 +1,9 @@
 /**
- * AllyCard — the one way Ally appears anywhere in the product.
+ * AICard — the one way AI appears anywhere in the product.
  *
- * The contract (D-05): Ally prepares, the human approves. Nothing
+ * The contract (D-05): AI prepares, the human approves. Nothing
  * borrower-facing sends without a human tap. So this card always shows:
- *   - what Ally prepared,
+ *   - what AI prepared,
  *   - WHY (the rationale + the factors it used — never a black box),
  *   - the full draft one tap away,
  *   - and exactly three verdicts.
@@ -11,18 +11,18 @@
  * Verdict set is defined once (D-19) and used verbatim everywhere:
  * Approve · Edit then send · Skip. No screen invents its own.
  *
- * Violet belongs to Ally alone. Ally never uses red or green — its outputs are
+ * Violet belongs to AI alone. AI never uses red or green — its outputs are
  * proposals, not statuses.
  */
 import type { ReactNode } from "react";
 import { Sparkle } from "lucide-react";
 import { cn } from "@/lib/cn";
 
-export function AllyMark({ className }: { className?: string }) {
+export function AIMark({ className }: { className?: string }) {
   return (
     <span
       className={cn(
-        "inline-grid size-5 shrink-0 place-items-center rounded bg-ally-bg text-ally",
+        "inline-grid size-5 shrink-0 place-items-center rounded bg-ai-bg text-ai",
         className,
       )}
       aria-hidden
@@ -32,11 +32,11 @@ export function AllyMark({ className }: { className?: string }) {
   );
 }
 
-export function AllyAttribution({ className }: { className?: string }) {
+export function AIAttribution({ className }: { className?: string }) {
   return (
-    <span className={cn("inline-flex items-center gap-1.5 text-label font-semibold text-ally", className)}>
-      <AllyMark />
-      Prepared by Ally
+    <span className={cn("inline-flex items-center gap-1.5 text-label font-semibold text-ai", className)}>
+      <AIMark />
+      Prepared by AI
     </span>
   );
 }
@@ -45,7 +45,7 @@ export function AllyAttribution({ className }: { className?: string }) {
  * The card shell. Callers supply the verdict controls so the actions stay
  * server-action-driven and auditable.
  */
-export function AllyCard({
+export function AICard({
   title,
   rationale,
   factors,
@@ -68,13 +68,13 @@ export function AllyCard({
   return (
     <article
       className={cn(
-        "rounded-card border border-ally-border bg-ally-bg/40 p-3.5",
+        "rounded-card border border-ai-border bg-ai-bg/40 p-3.5",
         className,
       )}
     >
       <header className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-2">
-          <AllyMark className="mt-0.5" />
+          <AIMark className="mt-0.5" />
           <div className="min-w-0">
             <h3 className="text-body font-semibold text-primary">{title}</h3>
             <p className="mt-0.5 text-small text-secondary">{rationale}</p>
@@ -85,10 +85,10 @@ export function AllyCard({
 
       {factors?.length ? (
         <details className="group mt-2.5">
-          <summary className="cursor-pointer list-none text-label font-semibold text-ally hover:underline">
+          <summary className="cursor-pointer list-none text-label font-semibold text-ai hover:underline">
             Why is this here?
           </summary>
-          <ul className="mt-1.5 space-y-1 border-l-2 border-ally-border pl-2.5">
+          <ul className="mt-1.5 space-y-1 border-l-2 border-ai-border pl-2.5">
             {factors.map((f) => (
               <li key={f} className="text-small text-secondary">
                 {f}
@@ -109,7 +109,7 @@ export function AllyCard({
  * The draft body, shown verbatim. A user must be able to read exactly what
  * would go out before they approve it.
  */
-export function AllyDraft({ body, language }: { body: string; language?: string }) {
+export function AIDraft({ body, language }: { body: string; language?: string }) {
   return (
     <div className="rounded-md border border-subtle bg-surface">
       {language && language !== "en" ? (

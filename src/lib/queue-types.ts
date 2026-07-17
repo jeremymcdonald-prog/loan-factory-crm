@@ -10,7 +10,7 @@ export type PriorityClass =
   | "deadline"
   | "new_lead"
   | "inbound"
-  | "ally_approval"
+  | "ai_approval"
   | "overdue_task"
   | "appointment"
   | "waiting_borrower"
@@ -23,7 +23,7 @@ export const CLASS_RANK: Record<PriorityClass, number> = {
   deadline: 1,
   new_lead: 2,
   inbound: 3,
-  ally_approval: 4,
+  ai_approval: 4,
   overdue_task: 5,
   appointment: 6,
   waiting_borrower: 7,
@@ -37,7 +37,7 @@ export const CLASS_LABELS: Record<PriorityClass, string> = {
   deadline: "Deadline",
   new_lead: "New lead",
   inbound: "Waiting on you",
-  ally_approval: "Ally prepared this",
+  ai_approval: "AI prepared this",
   overdue_task: "Overdue",
   appointment: "Today",
   waiting_borrower: "Waiting on them",
@@ -46,7 +46,7 @@ export const CLASS_LABELS: Record<PriorityClass, string> = {
   relationship: "Relationship",
 };
 
-export type QueueUrgency = "critical" | "warning" | "info" | "neutral" | "ally";
+export type QueueUrgency = "critical" | "warning" | "info" | "neutral" | "ai";
 
 export type QueueItem = {
   id: string;
@@ -64,7 +64,7 @@ export type QueueItem = {
   /** Sort key within a class — hours until (or since) the deadline. */
   hours: number;
   amount: number;
-  /** Populated for Ally approval items. */
+  /** Populated for AI approval items. */
   insight?: {
     id: string;
     body: string | null;

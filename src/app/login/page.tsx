@@ -23,13 +23,13 @@ export default async function LoginPage({
           </p>
           <p className="mt-3 text-body leading-6 text-sidebar-fg-muted">
             Loan Factory CRM opens on what needs you now — the locks about to expire, the
-            leads still waiting, the follow-ups Ally has drafted for your approval.
+            leads still waiting, the follow-ups AI has drafted for your approval.
           </p>
 
           <dl className="mt-8 grid grid-cols-3 gap-4 border-t border-sidebar-border pt-6">
             {[
               { k: "Prioritised", v: "One queue" },
-              { k: "Prepared", v: "Ally drafts" },
+              { k: "Prepared", v: "AI drafts" },
               { k: "Approved", v: "By you" },
             ].map((item) => (
               <div key={item.k}>

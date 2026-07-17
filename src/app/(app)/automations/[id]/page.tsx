@@ -52,7 +52,7 @@ export default async function AutomationPage({ params }: { params: Promise<{ id:
             <AutomationStateBadge state={record.status} />
             <TierBadge tier={record.tier} />
             {record.waitingCount > 0 ? (
-              <Badge tone="ally">{record.waitingCount} waiting for you</Badge>
+              <Badge tone="ai">{record.waitingCount} waiting for you</Badge>
             ) : null}
           </div>
         }
@@ -73,14 +73,14 @@ export default async function AutomationPage({ params }: { params: Promise<{ id:
         }
       />
 
-      {/* The one rung where Ally is not involved at all. Say so before anything else. */}
+      {/* The one rung where AI is not involved at all. Say so before anything else. */}
       {record.tier === "t0" ? (
         <div className="px-4 pt-4 sm:px-6">
           <div className="flex items-start gap-2.5 rounded-md border border-critical/25 bg-critical-bg px-3 py-2.5">
             <ShieldAlert className="mt-0.5 size-4 shrink-0 text-critical" aria-hidden />
             <div>
               <p className="text-body font-semibold text-critical">
-                Ally drafts nothing for this one.
+                AI drafts nothing for this one.
               </p>
               <p className="mt-0.5 max-w-2xl text-small text-critical">
                 It never writes a message and it never sends one. It creates the task and tells
@@ -124,7 +124,7 @@ export default async function AutomationPage({ params }: { params: Promise<{ id:
                       className={cn(
                         "border-l-2 pl-3",
                         run.status === "queued_for_approval"
-                          ? "border-ally-border"
+                          ? "border-ai-border"
                           : run.status === "failed"
                             ? "border-critical/25"
                             : "border-subtle",

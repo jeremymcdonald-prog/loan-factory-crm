@@ -7,10 +7,9 @@ import { user as userTable } from "@/db/schema";
 import { buildQueue, todayStats, recentActivity } from "@/lib/queries/today";
 import { buildBriefing } from "./briefing";
 import { QueueItemRow } from "./queue-item";
+import { AssistantPanel } from "./assistant-panel";
 import { moneyCompact, relativeTime } from "@/lib/format";
-import { AllyMark } from "@/components/ally/ally-card";
 import { Card } from "@/components/ui/card";
-import { cn } from "@/lib/cn";
 
 export const metadata: Metadata = { title: "Today" };
 export const dynamic = "force-dynamic";
@@ -44,7 +43,7 @@ export default async function TodayPage() {
 
   const briefing = buildBriefing(firstName, items, stats, now);
   const visible = items.slice(0, 20);
-  const approvals = items.filter((i) => i.cls === "ally_approval").length;
+  const approvals = items.filter((i) => i.cls === "ai_approval").length;
 
   const statTiles = [
     { label: "Active files", value: String(stats.activeCount) },
@@ -55,71 +54,9 @@ export default async function TodayPage() {
 
   return (
     <div className="mx-auto max-w-5xl p-4 sm:p-6">
-      {/* The briefing: an executive summary, in the Loan Factory voice.
-          Greeting + one-line read, concise bullets, then the top three as
-          real, tappable actions. */}
-      <section className="rounded-card border border-ally-border bg-ally-bg/40 p-5">
-        <div className="flex items-center gap-2.5">
-          <AllyMark />
-          <h1 className="text-h1 font-semibold tracking-tight text-primary">
-            {briefing.greeting}
-          </h1>
-          <span className="ml-auto hidden text-label font-semibold text-ally sm:block">
-            Prepared by Ally
-          </span>
-        </div>
-
-        {briefing.lead ? (
-          <p className="mt-1.5 text-body text-secondary">{briefing.lead}</p>
-        ) : null}
-
-        {briefing.bullets.length > 0 ? (
-          <ul className="mt-3 grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
-            {briefing.bullets.map((b) => (
-              <li key={b} className="flex items-start gap-2 text-body text-secondary">
-                <span
-                  aria-hidden
-                  className="mt-[7px] size-1.5 shrink-0 rounded-full bg-ally/60"
-                />
-                <span>{b}</span>
-              </li>
-            ))}
-          </ul>
-        ) : null}
-
-        {briefing.topActions.length > 0 ? (
-          <div className="mt-4 border-t border-ally-border/70 pt-3.5">
-            <p className="text-label font-semibold uppercase tracking-wide text-ally">
-              If you only do three things today
-            </p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {briefing.topActions.map((a, i) => (
-                <Link
-                  key={a.href + i}
-                  href={a.href}
-                  className={cn(
-                    "inline-flex items-center gap-2 rounded-control px-3 py-2 text-small font-semibold transition-colors",
-                    i === 0
-                      ? "bg-action text-action-fg shadow-e1 hover:bg-action-hover"
-                      : "border border-strong bg-surface text-primary hover:border-brand hover:bg-action-tint",
-                  )}
-                >
-                  <span
-                    aria-hidden
-                    className={cn(
-                      "grid size-4 shrink-0 place-items-center rounded-full text-[10px] font-bold tnum",
-                      i === 0 ? "bg-white/25 text-white" : "bg-brand text-white",
-                    )}
-                  >
-                    {i + 1}
-                  </span>
-                  {a.label}
-                </Link>
-              ))}
-            </div>
-          </div>
-        ) : null}
-      </section>
+      {/* The AI assistant: the briefing is its opening message, and from
+          there the user can ask questions against their own records. */}
+      <AssistantPanel briefing={briefing} />
 
       {/* Four glanceable numbers. */}
       <div className="mt-4 grid grid-cols-2 gap-px overflow-hidden rounded-card border border-subtle bg-subtle sm:grid-cols-4">
@@ -146,7 +83,7 @@ export default async function TodayPage() {
             ) : null}
           </h2>
           {approvals > 0 ? (
-            <span className="inline-flex shrink-0 items-center gap-1.5 rounded border border-ally-border bg-ally-bg px-1.5 py-0.5 text-label font-semibold text-ally">
+            <span className="inline-flex shrink-0 items-center gap-1.5 rounded border border-ai-border bg-ai-bg px-1.5 py-0.5 text-label font-semibold text-ai">
               {approvals} waiting for your approval
             </span>
           ) : null}

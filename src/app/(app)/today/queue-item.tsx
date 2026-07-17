@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import type { QueueItem, PriorityClass } from "@/lib/queue-types";
 import { decideInsight, completeTask, type ApprovalState } from "./actions";
-import { AllyCard, AllyDraft, ComplianceFooterPreview } from "@/components/ally/ally-card";
+import { AICard, AIDraft, ComplianceFooterPreview } from "@/components/ai/ai-card";
 import { Button } from "@/components/ui/button";
 import { UrgencyDot } from "@/components/ui/badge";
 import { CLASS_LABELS } from "@/lib/queue-types";
@@ -25,7 +25,7 @@ const CLASS_ICONS: Record<PriorityClass, typeof AlarmClock> = {
   deadline: AlarmClock,
   new_lead: UserPlus,
   inbound: MessageSquare,
-  ally_approval: ListChecks,
+  ai_approval: ListChecks,
   overdue_task: ListChecks,
   appointment: CalendarClock,
   waiting_borrower: Hourglass,
@@ -45,11 +45,11 @@ const REASONS = [
 ];
 
 export function QueueItemRow({ item, loNmls }: { item: QueueItem; loNmls: string | null }) {
-  if (item.insight) return <AllyQueueItem item={item} loNmls={loNmls} />;
+  if (item.insight) return <AIQueueItem item={item} loNmls={loNmls} />;
   return <PlainQueueItem item={item} />;
 }
 
-/** Everything that isn't an Ally card: open the right surface, pre-loaded. */
+/** Everything that isn't an AI card: open the right surface, pre-loaded. */
 function PlainQueueItem({ item }: { item: QueueItem }) {
   const Icon = CLASS_ICONS[item.cls];
   const isTask = item.cls === "overdue_task";
@@ -113,8 +113,8 @@ function PlainQueueItem({ item }: { item: QueueItem }) {
   );
 }
 
-/** An Ally card: what it prepared, why, and the three verdicts. */
-function AllyQueueItem({ item, loNmls }: { item: QueueItem; loNmls: string | null }) {
+/** An AI card: what it prepared, why, and the three verdicts. */
+function AIQueueItem({ item, loNmls }: { item: QueueItem; loNmls: string | null }) {
   const [state, formAction, pending] = useActionState<ApprovalState, FormData>(
     decideInsight,
     {},
@@ -134,7 +134,7 @@ function AllyQueueItem({ item, loNmls }: { item: QueueItem; loNmls: string | nul
 
   return (
     <li className="border-b border-subtle p-3 last:border-0">
-      <AllyCard
+      <AICard
         title={item.headline}
         rationale={insight.rationale}
         factors={insight.factors}
@@ -235,9 +235,9 @@ function AllyQueueItem({ item, loNmls }: { item: QueueItem; loNmls: string | nul
         }
       >
         {insight.body && !editing ? (
-          <AllyDraft body={insight.body} language={insight.language} />
+          <AIDraft body={insight.body} language={insight.language} />
         ) : null}
-      </AllyCard>
+      </AICard>
     </li>
   );
 }

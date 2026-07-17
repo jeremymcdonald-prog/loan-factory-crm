@@ -1,6 +1,6 @@
 # Data_Model
 
-Purpose: this document is the full entity catalog for the Loan Factory CRM's Postgres database — every table the implementation team needs for Phases 1–2, with fields, relationships, the locked 20-stage opportunity-stage enum, the row-level-security and tenancy rules that make borrower contact data safe by construction, a PII classification for every field, retention notes, and the indexing/scale decisions that keep it fast. It is the database-shaped twin of [[Technical_Architecture]] (which explains where this database sits) and it must be able to populate the 17 merge fields the 135-template communication library requires (see [[Communication_Templates]]) and record every AI action per the Ally contract ([[AI_Product_Architecture]], [[Decisions]] D-05, D-11).
+Purpose: this document is the full entity catalog for the Loan Factory CRM's Postgres database — every table the implementation team needs for Phases 1–2, with fields, relationships, the locked 20-stage opportunity-stage enum, the row-level-security and tenancy rules that make borrower contact data safe by construction, a PII classification for every field, retention notes, and the indexing/scale decisions that keep it fast. It is the database-shaped twin of [[Technical_Architecture]] (which explains where this database sits) and it must be able to populate the 17 merge fields the 135-template communication library requires (see [[Communication_Templates]]) and record every AI action per the AI contract ([[AI_Product_Architecture]], [[Decisions]] D-05, D-11).
 
 Conventions used throughout: every table has `id uuid primary key`, `tenant_id uuid not null references tenant`, `created_at timestamptz`, `updated_at timestamptz`; user-deletable records also carry `deleted_at` (soft delete — nothing user-facing is hard-deleted). These standard columns are not repeated in the field tables below. **PII column legend:** `—` = not personal data · **PII** = personal identifiers/contact data · **NPI** = nonpublic personal financial information (GLBA-sensitive) · **Restricted** = never stored, in any phase (listed only to show what is deliberately excluded).
 
@@ -27,11 +27,11 @@ Conventions used throughout: every table has `id uuid primary key`, `tenant_id u
 | 15 | `automation` / `automation_run` | Plain-language trigger→action rules + run history | 2 |
 | 16 | `partner` / `partner_relationship` | Referral partners and their links to people/loans | 2 |
 | 17 | `event` | Domain event stream driving automations | 1 |
-| 18 | `ai_insight` | Everything Ally proposes (briefings, next actions, drafts) | 1 |
+| 18 | `ai_insight` | Everything AI proposes (briefings, next actions, drafts) | 1 |
 | 19 | `ai_action_log` | Immutable log of every model call and approval | 1 |
 | 20 | `score_snapshot` | Point-in-time scores with documented factors | 1 |
 | 21 | `audit_log` | Append-only record of every mutation | 1 |
-| 22 | `embedding` | pgvector memory for Ally retrieval | 1 |
+| 22 | `embedding` | pgvector memory for AI retrieval | 1 |
 | 23 | `milestone` | Read-only third-party progress visibility per opportunity: appraisal, title, insurance | 2 |
 | 24 | `appointment` | Scheduled consultations/calls/closings feeding the Today calendar strip | 1 |
 | 25 | `notification` | In-app notification feed (Screen 18) | 1 |
@@ -72,8 +72,8 @@ erDiagram
     partner ||--o{ task : about
     person ||--o{ note : about
     loan ||--o{ note : about
-    loan ||--o{ ai_insight : "analyzed by Ally"
-    person ||--o{ ai_insight : "analyzed by Ally"
+    loan ||--o{ ai_insight : "analyzed by AI"
+    person ||--o{ ai_insight : "analyzed by AI"
     ai_insight ||--o{ ai_action_log : "produced via"
     lead ||--o{ score_snapshot : scored
     loan ||--o{ score_snapshot : scored
@@ -132,7 +132,7 @@ The human. One row per human, regardless of how many leads or loans they generat
 | `phones` | jsonb array | PII | Each with label, sms-capable flag |
 | `mailing_address` | jsonb | PII | Street/city/state/zip |
 | `date_of_birth` | date | PII | Birthday automations; store full date only if provided |
-| `preferred_language` | enum: en, vi, zh, es, ru | PII | **First-class per D-08** — drives template variant selection, Ally draft language |
+| `preferred_language` | enum: en, vi, zh, es, ru | PII | **First-class per D-08** — drives template variant selection, AI draft language |
 | `type` | enum: lead, borrower, past_client, other | — | Denormalized convenience; truth derives from lead/loan state |
 | `owner_user_id` | uuid → user | — | The LO who owns the relationship (RLS visibility anchor) |
 | `source` | jsonb | — | First-touch attribution (see `lead.source` structure) |
@@ -257,18 +257,18 @@ Append-only; never updated or deleted. This is the milestone record CANON requir
 | `priority` | enum: urgent, high, normal, low | — | Today-screen stack respects this plus scoring |
 | `status` | enum: open, snoozed, done, cancelled | — | Snooze requires `snoozed_until` + `snooze_reason` (the "snooze with reason" pattern from [[Information_Architecture]]) |
 | `person_id`, `loan_id`, `partner_id` | uuid, nullable | — | At most one subject set; enforced by check constraint |
-| `origin` | enum: user, ally, automation | — | Who created it — attribution per the Ally contract |
+| `origin` | enum: user, ai, automation | — | Who created it — attribution per the AI contract |
 | `origin_ref` | uuid | — | ai_insight or automation_run that spawned it |
 
 ### 3.9 `note`
 
 | Field | Type | PII | Notes |
 |---|---|---|---|
-| `body` | text (markdown) | PII possible | Relationship memory; embedded for Ally retrieval |
+| `body` | text (markdown) | PII possible | Relationship memory; embedded for AI retrieval |
 | `author_user_id` | uuid → user | — | |
 | `person_id`, `loan_id`, `partner_id` | uuid, nullable | — | One subject |
 | `pinned` | boolean | — | |
-| `is_ai_generated` | boolean | — | e.g. Ally call summary (Phase 3 voice) — always labeled, never silently mixed with human notes |
+| `is_ai_generated` | boolean | — | e.g. AI call summary (Phase 3 voice) — always labeled, never silently mixed with human notes |
 
 ### 3.10 `conversation` and `message`
 
@@ -289,7 +289,7 @@ Append-only; never updated or deleted. This is the milestone record CANON requir
 | `language` | enum | — | Language actually sent — must match `person.preferred_language` unless the user overrides |
 | `template_id`, `template_variant_id` | uuid, nullable | — | Which EMT template produced it |
 | `merge_data` | jsonb | PII | Snapshot of resolved merge fields at send time (auditability: what the borrower actually saw) |
-| `status` | enum: draft, pending_approval, approved, queued, sent, delivered, opened, clicked, bounced, failed, cancelled | — | The approval states are the Ally contract in schema form |
+| `status` | enum: draft, pending_approval, approved, queued, sent, delivered, opened, clicked, bounced, failed, cancelled | — | The approval states are the AI contract in schema form |
 | `is_ai_drafted` | boolean | — | |
 | `approved_by_user_id`, `approved_at` | uuid / timestamptz | — | **Required non-null before any AI-drafted or automation-queued outbound message may reach `queued`** — enforced by trigger, not convention |
 | `consent_check` | jsonb | — | Consent status recorded at send time (proof, not just a gate) |
@@ -334,7 +334,7 @@ Append-only: status changes insert a new row; current status = latest row per (p
 | `template_id` | uuid → template | — | |
 | `language` | enum: vi, zh, es, ru | — | Per-template language variants (D-08). Seeded from the library's per-stage localization modules — honestly thinner than per-template translations |
 | `subject`, `body` | text | — | |
-| `review_status` | enum: machine_draft, human_reviewed, approved | — | **Non-approved variants cannot be auto-selected**; Ally flags "human translation review required" per the library's own rule |
+| `review_status` | enum: machine_draft, human_reviewed, approved | — | **Non-approved variants cannot be auto-selected**; AI flags "human translation review required" per the library's own rule |
 
 ### 3.13 `segment`
 
@@ -418,7 +418,7 @@ Privacy rule in schema: partner-facing surfaces read **only** partner tables, `l
 
 ### 3.18 `ai_insight`
 
-Everything Ally proposes, in one shape, all routed through approval.
+Everything AI proposes, in one shape, all routed through approval.
 
 | Field | Type | PII | Notes |
 |---|---|---|---|
@@ -428,7 +428,7 @@ Everything Ally proposes, in one shape, all routed through approval.
 | `title`, `body` | text | PII possible | Plain-language card content |
 | `explanation` | text | — | **Required.** The plain-language "why" ("#1 because it arrived 40 minutes ago from your Facebook ad and hasn't been called") — the explainability requirement from D-11 and the persona pack's SOURCE-UNCLEAR risk tag |
 | `proposed_action` | jsonb | — | e.g. draft message id, task spec — the one-tap payload |
-| `status` | enum: proposed, approved, edited_then_approved, dismissed, expired | — | The three approval outcomes feed Ally quality metrics ([[Technical_Architecture]] §8) |
+| `status` | enum: proposed, approved, edited_then_approved, dismissed, expired | — | The three approval outcomes feed AI quality metrics ([[Technical_Architecture]] §8) |
 | `resolved_by`, `resolved_at` | uuid / timestamptz | — | |
 | `expires_at` | timestamptz | — | Stale insights self-expire; nothing nags forever |
 
@@ -464,7 +464,7 @@ Point-in-time scores with documented factors — the fair-lending evidence trail
 
 | Field | Type | PII | Notes |
 |---|---|---|---|
-| `actor_type` | enum: user, ally, automation, system | — | |
+| `actor_type` | enum: user, ai, automation, system | — | |
 | `actor_id` | uuid, nullable | — | |
 | `verb` | text | — | created, updated, stage_changed, sent, approved, merged, exported, deleted… |
 | `entity_type`, `entity_id` | text / uuid | — | |
@@ -560,8 +560,8 @@ User-saved filter/sort views over list surfaces (PT-03).
 |---|---|---|
 | — (business data) | Stages, statuses, templates, automations, scores, logs' structural fields | Standard controls |
 | **PII** | Names, emails, phones, addresses, DOB, language preference, free-text bodies (notes, messages, tasks) | Encrypted at rest (platform-level); access via RLS only; included in export/delete workflows; masked in non-production environments (staging uses fake data only, per [[QA_Plan]]) |
-| **NPI** (GLBA) | Loan amount, preapproval amount, rate-lock data, stated FICO range, any financial detail inside message bodies | Everything PII gets, plus: excluded from partner-facing views by construction; bulk-export access audited; reaches the model gateway **only via an explicit field-level allowlist** — the NPI merge fields Ally drafting legitimately needs (loan amount, loan program, preapproval amount and expiry, key milestone dates) may enter prompts under the no-training DPA, enforced and logged per call at the gateway ([[AI_Product_Architecture]] §10, "Data protection"); everything else — stated FICO range above all — is redacted and never prompted. The allowlist is versioned in the prompt registry so the control is auditable, rather than a blanket exclusion that drafting features would force engineers to silently break |
-| **Restricted** (never stored) | SSN, credit reports/scores, income, assets, bank statements, government IDs, document images | Deliberately and permanently absent from the schema: this is loan-origination data, and it lives in the LOS/POS and document systems that own that work — outside the CRM boundary in every phase. Ally's public-tool safety rule (never place Restricted-class data in prompts; NPI only per the allowlist above) is enforced at the model gateway |
+| **NPI** (GLBA) | Loan amount, preapproval amount, rate-lock data, stated FICO range, any financial detail inside message bodies | Everything PII gets, plus: excluded from partner-facing views by construction; bulk-export access audited; reaches the model gateway **only via an explicit field-level allowlist** — the NPI merge fields AI drafting legitimately needs (loan amount, loan program, preapproval amount and expiry, key milestone dates) may enter prompts under the no-training DPA, enforced and logged per call at the gateway ([[AI_Product_Architecture]] §10, "Data protection"); everything else — stated FICO range above all — is redacted and never prompted. The allowlist is versioned in the prompt registry so the control is auditable, rather than a blanket exclusion that drafting features would force engineers to silently break |
+| **Restricted** (never stored) | SSN, credit reports/scores, income, assets, bank statements, government IDs, document images | Deliberately and permanently absent from the schema: this is loan-origination data, and it lives in the LOS/POS and document systems that own that work — outside the CRM boundary in every phase. AI's public-tool safety rule (never place Restricted-class data in prompts; NPI only per the allowlist above) is enforced at the model gateway |
 
 Free-text fields are the honest weak point of any classification: notes and messages can contain anything. Mitigations: they are the most tightly RLS-scoped tables, they are access-logged, and the model gateway redacts recognized identifier patterns before text leaves the database boundary.
 
@@ -575,7 +575,7 @@ Free-text fields are the honest weak point of any classification: notes and mess
 | Consent ledger | Life of consent + 5 years after revocation ([[Mortgage_Compliance]] §10); opt-outs survive person deletion via hashed suppression entry | An opt-out must outlive the record it protects |
 | `audit_log`, `ai_action_log`, `score_snapshot` | 7 years | AI accountability + fair-lending review horizon |
 | Cold leads (loan died in ENGAGE/QUALIFY, inactive) | Purge-eligible after 24 months, and only after the reviewed purge job verifies: no consent/opt-out evidence that must survive, no advertising-record linkage still under §10 retention, no linkage to a loan that progressed past QUALIFY | Data minimization with compliance carve-outs; runs as a reviewed job, not automatic silence |
-| Ally insights (dismissed/expired) | 12 months | Enough for quality analysis; no reason to hoard |
+| AI insights (dismissed/expired) | 12 months | Enough for quality analysis; no reason to hoard |
 | Embeddings | Cascade-delete with their source row, always | Purged text must not survive in vector form |
 | Soft-deleted rows | Hard-purge 90 days after `deleted_at`, **subordinate to retention class and legal hold**: a row still inside its §10 retention window (e.g. a message tied to a loan file) or under legal hold is hidden from the UI at soft-delete but is not physically purged until its retention clock and any hold expire | Undo window, then genuine deletion — but user deletion can never destroy records the tenant is legally required to keep |
 

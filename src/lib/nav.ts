@@ -13,6 +13,7 @@ import {
   Workflow,
   ChartNoAxesCombined,
   UsersRound,
+  MonitorPlay,
   Settings2,
 } from "lucide-react";
 
@@ -34,6 +35,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/automations", label: "Automations", icon: Workflow },
   { href: "/intelligence", label: "Intelligence", icon: ChartNoAxesCombined },
   { href: "/team", label: "Team", icon: UsersRound },
+  { href: "/videos", label: "How To Videos", icon: MonitorPlay },
   { href: "/settings", label: "Settings", icon: Settings2 },
 ];
 

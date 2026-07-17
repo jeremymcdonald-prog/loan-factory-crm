@@ -1,6 +1,6 @@
 # Design_System
 
-Purpose: the complete visual and interaction language for Loan Factory CRM — tokens, components, and rules an implementation team can build from without asking follow-up questions. It turns the locked design direction (D-13: elite command center, high information density done calmly, status color tied to loan urgency) into concrete hex values, pixel sizes, and component contracts, defines the one consistent way Ally appears on every screen, and formally retires the prototype's coral/beige/emoji aesthetic. It is grounded in the Loan Factory brand voice — clear, practical, human, confident without making promises — and consistent with [[Information_Architecture]] (navigation, approval queue, record anatomy), [[PRD]], and the locked decisions in [[Decisions]]. Where this document makes a new decision, it is flagged in §20 for [[Decisions]].
+Purpose: the complete visual and interaction language for Loan Factory CRM — tokens, components, and rules an implementation team can build from without asking follow-up questions. It turns the locked design direction (D-13: elite command center, high information density done calmly, status color tied to loan urgency) into concrete hex values, pixel sizes, and component contracts, defines the one consistent way AI appears on every screen, and formally retires the prototype's coral/beige/emoji aesthetic. It is grounded in the Loan Factory brand voice — clear, practical, human, confident without making promises — and consistent with [[Information_Architecture]] (navigation, approval queue, record anatomy), [[PRD]], and the locked decisions in [[Decisions]]. Where this document makes a new decision, it is flagged in §20 for [[Decisions]].
 
 ---
 
@@ -16,7 +16,7 @@ The offline HTML prototype's look is replaced wholesale (D-01, D-13, evidence in
 | "Good morning, Minh 👋" greeting tone | Home header | Today opens with what matters now, not a greeting card. A date/context line is fine; waving is not |
 | Gradient noise / decorative gradients | Buttons, banners | Only permitted gradient: none. Depth comes from layered neutrals and borders |
 | Whitespace-first, 4-cards-per-screen layouts | Prototype Home | The CRM's density targets (§6) are the opposite: an LO with 25 files sees their day without scrolling |
-| Mascot/tip widgets ("AI Assistant — 4 setup tips" pinned card) | Prototype sidebar | Ally is ambient and operational (§15), never a mascot |
+| Mascot/tip widgets ("AI Assistant — 4 setup tips" pinned card) | Prototype sidebar | AI is ambient and operational (§15), never a mascot |
 | Fake status decoration (e.g. "Encompass ✓ Connected") | Prototype settings | Never render an integration, sync, or send state that isn't real — CANON compliance posture |
 
 ---
@@ -27,9 +27,9 @@ Loan Factory's voice rules (brand pack: "clear, practical, human, direct, helpfu
 
 1. **Calm authority.** The product of a shop that closes loans every day. Graphite surfaces, one accent, restrained motion. Nothing blinks, bounces, or celebrates with confetti.
 2. **Density, composed.** Information-dense like a trading desk, organized like a well-run pipeline meeting. Density comes from tight type and spacing scales — never from shrinking touch targets or removing hierarchy.
-3. **Color is meaning.** On working surfaces, hue is reserved for two jobs: loan urgency (§4.4) and Ally identity (§4.3). Everything else is neutral. If a screen is colorful, something is wrong with the pipeline — and that is the point.
+3. **Color is meaning.** On working surfaces, hue is reserved for two jobs: loan urgency (§4.4) and AI identity (§4.3). Everything else is neutral. If a screen is colorful, something is wrong with the pipeline — and that is the point.
 4. **Numbers are first-class citizens.** Loan amounts, rates, days-to-close, and counts always render in tabular numerals, right-aligned, consistently formatted (§5.4). A misaligned column of dollar figures is a bug.
-5. **Confident, never promising.** The UI never over-claims, same as the copy rules: progress bars show verified milestones, not optimism; Ally states confidence in words with reasons, never fake precision (§15.3). "Clear to close" is never rendered as "done" (compliance guide: CTC ≠ funded).
+5. **Confident, never promising.** The UI never over-claims, same as the copy rules: progress bars show verified milestones, not optimism; AI states confidence in words with reasons, never fake precision (§15.3). "Clear to close" is never rendered as "done" (compliance guide: CTC ≠ funded).
 
 Voice in microcopy: plain mortgage language, second person, verbs first ("Advance stage", "Log a touch", "Approve & send"). No developer terms (no "sync entity", "null", "payload"). No hype ("supercharge"), no fear urgency, no exclamation points in system copy. EN and VI strings are peers, not translations bolted on (D-08) — layouts must tolerate Vietnamese diacritics and ~20–30% string expansion without truncating (§18.6).
 
@@ -79,17 +79,17 @@ Two full themes. **Dark is the flagship** ("command center"); light is a first-c
 | `text/muted` | `#66707F` | ≈5.3:1 — the floor |
 | `text/disabled` | `#9AA3B0` | Disabled only |
 
-### 4.3 Brand action color + Ally identity
+### 4.3 Brand action color + AI identity
 
 | Token | Light | Dark | Use |
 |---|---|---|---|
 | `action/primary` | `#1D4ED8` (white label, ≈6.3:1) | `#4D8DFF` (label `#0A1428`, ≈7:1) | The one primary button per screen, links, active nav item, selected states |
 | `action/primary-hover` | `#1E40AF` | `#6AA1FF` | Hover/pressed |
-| `ally/fg` | `#6D28D9` (≈6:1 on white) | `#A78BFA` (≈6:1 on surface) | Ally glyph, Ally card accents, "Prepared by Ally" attribution |
-| `ally/bg` | `#F3EEFD` | `#221A33` | Ally card fill tint, Ally chips |
-| `ally/border` | `#D6C9F5` | `#3D3159` | Ally card border |
+| `ai/fg` | `#6D28D9` (≈6:1 on white) | `#A78BFA` (≈6:1 on surface) | AI glyph, AI card accents, "Prepared by AI" attribution |
+| `ai/bg` | `#F3EEFD` | `#221A33` | AI card fill tint, AI chips |
+| `ai/border` | `#D6C9F5` | `#3D3159` | AI card border |
 
-Rules: **violet belongs to Ally alone.** No other component may use it. Blue = "you act here"; violet = "AI prepared this, it is waiting for you." Ally never uses red/green — its outputs are proposals, not statuses.
+Rules: **violet belongs to AI alone.** No other component may use it. Blue = "you act here"; violet = "AI prepared this, it is waiting for you." AI never uses red/green — its outputs are proposals, not statuses.
 
 ### 4.4 Status colors — tied to loan urgency, not decoration
 
@@ -189,7 +189,7 @@ Three weights only: 400 (read), 500 (micro/labels needing slight lift), 600 (str
 | Design/QA reference viewport | 1440 × 900 |
 | Sidebar | 240px expanded / 64px collapsed (icons + tooltips) |
 | Top bar | 56px |
-| Right Ally/facts rails on records | 320px |
+| Right AI/facts rails on records | 320px |
 | Minimum supported desktop width | 1280px (below → tablet layout) |
 
 ### 6.3 Density targets (acceptance criteria, not aspirations)
@@ -212,7 +212,7 @@ Calm comes from alignment and rhythm, not emptiness: consistent 4px baseline, ri
 | Token | Value | Use |
 |---|---|---|
 | `radius/sm` | 6px | Buttons, inputs, chips |
-| `radius/md` | 8px | Cards, Ally cards, table container |
+| `radius/md` | 8px | Cards, AI cards, table container |
 | `radius/lg` | 12px | Modals, popovers |
 | `radius/full` | 999px | Pills, avatars, count badges |
 | `shadow/1` (light theme) | `0 1px 2px rgba(23,28,36,.06), 0 1px 3px rgba(23,28,36,.10)` | Raised surfaces |
@@ -234,8 +234,8 @@ Implements the locked 10-item nav ([[Information_Architecture]] §2).
 
 **Top bar** (56px, `bg/surface`, `border/subtle` bottom):
 - Left: breadcrumb (section / record).
-- Center: global search field — ⌘K target, 320px, placeholder "Search or ask anything…" (the natural-language entry to Ally per IA §3.1).
-- Right, in order: **＋ Quick create** (menu: Lead · Task · Note · Message), **Approvals** icon with count (violet dot when Ally items wait), **Notifications** (three-lane panel), user/workspace menu. Team leaders see the "Viewing as" workspace switch here as a persistent amber-outlined chip — impersonation is never invisible.
+- Center: global search field — ⌘K target, 320px, placeholder "Search or ask anything…" (the natural-language entry to AI per IA §3.1).
+- Right, in order: **＋ Quick create** (menu: Lead · Task · Note · Message), **Approvals** icon with count (violet dot when AI items wait), **Notifications** (three-lane panel), user/workspace menu. Team leaders see the "Viewing as" workspace switch here as a persistent amber-outlined chip — impersonation is never invisible.
 
 ---
 
@@ -253,7 +253,7 @@ Implements the locked 10-item nav ([[Information_Architecture]] §2).
 | **Secondary** | transparent, `border/strong` 1px | `text/primary` | Peer actions ("Edit then send", "Export") |
 | **Ghost** | transparent, no border | `text/secondary` | Tertiary, table row actions, "Not now" |
 | **Destructive** | transparent, `border/strong`; fill `status/critical` fg only inside a confirm dialog | `status/critical` fg | Delete/suppress. Never a red button sitting idle on a page |
-| **Ally-inline** | `ally/bg` fill, `ally/border` | `ally/fg` | Only inside Ally cards ("Show why", "Regenerate") — never for user-initiated actions |
+| **AI-inline** | `ai/bg` fill, `ai/border` | `ai/fg` | Only inside AI cards ("Show why", "Regenerate") — never for user-initiated actions |
 
 Sizes: `md` 32px height / 12px padding-x (default everywhere), `lg` 36px (page-level primary only), `sm` 28px (dense table rows). Radius `radius/sm`. Icon+label gap 6px. Disabled = 45% opacity + `not-allowed` cursor + reason on tooltip (a disabled button must always explain itself — QA critical-fail: scary/vague blocks). Loading = spinner replaces icon, label stays, width locked (no layout jump). Focus: 2px ring `action/primary` at 2px offset (§18.2).
 
@@ -266,7 +266,7 @@ One primary button per viewport. If a screen seems to need two, the screen is wr
 - Anatomy: `bg/surface`, `border/subtle` 1px, `radius/md`, `space/4` padding (16px; `space/3` for dense stat tiles). Title `type/h3` with optional right-aligned meta; body; optional footer separated by `border/subtle`.
 - **Stat tile** (Today, Intelligence): label `type/label` `text/muted` → value `type/metric-lg` tabular → delta line `type/small` with `status/*` fg + arrow icon. No sparkline in v1 tiles.
 - **Loan card** (board): §12.1.
-- **Ally card**: §15 — visually distinct from all other cards by `ally/border` + violet glyph, and the *only* tinted card in the system.
+- **AI card**: §15 — visually distinct from all other cards by `ai/border` + violet glyph, and the *only* tinted card in the system.
 - Cards never nest more than one level. Cards are not buttons; if the whole card is clickable, the title is the link and the hover state is `bg/raised`.
 
 ---
@@ -293,13 +293,13 @@ One dataset, two projections, toggle top-right (persisted per user). Both obey t
 
 - **5 columns = macro-phases** (ENGAGE · QUALIFY · TRANSACT · RETAIN · GROW), never 20 columns. Column header: phase name `type/label`, loan count + total volume `type/metric-md` tabular (e.g. "TRANSACT · 14 · $6.2M"). No phase hue (§4.4) — urgency is the only color on the board.
 - Within a column, cards group under slim stage sub-headers (e.g. "Conditional Approval · 3") in stage order; sub-groups collapse. Default sort inside a stage: urgency desc, then days-in-stage desc.
-- **Loan card** (fixed anatomy, ~84px, `space/3` padding): line 1 — borrower name `body-strong` + amount `body` tabular right; line 2 — program + purpose `small` `text/muted` (e.g. "Conv 30-yr · Purchase"); line 3 — stage chip + urgency chip ("Lock 41h" / "Stalled 6d") + owner avatar 20px right; a violet Ally dot on the top-right when a prepared action awaits approval, opening the Ally panel on click. Left urgency rail 3px, same rule as tables.
+- **Loan card** (fixed anatomy, ~84px, `space/3` padding): line 1 — borrower name `body-strong` + amount `body` tabular right; line 2 — program + purpose `small` `text/muted` (e.g. "Conv 30-yr · Purchase"); line 3 — stage chip + urgency chip ("Lock 41h" / "Stalled 6d") + owner avatar 20px right; a violet AI dot on the top-right when a prepared action awaits approval, opening the AI panel on click. Left urgency rail 3px, same rule as tables.
 - Drag between stages is allowed **within** a phase; dragging across a phase boundary or into a gated stage (e.g. into Funded) opens the Advance-stage dialog listing unfinished checklist items (CRM tasks and follow-ups, not loan conditions) instead of silently moving — stage moves are CRM events with audit trail, not cosmetic repositioning.
 - Board is virtualized; 200+ loans must scroll at 60fps.
 
 ### 12.2 Table view
 
-Default columns: Borrower · Loan (program/purpose) · Amount · **Stage** (chip with days-in-stage) · **Urgency** (chip) · Next action (from Ally/task engine, plain language) · Owner · Last activity. Column picker + saved views ("My locks expiring", "Team TRANSACT"). Group-by-stage renders sticky group headers with count + volume subtotals. Everything else per §11.
+Default columns: Borrower · Loan (program/purpose) · Amount · **Stage** (chip with days-in-stage) · **Urgency** (chip) · Next action (from AI/task engine, plain language) · Owner · Last activity. Column picker + saved views ("My locks expiring", "Team TRANSACT"). Group-by-stage renders sticky group headers with count + volume subtotals. Everything else per §11.
 
 ### 12.3 Stage stepper (record header)
 
@@ -344,22 +344,22 @@ These are specified because the QA scorecard makes them critical-fail conditions
 
 ---
 
-## 15. Ally UI language — one card, everywhere
+## 15. AI UI language — one card, everywhere
 
-Ally is ambient (D-04) but visually singular: **every AI recommendation, draft, or prepared action in the product renders as the same Ally card**, whether it appears on Today, a record's right rail, the composer, the approval queue, Marketing, or Automations. Users learn the pattern once.
+AI is ambient (D-04) but visually singular: **every AI recommendation, draft, or prepared action in the product renders as the same AI card**, whether it appears on Today, a record's right rail, the composer, the approval queue, Marketing, or Automations. Users learn the pattern once.
 
-### 15.1 Ally card anatomy (fixed, top to bottom)
+### 15.1 AI card anatomy (fixed, top to bottom)
 
-1. **Header row:** Ally glyph (violet spark, 16px — the only place violet iconography exists) + label "Ally" `type/label` `ally/fg` + category tag (Draft email · Next best action · Risk flag · Stage suggestion) + **confidence chip** right-aligned (§15.3).
+1. **Header row:** AI glyph (violet spark, 16px — the only place violet iconography exists) + label "AI" `type/label` `ai/fg` + category tag (Draft email · Next best action · Risk flag · Stage suggestion) + **confidence chip** right-aligned (§15.3).
 2. **Headline:** the recommendation in one plain sentence, `body-strong`. "Send Kim Tran the appraisal-received update." Verbs first; no hedging filler; no exclamation.
 3. **Payload:** the prepared thing, fully rendered — email/SMS draft in a `bg/sunken` well with recipient + language chip (EN/VI) + template ID (`EMT-032`), or the proposed action stated exactly ("Move to Conditional Approval").
 4. **Why row:** "Why:" + one-line rationale + **evidence chips** linking to the exact records it drew from ("Appraisal received 2:03 PM" · "Stage: Processing, day 9" · "Template EMT-032"). Every claim inspectable in one click — the scorecard's *source evidence clarity* requirement.
 5. **Action row:** **Approve & send** (primary) · **Edit** (secondary) · **Dismiss** (ghost, opens reason menu: Not now / Wrong suggestion / Never for this contact). Labels adapt to payload ("Approve & advance" for a stage move) but always three verdicts in this order.
-6. **Footer (after any verdict):** audit line, `type/small` `text/muted`: "Prepared by Ally · Approved by Jeremy McDonald · Apr 3, 2:14 PM" (or "· Edited, then approved" with a diff link). Every Ally action is attributable — CANON, verbatim.
+6. **Footer (after any verdict):** audit line, `type/small` `text/muted`: "Prepared by AI · Approved by Jeremy McDonald · Apr 3, 2:14 PM" (or "· Edited, then approved" with a diff link). Every AI action is attributable — CANON, verbatim.
 
-Card styling: `ally/bg` fill, `ally/border`, `radius/md` — the only tinted card in the system, so AI-prepared content is unmistakable at a glance and can never impersonate a system fact or a human note.
+Card styling: `ai/bg` fill, `ai/border`, `radius/md` — the only tinted card in the system, so AI-prepared content is unmistakable at a glance and can never impersonate a system fact or a human note.
 
-### 15.2 Ally card states
+### 15.2 AI card states
 
 | State | Rendering |
 |---|---|
@@ -368,11 +368,11 @@ Card styling: `ally/bg` fill, `ally/border`, `radius/md` — the only tinted car
 | Edited | "Edited" tag + diff view accessible; approval applies to the edited version |
 | Dismissed | Collapses to a single muted line ("Dismissed — wrong suggestion"), recoverable for 30 days from the record History |
 | Expired | If the trigger invalidates (borrower replied, stage advanced — the framework's stop conditions), the card self-retires with an explanatory line; it never sends stale content |
-| Low data | If Ally can't ground a suggestion, it says so plainly ("Not enough activity to suggest a next step") — it never pads |
+| Low data | If AI can't ground a suggestion, it says so plainly ("Not enough activity to suggest a next step") — it never pads |
 
 ### 15.3 Confidence — words with reasons, never percentages
 
-Confidence chip values: **High · Medium · Low**, `type/label` in `ally/fg` on `ally/bg`. Hover/tap reveals the drivers in plain language ("High: exact trigger match, all merge fields verified, Fully-Automated template class"). Rules:
+Confidence chip values: **High · Medium · Low**, `type/label` in `ai/fg` on `ai/bg`. Hover/tap reveals the drivers in plain language ("High: exact trigger match, all merge fields verified, Fully-Automated template class"). Rules:
 
 - Never a percentage or score — false precision breeds the AI-OVERTRUST failure mode the QA framework flags.
 - Low-confidence cards sort below high, never appear in bulk approval, and default their primary action to **Edit** instead of Approve.
@@ -380,19 +380,19 @@ Confidence chip values: **High · Medium · Low**, `type/label` in `ally/fg` on 
 
 ### 15.4 Placement rules
 
-- Today: Ally cards in the "Review" lane, max 5 visible, "View all in Approvals" beyond.
-- Records: right-rail Ally panel holds at most the top 2 cards + next-best-action line.
-- Composer: Ally drafts appear *in* the composer as pre-filled content with the Ally header attached — editing there is the Edit verdict.
-- Ally never interrupts: no modals, no popups, no unsolicited chat bubbles. Cards wait; they don't chase. The only proactive surface is the morning briefing block on Today.
-- Chat/ask-Ally (⌘K natural-language) answers render with the same header + evidence-chip pattern inline in the palette.
+- Today: AI cards in the "Review" lane, max 5 visible, "View all in Approvals" beyond.
+- Records: right-rail AI panel holds at most the top 2 cards + next-best-action line.
+- Composer: AI drafts appear *in* the composer as pre-filled content with the AI header attached — editing there is the Edit verdict.
+- AI never interrupts: no modals, no popups, no unsolicited chat bubbles. Cards wait; they don't chase. The only proactive surface is the morning briefing block on Today.
+- Chat/ask-AI (⌘K natural-language) answers render with the same header + evidence-chip pattern inline in the palette.
 
 ---
 
 ## 16. Approval controls
 
-The physical form of "Ally prepares, the human approves" (D-05), consistent with [[Information_Architecture]] §3.3:
+The physical form of "AI prepares, the human approves" (D-05), consistent with [[Information_Architecture]] §3.3:
 
-- **Queue rows** are compact Ally cards (payload collapsed to subject/preview, expandable). Keyboard-first: `J/K` move, `A` approve, `E` edit, `N` not-now, `⏎` expand. Hit-through rate matters more here than anywhere; every control ≥ 24px hit target.
+- **Queue rows** are compact AI cards (payload collapsed to subject/preview, expandable). Keyboard-first: `J/K` move, `A` approve, `E` edit, `N` not-now, `⏎` expand. Hit-through rate matters more here than anywhere; every control ≥ 24px hit target.
 - **Bulk approve** exists *only* for identical-template, Fully-Automated-class items (the 44-template class in the communication framework), shows the full recipient list first with per-row exclusion checkboxes, and is capped at 50 per action.
 - **Sensitive categories** (rate lock, cash-to-close, payment change, closing delay, adverse outcomes, problem files) render with a `status/critical` "Review required" tag, can never be bulk items, and require the payload fully expanded before Approve enables.
 - Every verdict writes user, timestamp, verdict, and diff-if-edited to the audit trail; the History tab renders these with the §15.1 footer format.
@@ -434,8 +434,8 @@ Loan Factory CRM is one responsive web application; there is no native app, and 
 - Base type stays 14px; row heights rise to 48px; touch targets 44px; page gutter `space/4`.
 - **Pipeline:** board becomes a phase-segmented list (horizontal phase selector + stage-grouped loan cards); no drag on mobile — stage moves via the Advance dialog only.
 - **Tables** collapse to list cards: each row renders its primary column as title, 2–3 key columns as meta lines, urgency rail preserved; column pickers hidden.
-- **Ally cards** render full-width with the same fixed anatomy; Approve & send requires one deliberate tap (no swipe-to-approve — approving borrower-facing communication is never a gesture).
-- Record pages collapse to Header → Ally panel → Timeline with facts behind "Details".
+- **AI cards** render full-width with the same fixed anatomy; Approve & send requires one deliberate tap (no swipe-to-approve — approving borrower-facing communication is never a gesture).
+- Record pages collapse to Header → AI panel → Timeline with facts behind "Details".
 - Composer, forms, and approvals all support interruption/resume (mobile-resume edge case is a QA acceptance test). Desktop-only surfaces (automation builder, report builder, workspace admin) render read-only with a "Finish on desktop" note — never a broken editor.
 
 ---
@@ -447,7 +447,7 @@ Per CANON, choices made here that weren't already locked, flagged for the log:
 | Proposed decision | Rationale |
 |---|---|
 | UI typeface = Inter (variable, VI subset always loaded); base size 14px | Density target + tabular numerals + proven Vietnamese rendering |
-| Violet is reserved exclusively for Ally; blue = human action; status hues per §4.4 | Makes AI-prepared content unmistakable and un-impersonatable |
+| Violet is reserved exclusively for AI; blue = human action; status hues per §4.4 | Makes AI-prepared content unmistakable and un-impersonatable |
 | Sidebar stays graphite in the light theme | Command-center brand constant; orientation anchor |
 | Pipeline macro-phases carry no hue; urgency is the only color on the board | Keeps a 60-loan board scannable; protects color-is-meaning |
 | Confidence displayed as High/Medium/Low words with inspectable drivers, never percentages | Counters AI-overtrust failure mode from the QA framework |

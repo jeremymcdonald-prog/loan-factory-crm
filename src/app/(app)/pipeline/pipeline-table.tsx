@@ -22,7 +22,7 @@ export function PipelineTable({ cards }: { cards: PipelineCard[] }) {
       critical: 0,
       warning: 1,
       info: 2,
-      ally: 3,
+      ai: 3,
       brand: 4,
       healthy: 5,
       neutral: 6,

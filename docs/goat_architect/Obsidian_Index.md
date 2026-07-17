@@ -21,7 +21,7 @@ Purpose: the one-page map of every document in the Loan Factory CRM blueprint (d
 ## System
 - [[Technical_Architecture]] — where everything runs
 - [[Data_Model]] — every table, the RLS rules, the PII classification
-- [[AI_Product_Architecture]] — how Ally works inside the approval contract
+- [[AI_Product_Architecture]] — how AI works inside the approval contract
 - [[Automation_Catalog]] — every automation, trigger, tier, and gate
 - [[Communication_Templates]] — the 135-template content layer and its contracts
 - [[Integration_Map]] — future data connections: read-only sync in, communication out

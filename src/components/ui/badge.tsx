@@ -4,7 +4,7 @@
  *
  * Status is never colour-only: every chip carries a word. Hue answers exactly
  * one question — how urgently does this need a human? Green, amber and red
- * mean status; orange means action; violet means Ally.
+ * mean status; orange means action; violet means AI.
  */
 import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
@@ -15,7 +15,7 @@ export type Urgency =
   | "healthy"
   | "info"
   | "neutral"
-  | "ally"
+  | "ai"
   | "brand";
 
 const TONES: Record<Urgency, string> = {
@@ -24,7 +24,7 @@ const TONES: Record<Urgency, string> = {
   healthy: "bg-healthy-bg text-healthy border-healthy-border",
   info: "bg-info-bg text-info border-info-border",
   neutral: "bg-neutral-bg text-neutral border-neutral-border",
-  ally: "bg-ally-bg text-ally border-ally-border",
+  ai: "bg-ai-bg text-ai border-ai-border",
   brand: "bg-action-tint text-action border-action-tint-border",
 };
 
@@ -62,7 +62,7 @@ export function UrgencyDot({ tone, className }: { tone: Urgency; className?: str
     healthy: "bg-healthy",
     info: "bg-info",
     neutral: "bg-neutral",
-    ally: "bg-ally",
+    ai: "bg-ai",
     brand: "bg-brand",
   };
   return (

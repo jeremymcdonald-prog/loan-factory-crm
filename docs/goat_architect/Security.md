@@ -6,7 +6,7 @@ Purpose: the complete security specification for Loan Factory CRM — who can se
 
 1. **Least privilege, always.** Every role starts from zero and is granted only what its daily job requires. No role gets "everything just in case." Elevation is temporary, logged, and visible.
 2. **The database enforces access, not the UI.** Hiding a button is not a security control. Every read and write is checked by Postgres row-level security (RLS) policies; the application layer is a second check, never the only one.
-3. **Ally prepares, the human approves** ([[Decisions]] D-05). The AI layer has no send, publish, delete, or money-adjacent capability. Its ceiling is the approval queue.
+3. **AI prepares, the human approves** ([[Decisions]] D-05). The AI layer has no send, publish, delete, or money-adjacent capability. Its ceiling is the approval queue.
 4. **All inbound content is untrusted input.** Emails, SMS replies, form submissions, inbound attachments, and web content are data, never instructions — the prompt-injection posture in §11.
 5. **Everything is attributable.** Every state change and every AI action carries who/what/when/why in an append-only audit trail. "The system did it" is never an acceptable answer.
 6. **Borrower NPI is minimized.** Loan Factory CRM stores the minimum borrower data the relationship workflow needs. Full credit reports, bank statements, and tax returns are never CRM data — see §5.
@@ -55,7 +55,7 @@ The 7 CANON staff user types plus a System Admin role = 8 role presets. Borrower
 
 Loan Factory CRM runs on Supabase Postgres with RLS as the primary isolation mechanism ([[Decisions]] D-09, [[Technical_Architecture]]).
 
-- **Every tenant-owned table carries `tenant_id`** (and, where scoped, `team_id`, `branch_id`, `owner_user_id`). No exceptions — including junction tables, logs, and AI memory/embedding tables (pgvector rows carry `tenant_id` too; vector search filters by tenant before similarity, so one tenant's borrower data can never surface in another tenant's Ally results).
+- **Every tenant-owned table carries `tenant_id`** (and, where scoped, `team_id`, `branch_id`, `owner_user_id`). No exceptions — including junction tables, logs, and AI memory/embedding tables (pgvector rows carry `tenant_id` too; vector search filters by tenant before similarity, so one tenant's borrower data can never surface in another tenant's AI results).
 - **RLS policy pattern:** policies derive the caller's tenant, roles, and scope from the authenticated JWT claims (Supabase Auth), never from client-supplied parameters. Read policies implement the Own/Team/Branch/All scopes from §2; write policies are stricter than read policies.
 - **The `service_role` bypasses RLS by design — so it is treated as radioactive:** used only inside server-side jobs that must operate cross-user (imports, automation execution, scheduled sends), each such code path enumerated in a reviewed allowlist, each invocation logged with job identity.
 - **RLS is tested, not trusted.** [[QA_Plan]] includes a standing cross-tenant test suite: for every table, an authenticated user from tenant A attempts reads and writes against tenant B rows and against out-of-scope rows in their own tenant (another LO's contacts, another team's pipeline). All must fail at the database. This suite runs in CI on every schema migration. The Supabase security advisors report (missing-RLS detection) is checked before every release.
@@ -76,7 +76,7 @@ Field-level data classification is defined per entity in [[Data_Model]]; this se
 Additional PII rules:
 
 - **AI boundary:** no P3/P4 data is ever placed into external AI tools outside the governed model gateway ([[AI_Product_Architecture]]); the gateway contracts must guarantee no training on our data (verified per vendor in §12). This encodes the marketing-content-os `ai_public_tool_safety` never-enter list as product policy.
-- **Merge fields are the leak surface.** The 17-token merge vocabulary is resolved server-side at queue time; drafts shown to Ally for compliance review contain the resolved P2 fields it needs and nothing more.
+- **Merge fields are the leak surface.** The 17-token merge vocabulary is resolved server-side at queue time; drafts shown to AI for compliance review contain the resolved P2 fields it needs and nothing more.
 - **Same-name collisions:** duplicate-detection and merge flows (a scorecard critical-fail area) must show enough distinguishing data to prevent cross-borrower mix-ups without exposing extra NPI (last-4 phone, city — never financial fields — in the disambiguation UI).
 - **Screens honor classification:** Intelligence dashboards aggregate; drill-down to P3 requires pipeline-scope access. Marketing sees segment counts, never member NPI.
 
@@ -102,26 +102,26 @@ Additional PII rules:
 One append-only audit trail covers the whole product ([[Technical_Architecture]] defines the table; this defines the contract):
 
 - **Logged events:** authentication (login, MFA, failures, session revocation), role/permission changes, record create/update/delete on People/Pipeline/Partners (with field-level before/after for P2/P3 fields), every outbound communication (channel, template ID, approver, timestamp), consent changes, automation activations/pauses, exports, view-as sessions, settings changes, and every AI action (§9).
-- **Every entry carries:** actor (user ID, or system job identity, or "Ally" + triggering automation ID), tenant, timestamp (UTC), action, object type + ID, before/after where applicable, origin (UI / automation / API / import).
+- **Every entry carries:** actor (user ID, or system job identity, or "AI" + triggering automation ID), tenant, timestamp (UTC), action, object type + ID, before/after where applicable, origin (UI / automation / API / import).
 - **Append-only:** no update or delete path exists in the application; database privileges on the audit table are insert+select only, including for Admin. Corrections are new entries referencing the old.
 - **Retention:** minimum 5 years, aligned to the communication-retention posture in [[Mortgage_Compliance]] §10 (audit trail must outlive the records it explains).
 - **Usability:** the audit trail is a product surface, not just a table — "source evidence clarity" is a scored usability field ([[QA_Plan]]); a user must be able to answer "why did this happen / who did this" from the record's timeline.
 
 ## 9. AI action logs
 
-Every Ally action gets a structured log entry beyond the general audit trail (schema detail in [[AI_Product_Architecture]]):
+Every AI action gets a structured log entry beyond the general audit trail (schema detail in [[AI_Product_Architecture]]):
 
 | Field | Content |
 |---|---|
 | Action ID + timestamp | Unique, immutable |
-| Trigger | What invoked Ally (automation ID from [[Automation_Catalog]], user request, daily briefing job) |
+| Trigger | What invoked AI (automation ID from [[Automation_Catalog]], user request, daily briefing job) |
 | Inputs summary | Which records/templates/knowledge were retrieved (IDs, not full content dumps), model + prompt version identifiers |
 | Output | The draft/recommendation produced, verbatim, with the compliance-lint result attached (pass/blockers/warnings) |
 | Risk tier | T0–T3 tier and content risk level (Standard/Medium/High per [[Mortgage_Compliance]] §9) |
 | Human decision | Approved / edited-then-approved (with diff) / rejected / expired — approver identity + timestamp |
 | Outcome | Sent/published/task-created; message ID linkage for delivery events |
 
-This makes three [[PRD]] guarantees checkable: unapproved-send count = 0 always (G6), 100% of AI actions logged and attributable (G8), and Ally draft approval/edit-distance metrics for the trust goal. It is also the dataset for the earned-autonomy proposal ([[Automation_Catalog]] §1) and the fair-lending review evidence ([[Mortgage_Compliance]] §4).
+This makes three [[PRD]] guarantees checkable: unapproved-send count = 0 always (G6), 100% of AI actions logged and attributable (G8), and AI draft approval/edit-distance metrics for the trust goal. It is also the dataset for the earned-autonomy proposal ([[Automation_Catalog]] §1) and the fair-lending review evidence ([[Mortgage_Compliance]] §4).
 
 ## 10. Approval gates
 
@@ -136,13 +136,13 @@ The tier model (T0/T1/T2/T3) in [[Automation_Catalog]] §1 is the behavioral spe
 
 ## 11. Prompt-injection defenses
 
-Ally reads emails, SMS replies, form submissions, and inbound attachments — all attacker-reachable. Defenses, layered:
+AI reads emails, SMS replies, form submissions, and inbound attachments — all attacker-reachable. Defenses, layered:
 
 1. **Instruction/data separation:** all retrieved and inbound content is wrapped and labeled as untrusted data in prompts; system instructions live server-side and are never concatenated from user-reachable fields. Contact names, notes, and email bodies are data, never template instructions.
-2. **No consequential tools on untrusted input:** when processing inbound content (summarizing an email, classifying a lead), Ally's toolset is read-only. Actions that change state (draft, queue, task-create) run from the CRM's own trigger logic, not from instructions found inside content. An email saying "send my file to X" produces at most a *suggested task for human review*, flagged as originating from message content.
+2. **No consequential tools on untrusted input:** when processing inbound content (summarizing an email, classifying a lead), AI's toolset is read-only. Actions that change state (draft, queue, task-create) run from the CRM's own trigger logic, not from instructions found inside content. An email saying "send my file to X" produces at most a *suggested task for human review*, flagged as originating from message content.
 3. **Output validation regardless of input:** every draft passes the deterministic compliance lint + the AI compliance reviewer ([[Mortgage_Compliance]] §9) after generation — so even a successfully manipulated generation cannot exit the system without human approval and lint pass.
 4. **The human gate is the backstop:** the T2 ceiling means injection can, at worst, produce a bad draft a human sees — not a sent message, changed record, or leaked dataset.
-5. **Egress control:** Ally cannot construct arbitrary outbound requests; recipients come from records, links come from an allowlist (Loan Factory domains, configured booking/apply links).
+5. **Egress control:** AI cannot construct arbitrary outbound requests; recipients come from records, links come from an allowlist (Loan Factory domains, configured booking/apply links).
 6. **Adversarial testing:** [[QA_Plan]] includes a prompt-injection suite (hostile email bodies, hostile form fills, hostile attachment text) run before every phase release, per [[PRD]] §7.
 
 ## 12. Vendor risk process
@@ -212,7 +212,7 @@ The pre-release verification list. Every phase release requires a signed pass (c
 - [ ] TLS on every hop; HSTS on; no mixed content
 - [ ] `.env.example` current; secret scanner green; no secrets in repo history, docs, or tickets; rotation log current
 - [ ] Audit trail append-only verified (attempted update/delete fails at DB level); all new event types logging
-- [ ] AI action log: sampled Ally actions reconstruct fully (trigger → inputs → output → lint → human decision → outcome)
+- [ ] AI action log: sampled AI actions reconstruct fully (trigger → inputs → output → lint → human decision → outcome)
 - [ ] Unapproved-send invariant: automated test proves the send service rejects unapproved content
 - [ ] State-licensing gate verified by fixture (release checklist 11a): draft to a borrower in an unlicensed state is blocked; lead assignment to an unlicensed LO is flagged for reroute
 - [ ] Marketing Coordinator cannot reach any recipient list: segment-list export test fails; campaign recipients resolve server-side only; any Admin co-signed export appears as a bulk-export audit event

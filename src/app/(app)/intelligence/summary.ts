@@ -1,12 +1,12 @@
 /**
- * Ally's reading of the report.
+ * AI's reading of the report.
  *
- * Every sentence is built from the counts on this page. Ally is not asked to
+ * Every sentence is built from the counts on this page. AI is not asked to
  * guess here and nothing is hardcoded: if a finding does not fire, its sentence
  * never appears. If the book is genuinely quiet the summary says so plainly
  * rather than manufacturing something to worry about.
  *
- * This is Ally reading numbers back to a human. It proposes nothing and it
+ * This is AI reading numbers back to a human. It proposes nothing and it
  * contacts nobody, so there is no approval to give (Decisions D-11).
  */
 import type { IntelligenceReport } from "@/lib/queries/intelligence";
@@ -17,7 +17,7 @@ function count(n: number, one: string, many: string): string {
 }
 
 /** The two or three things worth saying, worst first. */
-export function allySummary(report: IntelligenceReport): string[] {
+export function aiSummary(report: IntelligenceReport): string[] {
   const { leads, followUp, stale, partners } = report;
   const lines: string[] = [];
 

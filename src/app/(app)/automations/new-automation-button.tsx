@@ -113,7 +113,7 @@ export function NewAutomationButton() {
             <Input
               id="actionText"
               name="actionText"
-              placeholder="Ally drafts a refresh offer — you approve before it sends"
+              placeholder="AI drafts a refresh offer — you approve before it sends"
               required
               autoComplete="off"
             />
@@ -124,7 +124,7 @@ export function NewAutomationButton() {
             <span className="font-semibold text-primary">
               &ldquo;{TIER_LABEL.t2}&rdquo;
             </span>{" "}
-            — Ally writes the message and holds it, and nothing reaches anyone until you say
+            — AI writes the message and holds it, and nothing reaches anyone until you say
             so.
           </p>
 

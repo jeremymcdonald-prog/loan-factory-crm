@@ -10,7 +10,7 @@ import { Card, CardHeader } from "@/components/ui/card";
 import { StageChip } from "@/components/crm/stage-chip";
 import { UrgencyDot } from "@/components/ui/badge";
 import { StatTile, Figure, Bar, NoData, durationLabel, percentLabel } from "./report-ui";
-import { allySummary } from "./summary";
+import { aiSummary } from "./summary";
 
 export const metadata: Metadata = { title: "Intelligence" };
 export const dynamic = "force-dynamic";
@@ -90,18 +90,18 @@ export default async function IntelligencePage() {
         }
       />
 
-      {/* Ally reads the numbers back. It proposes nothing and contacts nobody. */}
+      {/* AI reads the numbers back. It proposes nothing and contacts nobody. */}
       <section className="border-b border-subtle px-4 py-4 sm:px-6">
-        <div className="rounded-lg border border-ally-border bg-ally-bg p-4">
+        <div className="rounded-lg border border-ai-border bg-ai-bg p-4">
           <div className="flex items-start gap-3">
-            <span className="grid size-7 shrink-0 place-items-center rounded-full border border-ally-border bg-surface">
-              <Sparkles className="size-3.5 text-ally" aria-hidden />
+            <span className="grid size-7 shrink-0 place-items-center rounded-full border border-ai-border bg-surface">
+              <Sparkles className="size-3.5 text-ai" aria-hidden />
             </span>
             <div className="min-w-0">
               <h2 className="text-h3 font-semibold text-primary">What the numbers say</h2>
-              <p className="mt-1 text-body text-primary">{allySummary(report).join(" ")}</p>
-              <p className="mt-2 text-small text-ally">
-                Ally read this from the counts on this page. Nothing here is estimated.
+              <p className="mt-1 text-body text-primary">{aiSummary(report).join(" ")}</p>
+              <p className="mt-2 text-small text-ai">
+                AI read this from the counts on this page. Nothing here is estimated.
               </p>
             </div>
           </div>

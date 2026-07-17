@@ -2310,8 +2310,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "prepared_by_ally": {
-          "name": "prepared_by_ally",
+        "prepared_by_ai": {
+          "name": "prepared_by_ai",
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,
@@ -2501,8 +2501,8 @@
           "primaryKey": false,
           "notNull": false
         },
-        "prepared_by_ally": {
-          "name": "prepared_by_ally",
+        "prepared_by_ai": {
+          "name": "prepared_by_ai",
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,

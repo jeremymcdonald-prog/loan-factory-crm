@@ -3,6 +3,7 @@ import Link from "next/link";
 import { eq } from "drizzle-orm";
 import {
   ChevronRight,
+  UserCircle,
   Users,
   Building2,
   ShieldCheck,
@@ -36,6 +37,13 @@ export default async function SettingsPage() {
 
   const sections = [
     {
+      href: "/settings/profile",
+      label: "My profile",
+      description: "Your photo, signature, and how the AI assistant writes as you.",
+      icon: UserCircle,
+      adminOnly: false,
+    },
+    {
       href: "/settings/users",
       label: "Team members",
       description: "Who can sign in, their role, and what they can see.",
@@ -50,9 +58,9 @@ export default async function SettingsPage() {
       adminOnly: false,
     },
     {
-      href: "/settings/ally",
-      label: "Ally",
-      description: "What Ally may prepare, and what always needs a person.",
+      href: "/settings/ai",
+      label: "AI",
+      description: "What AI may prepare, and what always needs a person.",
       icon: ShieldCheck,
       adminOnly: false,
     },

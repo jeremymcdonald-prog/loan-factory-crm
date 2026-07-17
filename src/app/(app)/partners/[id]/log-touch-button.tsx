@@ -20,7 +20,7 @@ const OUTCOMES = [
  * The partner record's one primary action: say what just happened.
  *
  * Logging a touch is the only thing that resets the relationship clock — it's
- * what stops a partner drifting into quiet, and what Ally reads to decide
+ * what stops a partner drifting into quiet, and what AI reads to decide
  * whether to say anything at all.
  */
 export function LogTouchButton({

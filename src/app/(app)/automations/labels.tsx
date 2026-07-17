@@ -27,7 +27,7 @@ export const TIER_LADDER: Tier[] = ["t0", "t1", "t2", "t3"];
 export const TIER_LABEL: Record<Tier, string> = {
   t0: "Never automated — you handle it",
   t1: "Runs on its own",
-  t2: "Ally prepares, you approve",
+  t2: "AI prepares, you approve",
   t3: "Runs automatically",
 };
 
@@ -35,15 +35,15 @@ export const TIER_LABEL: Record<Tier, string> = {
 export const TIER_TONE: Record<Tier, Urgency> = {
   t0: "critical",
   t1: "healthy",
-  t2: "ally",
+  t2: "ai",
   t3: "healthy",
 };
 
 /** One sentence per rung, so the ladder is legible wherever a level is shown. */
 export const TIER_MEANING: Record<Tier, string> = {
-  t0: "Too important to hand off. Ally drafts nothing and nothing goes out on its own — you get told, and you handle it yourself.",
+  t0: "Too important to hand off. AI drafts nothing and nothing goes out on its own — you get told, and you handle it yourself.",
   t1: "Only ever touches your own workspace: a task, a reminder, a flag on Today. Nobody outside the team sees anything, so it doesn't stop to ask.",
-  t2: "Ally writes it and holds it. Nothing reaches a borrower or a partner until you have read it and approved it.",
+  t2: "AI writes it and holds it. Nothing reaches a borrower or a partner until you have read it and approved it.",
   t3: "Runs start to finish without stopping for you. Anything a borrower or a partner would read never sits at this level.",
 };
 
@@ -68,7 +68,7 @@ export const RUN_STATE_LABEL: Record<RunState, string> = {
 };
 
 export const RUN_STATE_TONE: Record<RunState, Urgency> = {
-  queued_for_approval: "ally",
+  queued_for_approval: "ai",
   approved: "neutral",
   completed: "neutral",
   skipped: "neutral",

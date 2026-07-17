@@ -5,9 +5,9 @@ import { decidePartnerCheckin, type TouchState } from "./actions";
 import { Button } from "@/components/ui/button";
 
 /**
- * The verdict on Ally's check-in suggestion.
+ * The verdict on AI's check-in suggestion.
  *
- * There is no "Edit then send" here, and that is deliberate: Ally hasn't
+ * There is no "Edit then send" here, and that is deliberate: AI hasn't
  * written anything to send. Approve puts the reach-out on your task list; Skip
  * says no. Neither one contacts the partner.
  */

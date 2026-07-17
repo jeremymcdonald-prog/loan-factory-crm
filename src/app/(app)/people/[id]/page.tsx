@@ -58,7 +58,7 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
         id: noteTable.id,
         body: noteTable.body,
         createdAt: noteTable.createdAt,
-        preparedByAlly: noteTable.preparedByAlly,
+        preparedByAi: noteTable.preparedByAi,
         authorName: userTable.fullName,
       })
       .from(noteTable)
@@ -331,14 +331,14 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
                         >
                           {relativeTime(n.createdAt)}
                         </time>
-                        {n.preparedByAlly ? <Badge tone="ally">Ally drafted</Badge> : null}
+                        {n.preparedByAi ? <Badge tone="ai">AI drafted</Badge> : null}
                       </p>
                     </li>
                   ))}
                 </ol>
               ) : (
                 <p className="mt-4 text-small text-muted">
-                  No notes yet. What you write here is what Ally will remember.
+                  No notes yet. What you write here is what AI will remember.
                 </p>
               )}
             </div>

@@ -130,12 +130,12 @@ export default async function OrganizationPage() {
               },
               {
                 label: "Languages",
-                value: `${(settings.defaultLanguages ?? ["en"]).map((l) => LANG[l] ?? l).join(" and ")}. Anything Ally writes in a language other than English is held for a human translation review.`,
+                value: `${(settings.defaultLanguages ?? ["en"]).map((l) => LANG[l] ?? l).join(" and ")}. Anything AI writes in a language other than English is held for a human translation review.`,
               },
               {
                 label: "Never automated",
                 value:
-                  "Rate locks, cash-to-close changes, payment changes, closing delays, and problem files. Ally drafts nothing for these — it only makes sure someone knows.",
+                  "Rate locks, cash-to-close changes, payment changes, closing delays, and problem files. AI drafts nothing for these — it only makes sure someone knows.",
               },
             ].map((row) => (
               <li key={row.label} className="px-4 py-2.5">

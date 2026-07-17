@@ -42,4 +42,4 @@ Jeremy accepted the blueprint as the baseline and issued a mandatory scope corre
 - **20-stage lifecycle retained** strictly as CRM opportunity/relationship stage visibility: stage and milestone facts are team-entered in v1, with possible future **read-only** sync from external systems; the CRM never owns loan-of-record data. Work-surface features for conditions/disclosures/document collection were removed.
 - **Official repository** named: `git@github.com:jeremymcdonald-prog/loan-factory-crm.git` ([[Decisions]] D-24).
 
-Unchanged by the correction: Ally as the embedded CRM AI layer and the "Ally prepares, the human approves" contract, the T0–T3 safe-automation tiers, the 135 EMT templates, English + Vietnamese support, the 10-item navigation, the design system, the compliance guardrails, and the Q/D/T/C numbering systems.
+Unchanged by the correction: AI as the embedded CRM AI layer and the "AI prepares, the human approves" contract, the T0–T3 safe-automation tiers, the 135 EMT templates, English + Vietnamese support, the 10-item navigation, the design system, the compliance guardrails, and the Q/D/T/C numbering systems.

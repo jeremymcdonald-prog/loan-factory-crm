@@ -235,7 +235,7 @@ export type ThreadMessage = {
   direction: Direction;
   status: MessageStatus;
   body: string;
-  preparedByAlly: boolean;
+  preparedByAi: boolean;
   templateRef: string | null;
   authorName: string | null;
   sentAt: Date | null;
@@ -286,7 +286,7 @@ export async function getThread(
       direction: message.direction,
       status: message.status,
       body: message.body,
-      preparedByAlly: message.preparedByAlly,
+      preparedByAi: message.preparedByAi,
       templateRef: message.templateRef,
       authorName: userTable.fullName,
       sentAt: message.sentAt,

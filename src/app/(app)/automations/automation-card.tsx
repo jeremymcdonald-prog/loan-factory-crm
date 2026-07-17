@@ -35,7 +35,7 @@ export function AutomationCard({ automation }: { automation: AutomationRow }) {
             </h2>
             <AutomationStateBadge state={automation.status} />
             {automation.waitingCount > 0 ? (
-              <Badge tone="ally">{automation.waitingCount} waiting for you</Badge>
+              <Badge tone="ai">{automation.waitingCount} waiting for you</Badge>
             ) : null}
           </div>
           {automation.description ? (

@@ -1,10 +1,10 @@
 # Mortgage Compliance
 
-Purpose: the compliance operating manual for Loan Factory CRM — the rules that keep every message, campaign, score, and AI action inside mortgage-marketing and lending law, written as executable checklists the implementation team can build and an auditor can verify. It covers consent (CAN-SPAM email, TCPA/10DLC SMS), fair lending in AI scoring, prohibited claims and required disclosures, licensing display, human-review gates, state rules, record retention, and how Ally's compliance-review capability enforces all of it at draft time. The source rules come from Loan Factory's own reviewed compliance corpus (the marketing-content-os `do_not_say`, `required_disclosures`, `state_rules`, and pre-publish checklist, plus the 135-template framework's compliance guide — see [[Asset_Inventory]]); this document turns them into product behavior. The CANON posture is non-negotiable and restated here as invariants. Security mechanics (audit trail, RLS, PII classes) live in [[Security]]; automation gate codes (G1–G9) live in [[Automation_Catalog]] §2.
+Purpose: the compliance operating manual for Loan Factory CRM — the rules that keep every message, campaign, score, and AI action inside mortgage-marketing and lending law, written as executable checklists the implementation team can build and an auditor can verify. It covers consent (CAN-SPAM email, TCPA/10DLC SMS), fair lending in AI scoring, prohibited claims and required disclosures, licensing display, human-review gates, state rules, record retention, and how AI's compliance-review capability enforces all of it at draft time. The source rules come from Loan Factory's own reviewed compliance corpus (the marketing-content-os `do_not_say`, `required_disclosures`, `state_rules`, and pre-publish checklist, plus the 135-template framework's compliance guide — see [[Asset_Inventory]]); this document turns them into product behavior. The CANON posture is non-negotiable and restated here as invariants. Security mechanics (audit trail, RLS, PII classes) live in [[Security]]; automation gate codes (G1–G9) live in [[Automation_Catalog]] §2.
 
 ## 1. Compliance invariants (release blockers, per [[PRD]] §5)
 
-1. **No autonomous lending decisions.** Loan Factory CRM never approves, denies, prequalifies, or prices a loan — origination, underwriting, and pricing are not what a CRM does, and the guardrail holds even for language that merely *implies* such a decision. Ally never states or implies a credit decision. Scoring (§4) prioritizes *work*, never *creditworthiness communicated to a borrower*.
+1. **No autonomous lending decisions.** Loan Factory CRM never approves, denies, prequalifies, or prices a loan — origination, underwriting, and pricing are not what a CRM does, and the guardrail holds even for language that merely *implies* such a decision. AI never states or implies a credit decision. Scoring (§4) prioritizes *work*, never *creditworthiness communicated to a borrower*.
 2. **No guaranteed approval, no unsupported rate claims, no misleading savings** — the automatic-block list in §5.
 3. **Licensing and Equal Housing displayed wherever required** (§6): Loan Factory NMLS #320841, the sending LO's NMLS, Equal Housing language.
 4. **Human review for all borrower-facing and public content** — the tier model's T2 ceiling and the T0 never-automate list (§8).
@@ -43,7 +43,7 @@ SMS is higher-risk than email (TCPA statutory damages are per-message) and Loan 
 
 ## 4. Fair lending and AI scoring
 
-Fair-lending law (ECOA/Reg B, Fair Housing Act) reaches marketing and lead prioritization, not just underwriting. Loan Factory CRM's exposure points: lead scoring, next-best-action ranking, segment building, refi-opportunity detection, and any Ally recommendation about *who* to contact first. Policy ([[Decisions]] D-11):
+Fair-lending law (ECOA/Reg B, Fair Housing Act) reaches marketing and lead prioritization, not just underwriting. Loan Factory CRM's exposure points: lead scoring, next-best-action ranking, segment building, refi-opportunity detection, and any AI recommendation about *who* to contact first. Policy ([[Decisions]] D-11):
 
 **Permitted factors — single source of truth:** the versioned **Factor Registry** in [[AI_Product_Architecture]] §5.1 is the one authoritative list of what may enter any score, ranking, segment, or model. This document deliberately does not restate that table — a second copy is how contradictions are born. In brief, the registry admits only behavioral and transactional factor classes (responsiveness, engagement events, stated intent, source & channel history, file progress, date pressure, relationship history); nothing scores unless it has a registry row, and any addition requires a compliance sign-off logged in [[Decisions]].
 
@@ -70,18 +70,18 @@ Sourced from the reviewed `do_not_say` asset, the framework's Compliance and Usa
 |---|---|
 | Guaranteed approval, guaranteed eligibility, guaranteed closing, guaranteed rate, guaranteed savings | Any "guarantee" of an outcome. Includes soft forms: "you'll definitely qualify," "this will close by…" |
 | "Everyone qualifies" / "no documentation needed" | Includes specialty-program overpromises (ITIN, DSCR, bank-statement) |
-| Specific rates, APR, payments, fees, closing costs, or savings figures **without** the required disclosures and an authorized rate source | Reg Z trigger terms (rate, APR, payment amount, down payment, finance charge, term, points, fees, closing costs, savings) require accompanying disclosures; rate ≠ APR and equal-prominence rules apply. Daily-rate content requires an authorized source input — Ally never invents a number. |
+| Specific rates, APR, payments, fees, closing costs, or savings figures **without** the required disclosures and an authorized rate source | Reg Z trigger terms (rate, APR, payment amount, down payment, finance charge, term, points, fees, closing costs, savings) require accompanying disclosures; rate ≠ APR and equal-prominence rules apply. Daily-rate content requires an authorized source input — AI never invents a number. |
 | "Locked" before a formal rate lock exists | Lock language only from a confirmed lock record (gate G4 pattern) |
 | Fear urgency ("rates will explode tomorrow") | Brand rule + UDAAP hygiene |
 | Government endorsement or affiliation implications | FHA/VA/USDA described accurately, never as sponsorship |
-| Tax, legal, credit-repair, or investment advice | Advice-boundary rule; Ally deflects and refers out |
+| Tax, legal, credit-repair, or investment advice | Advice-boundary rule; AI deflects and refers out |
 | "Clear to close" presented as done | Required framing, verbatim from the framework: "Clear to close means the file can move into final closing steps. It does not mean funding or recording is complete." |
 | Best Price Guarantee content without the official terms link — and **never in Washington** | Terms link `www.loanfactory.com/best-price-guarantee` required in caption AND creative; hard WA exclusion (§7) |
 | Borrower-sensitive details in partner-facing messages | Partner privacy wall — milestone/timeline/owner only, never credit, income, assets, AUS findings, or condition details (gate G3) |
 | Requests to email sensitive documents | Secure channel only; the lint flags any draft asking a borrower to email paystubs/statements ([[Security]] §5 P4 rules) |
 | Unsupported superlatives: "lowest rate," "best rate," "no closing costs" | From the tested block-pattern set in the archived compliance engine — carried forward |
 
-**Also prohibited as product behavior (not just language):** Ally issuing anything that functions as a preapproval, denial, or counteroffer; any automation that sends adverse or pricing-change news (those are T0 — §8); marketing that displays borrower-paid compensation as a default (Jeremy's business is **lender-paid compensation only** — configuration default, flagged in discovery, needs Jeremy's confirmation as a locked setting).
+**Also prohibited as product behavior (not just language):** AI issuing anything that functions as a preapproval, denial, or counteroffer; any automation that sends adverse or pricing-change news (those are T0 — §8); marketing that displays borrower-paid compensation as a default (Jeremy's business is **lender-paid compensation only** — configuration default, flagged in discovery, needs Jeremy's confirmation as a locked setting).
 
 ## 6. Required disclosures & licensing display
 
@@ -122,14 +122,14 @@ The tier model in [[Automation_Catalog]] §1 is the enforcement mechanism; this 
 | Gate | Rule |
 |---|---|
 | **T2 ceiling (v1)** | No borrower- or partner-facing communication sends without a named human approving that specific message — including everything the source framework rated "Fully Automated." Approval identity, timestamp, and diff-from-draft are logged ([[Security]] §9–10). |
-| **T0 — never automated, never drafted** | Rate lock conversations, cash-to-close changes, payment changes, closing delays, problem files, adverse outcomes, complaint responses, anything resembling adverse action. Ally's only role is detection: create a human task + notify LO and ops owner. Preserved verbatim from the framework's Never Automate class. |
+| **T0 — never automated, never drafted** | Rate lock conversations, cash-to-close changes, payment changes, closing delays, problem files, adverse outcomes, complaint responses, anything resembling adverse action. AI's only role is detection: create a human task + notify LO and ops owner. Preserved verbatim from the framework's Never Automate class. |
 | **High-risk content class** | The content-OS 3-tier risk model applies to marketing: High risk = "rates, payments, APR, fees, down payments, guarantee claims, investor products, government programs, qualification, approval, or outbound follow-up" → requires compliance-owner review, not just LO self-approval. Medium → LO + one reviewer. Standard → LO approval. Risk level is computed by the lint and displayed on the queue item. |
-| **Review roles** | Drafter (Ally or human) · Brand reviewer · Compliance reviewer · Marketing owner — the content-OS four-role model maps onto the RBAC matrix ([[Security]] §2): Marketing Coordinator = brand/marketing owner approvals; compliance-owner review is a named responsibility (Jeremy or designee) with its own approval records. Decisions: Approved / Changes Requested / Rejected / Escalated. |
+| **Review roles** | Drafter (AI or human) · Brand reviewer · Compliance reviewer · Marketing owner — the content-OS four-role model maps onto the RBAC matrix ([[Security]] §2): Marketing Coordinator = brand/marketing owner approvals; compliance-owner review is a named responsibility (Jeremy or designee) with its own approval records. Decisions: Approved / Changes Requested / Rejected / Escalated. |
 | **Escalation triggers** | Anything on the do-not-say list surviving to review, state-rule uncertainty, Best Price Guarantee content, RI business-card formats, co-branded/RESPA questions (gate G9), fair-lending concern, complaint or possible-denial context, pricing disputes, closing-delay communications — escalation creates a ticket with an SLA (the content-OS escalation-ticket pattern, 2–3 business day SLA). |
 | **Non-English sends** | Flagged "human translation review required" until a reviewed variant exists; conditional language is never softened in translation ([[PRD]] §5.3). |
 | **Earned autonomy** | Any future relaxation of the T2 ceiling is Jeremy's explicit per-automation decision under the criteria in [[Automation_Catalog]] §1 — logged in [[Decisions]], reversible by kill switch, and never applicable to T0 classes or High-risk content. |
 
-## 9. Ally's compliance-review capability — enforcement at draft time
+## 9. AI's compliance-review capability — enforcement at draft time
 
 This is the mechanism that makes the rest of this document real. Every draft — borrower email, SMS, partner update, marketing asset, social post — passes a **two-layer check between generation and the approval queue**, and again at approval time if edited ([[Security]] §10). Architecture detail in [[AI_Product_Architecture]]; behavior contract here:
 
@@ -200,7 +200,7 @@ Every retention clock is a field, every expiry is a job, every deletion is a log
 - [ ] Sample audit: pull 25 random sent messages — verify approval record, lint result, disclosures, consent status on each
 - [ ] Opt-out latency spot-check (email and SMS): measured, inside policy
 - [ ] Escalation tickets reviewed: all closed within SLA or explained
-- [ ] Ally metrics reviewed: approval rate, edit distance, blocker frequency by rule (a rule that never fires or always fires needs attention)
+- [ ] AI metrics reviewed: approval rate, edit distance, blocker frequency by rule (a rule that never fires or always fires needs attention)
 - [ ] Do-not-say / disclosure corpus reviewed against any new Loan Factory guidance; version bumped if changed
 - [ ] Access review completed with [[Security]] §3 (roles still match jobs)
 

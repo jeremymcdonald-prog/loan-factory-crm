@@ -113,7 +113,7 @@ export type SeedThread = {
     body: string;
     hoursAgo: number;
     status?: "received" | "sent" | "awaiting_approval" | "draft";
-    preparedByAlly?: boolean;
+    preparedByAi?: boolean;
     templateRef?: string;
     meta?: Record<string, unknown>;
   }[];
@@ -241,7 +241,7 @@ export const THREADS: SeedThread[] = [
 ];
 
 /**
- * Ally's pending drafts. Every one is a proposal awaiting a human — nothing
+ * AI's pending drafts. Every one is a proposal awaiting a human — nothing
  * here has been or will be sent without an explicit approval.
  */
 export type SeedInsight = {
@@ -415,10 +415,10 @@ export const AUTOMATIONS: SeedAutomation[] = [
     ref: "D-01",
     name: "Waiting on documents — follow up",
     description:
-      "When the team flags that a borrower still owes items, Ally drafts the nudge and waits for approval.",
+      "When the team flags that a borrower still owes items, AI drafts the nudge and waits for approval.",
     triggerText: "A file has been waiting on borrower documents for 2 days",
     audienceText: "The borrower on that file",
-    actionText: "Ally drafts a reminder in their language — you approve before it sends",
+    actionText: "AI drafts a reminder in their language — you approve before it sends",
     tier: "t2",
     status: "active",
     templateRef: "EMT-012",
@@ -446,7 +446,7 @@ export const AUTOMATIONS: SeedAutomation[] = [
     description: "A preapproval that lapses quietly costs a deal.",
     triggerText: "A preapproval expires in 14 days",
     audienceText: "The borrower, and their agent if there is one",
-    actionText: "Ally drafts a refresh offer — you approve before it sends",
+    actionText: "AI drafts a refresh offer — you approve before it sends",
     tier: "t2",
     status: "active",
     templateRef: "EMT-008",
@@ -467,7 +467,7 @@ export const AUTOMATIONS: SeedAutomation[] = [
     description: "The cheapest referral you will ever earn.",
     triggerText: "It's a year since a client's loan funded",
     audienceText: "Past clients",
-    actionText: "Ally drafts an anniversary note — you approve before it sends",
+    actionText: "AI drafts an anniversary note — you approve before it sends",
     tier: "t2",
     status: "active",
     templateRef: "EMT-105",
@@ -502,10 +502,10 @@ export const AUTOMATIONS: SeedAutomation[] = [
     ref: "F-03",
     name: "Rate lock expiring",
     description:
-      "Rate locks are never automated. Ally will not draft this — it only makes sure you know.",
+      "Rate locks are never automated. AI will not draft this — it only makes sure you know.",
     triggerText: "A rate lock expires within 3 days",
     audienceText: "Nobody — a human must handle this personally",
-    actionText: "Create an urgent task and notify me. Ally drafts nothing.",
+    actionText: "Create an urgent task and notify me. AI drafts nothing.",
     tier: "t0",
     status: "active",
     runCount: 4,
@@ -525,7 +525,7 @@ export const AUTOMATIONS: SeedAutomation[] = [
     description: "Cuts no-shows.",
     triggerText: "A consultation is booked for tomorrow",
     audienceText: "The person attending",
-    actionText: "Ally drafts a reminder — you approve before it sends",
+    actionText: "AI drafts a reminder — you approve before it sends",
     tier: "t2",
     status: "paused",
     runCount: 3,

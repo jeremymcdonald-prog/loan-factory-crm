@@ -30,19 +30,19 @@ import type { Stage } from "@/lib/stages";
 
 /**
  * Silence is the risk this module exists to surface. One threshold, computed in
- * one place, so the list, the record, and Ally all read the same quiet the same
+ * one place, so the list, the record, and AI all read the same quiet the same
  * way.
  */
 export const QUIET_AFTER_DAYS = 60;
 
 /**
- * Ally's check-in suggestion is computed from partner facts rather than stored:
+ * AI's check-in suggestion is computed from partner facts rather than stored:
  * `ai_insight` has no partner column, and inventing one is out of scope. The
  * human's verdict IS durable — it lands in `event`, keyed by partner id in the
  * payload, which is what lets the card settle instead of nagging forever.
  */
-export const CHECKIN_APPROVED = "ally.partner_checkin.approved";
-export const CHECKIN_SKIPPED = "ally.partner_checkin.skipped";
+export const CHECKIN_APPROVED = "ai.partner_checkin.approved";
+export const CHECKIN_SKIPPED = "ai.partner_checkin.skipped";
 
 export type PartnerHealth = {
   level: Urgency;
@@ -192,7 +192,7 @@ export type PartnerMessage = {
   direction: string;
   subject: string | null;
   body: string;
-  preparedByAlly: boolean;
+  preparedByAi: boolean;
   occurredAt: Date;
   authorName: string | null;
 };
@@ -240,7 +240,7 @@ export async function getPartner(db: Db, currentUser: CurrentUser, partnerId: st
       direction: message.direction,
       subject: message.subject,
       body: message.body,
-      preparedByAlly: message.preparedByAlly,
+      preparedByAi: message.preparedByAi,
       occurredAt: message.occurredAt,
       authorName: userTable.fullName,
     })

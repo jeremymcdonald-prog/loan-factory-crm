@@ -5,9 +5,9 @@
  * EMT-001..135 master templates. This parses them rather than restating them,
  * so the library in the product is the library the compliance team wrote.
  *
- * The `automation_ready` field becomes the policy that governs whether Ally may
+ * The `automation_ready` field becomes the policy that governs whether AI may
  * draft the template at all. "Manual Only" and anything touching a
- * Never-Automate topic never becomes an approvable Ally card.
+ * Never-Automate topic never becomes an approvable AI card.
  */
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -53,7 +53,7 @@ const POLICY_MAP: Record<string, ParsedTemplate["policy"]> = {
 };
 
 /**
- * Topics the communication framework marks Never Automate. Ally must not draft
+ * Topics the communication framework marks Never Automate. AI must not draft
  * or queue these at all — it only creates a human-review task
  * (Automation_Catalog §1, tier T0).
  */

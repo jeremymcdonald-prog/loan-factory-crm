@@ -60,8 +60,8 @@ The source pack's CRM Automation Map assigns every EMT-001–065 template a poli
 
 | Policy | Count | Loan Factory CRM behavior |
 |---|---|---|
-| Fully Automated | 44 | Eligible for automated queueing — but in v1 still **Ally-prepared, human-approved** ([[Decisions]] D-05); true auto-send is a P3 decision gated on G6 trust metrics |
-| Semi Automated | 71 | Ally drafts on trigger; always through the approval queue |
+| Fully Automated | 44 | Eligible for automated queueing — but in v1 still **AI-prepared, human-approved** ([[Decisions]] D-05); true auto-send is a P3 decision gated on G6 trust metrics |
+| Semi Automated | 71 | AI drafts on trigger; always through the approval queue |
 | Manual Only + Never Automate | 20 | **Hard-blocked** from any automated queue; human-initiated, human-sent (rate lock, cash-to-close, payment change, delays, problem files) |
 
 **Authority rule (adopted verbatim as system policy):** the CRM Automation Map's policy column is authoritative; the `tags` field in the AI-metadata file is **ignored for policy**. Known contradiction: EMT-060–065 are Manual Only / Never Automate in every authoritative table but tagged `semi-automated` in metadata — a compliance hazard if tags ever fed an automation filter.

@@ -1,6 +1,6 @@
 /**
  * LanguageBadge — every person record carries one (Screen_Specifications
- * shared conventions). Ally drafts in the contact's preferred language, and
+ * shared conventions). AI drafts in the contact's preferred language, and
  * non-English drafts are always flagged for human translation review.
  * First-class per D-08: EN and VI are peers.
  */

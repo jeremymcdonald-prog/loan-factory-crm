@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Search, ChevronDown, LogOut } from "lucide-react";
+import Link from "next/link";
+import { Search, ChevronDown, LogOut, UserCircle } from "lucide-react";
 import { logout } from "@/app/login/actions";
 import { ROLE_LABELS } from "@/lib/roles";
 import { cn } from "@/lib/cn";
@@ -106,6 +107,15 @@ export function TopBar({
                 {tenantName} · {ROLE_LABELS[role] ?? role}
               </p>
             </div>
+            <Link
+              href="/settings/profile"
+              role="menuitem"
+              onClick={() => setOpen(false)}
+              className="flex w-full items-center gap-2 rounded-control px-3 py-2 text-left text-small text-secondary hover:bg-sunken hover:text-primary"
+            >
+              <UserCircle className="size-4" aria-hidden />
+              My profile
+            </Link>
             <form action={logout}>
               <button
                 type="submit"
