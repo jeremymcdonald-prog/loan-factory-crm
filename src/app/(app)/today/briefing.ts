@@ -16,8 +16,24 @@
 import type { QueueItem } from "@/lib/queue-types";
 import { moneyCompact } from "@/lib/format";
 
+export type BriefingAction = {
+  /** A short, punchy label for the chip: "The Thanh lock", "Call Chidi". */
+  label: string;
+  href: string;
+  /** The verb on the button: "Open the file", "Call now", "Approve & send". */
+  actionLabel: string;
+  urgency: QueueItem["urgency"];
+};
+
 export type Briefing = {
   greeting: string;
+  /** The one-line read of the day — rendered as the lead, not a bullet. */
+  lead: string;
+  /** The concise priority bullets (everything after the lead). */
+  bullets: string[];
+  /** The three highest-ranked things to actually do, as real actions. */
+  topActions: BriefingAction[];
+  /** Retained for callers/tests that read the flat sentence form. */
   sentences: string[];
   focus: string | null;
 };
@@ -119,9 +135,22 @@ export function buildBriefing(
     );
   }
 
+  const trimmed = sentences.filter(Boolean).slice(0, 6);
+
+  // The three highest-ranked items become real, tappable actions.
+  const topActions: BriefingAction[] = items.slice(0, 3).map((item) => ({
+    label: capitalise(focusPhrase(item)),
+    href: item.href,
+    actionLabel: item.actionLabel,
+    urgency: item.urgency,
+  }));
+
   return {
     greeting: `Good morning, ${firstName}.`,
-    sentences: sentences.filter(Boolean).slice(0, 6),
+    lead: trimmed[0] ?? "",
+    bullets: trimmed.slice(1),
+    topActions,
+    sentences: trimmed,
     focus,
   };
 }

@@ -218,7 +218,7 @@ export default async function TeamMemberPage({
                   <li key={l.id}>
                     <Link
                       href={`/opportunities/${l.id}`}
-                      className="flex items-center justify-between gap-3 px-4 py-2.5 hover:bg-raised"
+                      className="flex items-center justify-between gap-3 px-4 py-2.5 hover:bg-sunken"
                     >
                       <span className="min-w-0">
                         <span className="block truncate font-semibold text-primary">

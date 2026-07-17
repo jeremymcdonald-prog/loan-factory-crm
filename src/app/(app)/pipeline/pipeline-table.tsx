@@ -37,7 +37,7 @@ export function PipelineTable({ cards }: { cards: PipelineCard[] }) {
 
   return (
     <div className="p-4 sm:p-6">
-      <div className="overflow-x-auto rounded-lg border border-subtle bg-surface">
+      <div className="overflow-x-auto rounded-card border border-subtle bg-surface">
         <table className="w-full min-w-[860px] text-body">
           <caption className="sr-only">Every opportunity, most urgent first</caption>
           <thead>
@@ -71,7 +71,7 @@ export function PipelineTable({ cards }: { cards: PipelineCard[] }) {
               const show =
                 urgency?.label && urgency.level !== "healthy" && urgency.level !== "neutral";
               return (
-                <tr key={card.loanId} className="border-b border-subtle last:border-0 hover:bg-raised">
+                <tr key={card.loanId} className="border-b border-subtle last:border-0 hover:bg-sunken">
                   <td className="px-4 py-2.5">
                     <Link href={`/opportunities/${card.loanId}`} className="flex items-center gap-1.5">
                       <span className="font-semibold text-primary">

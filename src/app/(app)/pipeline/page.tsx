@@ -93,7 +93,7 @@ export default async function PipelinePage({
 
       {cards.length === 0 ? (
         <div className="p-6">
-          <div className="rounded-lg border border-subtle bg-surface px-6 py-14 text-center">
+          <div className="rounded-card border border-subtle bg-surface px-6 py-14 text-center">
             <Columns3 className="mx-auto size-6 text-disabled" aria-hidden />
             <p className="mt-3 text-h3 font-semibold text-primary">Your pipeline is empty</p>
             <p className="mx-auto mt-1 max-w-sm text-body text-secondary">
@@ -101,7 +101,7 @@ export default async function PipelinePage({
             </p>
             <Link
               href="/people"
-              className="mt-4 inline-flex h-9 items-center rounded-md bg-action px-3.5 text-body font-semibold text-action-fg hover:bg-action-hover"
+              className="mt-4 inline-flex h-9 items-center rounded-control bg-action px-3.5 text-body font-semibold text-action-fg hover:bg-action-hover"
             >
               Go to People
             </Link>

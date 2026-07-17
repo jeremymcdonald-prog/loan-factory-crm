@@ -25,14 +25,14 @@ export function InviteForm() {
   }
 
   return (
-    <div className="w-full rounded-lg border border-subtle bg-surface">
+    <div className="w-full rounded-card border border-subtle bg-surface">
       <div className="flex items-center justify-between border-b border-subtle px-4 py-3">
         <h2 className="text-h3 font-semibold text-primary">Add a teammate</h2>
         <button
           type="button"
           onClick={() => setOpen(false)}
           aria-label="Close"
-          className="rounded p-1 text-muted hover:bg-raised hover:text-primary"
+          className="rounded p-1 text-muted hover:bg-sunken hover:text-primary"
         >
           <X className="size-4" aria-hidden />
         </button>

@@ -21,7 +21,9 @@ export function PageHeader({
   return (
     <div
       className={cn(
-        "flex flex-wrap items-start justify-between gap-3 border-b border-subtle bg-surface px-5 py-5 sm:px-7 sm:py-6",
+        // Left edge (px-4 / sm:px-6) matches every page body, so the title and
+        // the content below share one gutter across all screens.
+        "flex flex-wrap items-start justify-between gap-3 border-b border-subtle bg-surface px-4 py-5 sm:px-6 sm:py-6",
         className,
       )}
     >

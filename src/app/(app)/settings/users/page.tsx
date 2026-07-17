@@ -67,7 +67,7 @@ export default async function UsersPage() {
       />
 
       <div className="p-4 sm:p-6">
-        <div className="overflow-hidden rounded-lg border border-subtle bg-surface">
+        <div className="overflow-hidden rounded-card border border-subtle bg-surface">
           <table className="w-full text-body">
             <caption className="sr-only">Team members and their roles</caption>
             <thead>
@@ -93,7 +93,7 @@ export default async function UsersPage() {
               {rows.map((row) => (
                 <tr
                   key={row.id}
-                  className="border-b border-subtle last:border-0 hover:bg-raised"
+                  className="border-b border-subtle last:border-0 hover:bg-sunken"
                 >
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2.5">

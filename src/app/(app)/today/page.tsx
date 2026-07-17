@@ -10,6 +10,7 @@ import { QueueItemRow } from "./queue-item";
 import { moneyCompact, relativeTime } from "@/lib/format";
 import { AllyMark } from "@/components/ally/ally-card";
 import { Card } from "@/components/ui/card";
+import { cn } from "@/lib/cn";
 
 export const metadata: Metadata = { title: "Today" };
 export const dynamic = "force-dynamic";
@@ -54,30 +55,74 @@ export default async function TodayPage() {
 
   return (
     <div className="mx-auto max-w-5xl p-4 sm:p-6">
-      {/* The briefing: prose, in the Loan Factory voice. */}
-      <section className="rounded-lg border border-ally-border bg-ally-bg/40 p-4">
-        <div className="flex items-start gap-2.5">
-          <AllyMark className="mt-0.5" />
-          <div className="min-w-0">
-            <h1 className="text-h2 font-semibold tracking-tight text-primary">
-              {briefing.greeting}
-            </h1>
-            <div className="mt-1.5 space-y-1">
-              {briefing.sentences.map((s) => (
-                <p key={s} className="text-body leading-6 text-secondary">
-                  {s}
-                </p>
+      {/* The briefing: an executive summary, in the Loan Factory voice.
+          Greeting + one-line read, concise bullets, then the top three as
+          real, tappable actions. */}
+      <section className="rounded-card border border-ally-border bg-ally-bg/40 p-5">
+        <div className="flex items-center gap-2.5">
+          <AllyMark />
+          <h1 className="text-h1 font-semibold tracking-tight text-primary">
+            {briefing.greeting}
+          </h1>
+          <span className="ml-auto hidden text-label font-semibold text-ally sm:block">
+            Prepared by Ally
+          </span>
+        </div>
+
+        {briefing.lead ? (
+          <p className="mt-1.5 text-body text-secondary">{briefing.lead}</p>
+        ) : null}
+
+        {briefing.bullets.length > 0 ? (
+          <ul className="mt-3 grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
+            {briefing.bullets.map((b) => (
+              <li key={b} className="flex items-start gap-2 text-body text-secondary">
+                <span
+                  aria-hidden
+                  className="mt-[7px] size-1.5 shrink-0 rounded-full bg-ally/60"
+                />
+                <span>{b}</span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+
+        {briefing.topActions.length > 0 ? (
+          <div className="mt-4 border-t border-ally-border/70 pt-3.5">
+            <p className="text-label font-semibold uppercase tracking-wide text-ally">
+              If you only do three things today
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {briefing.topActions.map((a, i) => (
+                <Link
+                  key={a.href + i}
+                  href={a.href}
+                  className={cn(
+                    "inline-flex items-center gap-2 rounded-control px-3 py-2 text-small font-semibold transition-colors",
+                    i === 0
+                      ? "bg-action text-action-fg shadow-e1 hover:bg-action-hover"
+                      : "border border-strong bg-surface text-primary hover:border-brand hover:bg-action-tint",
+                  )}
+                >
+                  <span
+                    aria-hidden
+                    className={cn(
+                      "grid size-4 shrink-0 place-items-center rounded-full text-[10px] font-bold tnum",
+                      i === 0 ? "bg-white/25 text-white" : "bg-brand text-white",
+                    )}
+                  >
+                    {i + 1}
+                  </span>
+                  {a.label}
+                </Link>
               ))}
             </div>
-            {briefing.focus ? (
-              <p className="mt-2.5 text-body font-semibold text-primary">{briefing.focus}</p>
-            ) : null}
           </div>
-        </div>
+        ) : null}
       </section>
 
       {/* Four glanceable numbers. */}
-      <div className="mt-4 grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-subtle bg-subtle sm:grid-cols-4">
+      <div className="mt-4 grid grid-cols-2 gap-px overflow-hidden rounded-card border border-subtle bg-subtle sm:grid-cols-4">
         {statTiles.map((s) => (
           <div key={s.label} className="bg-surface px-4 py-3">
             <p className="text-label font-semibold uppercase tracking-wide text-muted">
@@ -119,13 +164,13 @@ export default async function TodayPage() {
             <div className="mt-4 flex justify-center gap-2">
               <Link
                 href="/pipeline"
-                className="inline-flex h-9 items-center rounded-md bg-action px-3.5 text-body font-semibold text-action-fg hover:bg-action-hover"
+                className="inline-flex h-9 items-center rounded-control bg-action px-3.5 text-body font-semibold text-action-fg hover:bg-action-hover"
               >
                 Look at your pipeline
               </Link>
               <Link
                 href="/people?type=past_client"
-                className="inline-flex h-9 items-center rounded-md border border-strong bg-surface px-3.5 text-body font-semibold text-primary hover:bg-raised"
+                className="inline-flex h-9 items-center rounded-control border border-strong bg-surface px-3.5 text-body font-semibold text-primary hover:bg-sunken"
               >
                 Review past clients
               </Link>

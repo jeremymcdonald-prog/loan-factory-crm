@@ -55,7 +55,7 @@ export default async function TeamPage() {
           canManageUsers(user.role) ? (
             <Link
               href="/settings/users"
-              className="inline-flex h-9 items-center gap-2 rounded-md bg-action px-3.5 text-body font-semibold text-action-fg shadow-e1 hover:bg-action-hover"
+              className="inline-flex h-9 items-center gap-2 rounded-control bg-action px-3.5 text-body font-semibold text-action-fg shadow-e1 hover:bg-action-hover"
             >
               <UsersRound className="size-4" aria-hidden />
               Manage members
@@ -95,7 +95,7 @@ export default async function TeamPage() {
 
       <div className="p-4 sm:p-6">
         {members.length === 0 ? (
-          <div className="rounded-lg border border-subtle bg-surface px-6 py-14 text-center">
+          <div className="rounded-card border border-subtle bg-surface px-6 py-14 text-center">
             <UsersRound className="mx-auto size-6 text-disabled" aria-hidden />
             <p className="mt-3 text-h3 font-semibold text-primary">Nobody here yet</p>
             <p className="mx-auto mt-1 max-w-sm text-body text-secondary">
@@ -105,7 +105,7 @@ export default async function TeamPage() {
             {canManageUsers(user.role) ? (
               <Link
                 href="/settings/users"
-                className="mt-4 inline-flex h-9 items-center rounded-md bg-action px-3.5 text-body font-semibold text-action-fg hover:bg-action-hover"
+                className="mt-4 inline-flex h-9 items-center rounded-control bg-action px-3.5 text-body font-semibold text-action-fg hover:bg-action-hover"
               >
                 Add a teammate
               </Link>
@@ -116,7 +116,7 @@ export default async function TeamPage() {
             )}
           </div>
         ) : (
-          <div className="overflow-hidden rounded-lg border border-subtle bg-surface">
+          <div className="overflow-hidden rounded-card border border-subtle bg-surface">
             <table className="w-full text-body">
               <caption className="sr-only">
                 Team members and the work each one is carrying
@@ -168,7 +168,7 @@ export default async function TeamPage() {
                 {members.map((member) => (
                   <tr
                     key={member.id}
-                    className="border-b border-subtle last:border-0 hover:bg-raised"
+                    className="border-b border-subtle last:border-0 hover:bg-sunken"
                   >
                     <td className="px-4 py-2.5">
                       <Link href={`/team/${member.id}`} className="flex items-center gap-2.5">

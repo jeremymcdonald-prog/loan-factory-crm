@@ -61,8 +61,11 @@
   --sidebar-fg: #e8ecf2; /* 15.02:1 on navy */
   --sidebar-fg-muted: #97a2b2; /* 6.89:1 */
   --sidebar-fg-dim: #6b7789; /* 3.92:1 — non-text only */
-  --sidebar-hover: #1b2534;
-  --sidebar-active: rgb(243 111 40 / 0.14);
+  --sidebar-hover: #172234;
+  /* A cool navy lift, not an orange wash: low-alpha orange over navy muddies
+     to brown, so the active fill stays cool and the brand comes from the
+     bright orange rail + orange icon instead. */
+  --sidebar-active: #1c2b43;
   --sidebar-border: #222e40;
 
   /* --- Surfaces: white app on a soft cool-gray canvas --- */

@@ -101,7 +101,7 @@ export default async function ConversationsPage({
           ) : (
             <Link
               href="/conversations?filter=waiting"
-              className="inline-flex h-9 items-center gap-2 rounded-md bg-action px-3.5 text-body font-semibold text-action-fg shadow-e1 hover:bg-action-hover"
+              className="inline-flex h-9 items-center gap-2 rounded-control bg-action px-3.5 text-body font-semibold text-action-fg shadow-e1 hover:bg-action-hover"
             >
               <Clock className="size-3.5" aria-hidden />
               Answer {counts.waiting} waiting
@@ -124,7 +124,7 @@ export default async function ConversationsPage({
                   "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-small font-semibold transition-colors",
                   active
                     ? "bg-action text-action-fg"
-                    : "text-secondary hover:bg-raised hover:text-primary",
+                    : "text-secondary hover:bg-sunken hover:text-primary",
                 )}
               >
                 {tab.label}
@@ -137,13 +137,13 @@ export default async function ConversationsPage({
         </nav>
 
         {threads.length === 0 ? (
-          <div className="mt-4 rounded-lg border border-subtle bg-surface px-6 py-14 text-center">
+          <div className="mt-4 rounded-card border border-subtle bg-surface px-6 py-14 text-center">
             <MessagesSquare className="mx-auto size-6 text-disabled" aria-hidden />
             <p className="mt-3 text-h3 font-semibold text-primary">{empty.title}</p>
             <p className="mx-auto mt-1 max-w-sm text-body text-secondary">{empty.body}</p>
           </div>
         ) : (
-          <ul className="mt-4 overflow-hidden rounded-lg border border-subtle bg-surface">
+          <ul className="mt-4 overflow-hidden rounded-card border border-subtle bg-surface">
             {threads.map((thread) => {
               const preview = previewOf(thread);
 
@@ -152,7 +152,7 @@ export default async function ConversationsPage({
                   <Link
                     href={`/conversations/${thread.id}`}
                     className={cn(
-                      "flex gap-3 border-l-2 px-3 py-3 transition-colors hover:bg-raised sm:px-4",
+                      "flex gap-3 border-l-2 px-3 py-3 transition-colors hover:bg-sunken sm:px-4",
                       // The conversion lever: a thread waiting on a human reply
                       // is the one thing on this screen that carries colour.
                       thread.awaitingReply

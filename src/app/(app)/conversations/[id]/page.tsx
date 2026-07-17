@@ -323,7 +323,7 @@ export default async function ThreadPage({ params }: { params: Promise<{ id: str
 
       {thread.messages.length === 0 ? (
         <div className="px-4 py-4 sm:px-6">
-          <div className="rounded-lg border border-subtle bg-surface px-6 py-10 text-center">
+          <div className="rounded-card border border-subtle bg-surface px-6 py-10 text-center">
             <p className="text-h3 font-semibold text-primary">Nothing on this thread yet</p>
             <p className="mx-auto mt-1 max-w-sm text-body text-secondary">
               Once there&rsquo;s a message here, it will show up with who said it and when.
@@ -371,7 +371,7 @@ export default async function ThreadPage({ params }: { params: Promise<{ id: str
                 {contact.href ? (
                   <Link
                     href={contact.href}
-                    className="inline-flex h-9 shrink-0 items-center rounded-md bg-action px-3.5 text-body font-semibold text-action-fg shadow-e1 hover:bg-action-hover"
+                    className="inline-flex h-9 shrink-0 items-center rounded-control bg-action px-3.5 text-body font-semibold text-action-fg shadow-e1 hover:bg-action-hover"
                   >
                     Open {firstName}&rsquo;s record
                   </Link>

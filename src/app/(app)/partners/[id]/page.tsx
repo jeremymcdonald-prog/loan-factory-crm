@@ -185,7 +185,7 @@ export default async function PartnerPage({ params }: { params: Promise<{ id: st
                 </thead>
                 <tbody>
                   {referrals.map((r) => (
-                    <tr key={r.id} className="border-b border-subtle last:border-0 hover:bg-raised">
+                    <tr key={r.id} className="border-b border-subtle last:border-0 hover:bg-sunken">
                       <td className="px-4 py-2.5">
                         {r.personId && r.firstName ? (
                           <Link

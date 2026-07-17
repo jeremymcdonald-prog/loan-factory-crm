@@ -63,7 +63,7 @@ export function StageControl({ loanId, current }: { loanId: string; current: Sta
           {pickerOpen ? (
             <div
               role="menu"
-              className="absolute right-0 top-full z-40 mt-1 max-h-80 w-64 overflow-y-auto rounded-lg border border-subtle bg-raised p-1 shadow-e3"
+              className="absolute right-0 top-full z-40 mt-1 max-h-80 w-64 overflow-y-auto rounded-card border border-subtle bg-raised p-1 shadow-e3"
             >
               {STAGES.map((stage) => (
                 <form key={stage} action={formAction}>

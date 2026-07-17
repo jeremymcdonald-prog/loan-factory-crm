@@ -62,7 +62,7 @@ function PlainQueueItem({ item }: { item: QueueItem }) {
   );
 
   return (
-    <li className="flex items-start gap-3 border-b border-subtle px-4 py-3 last:border-0 hover:bg-raised">
+    <li className="flex items-start gap-3 border-b border-subtle px-4 py-3 last:border-0 hover:bg-sunken">
       <span
         className={cn(
           "mt-0.5 grid size-7 shrink-0 place-items-center rounded",
@@ -103,7 +103,7 @@ function PlainQueueItem({ item }: { item: QueueItem }) {
         ) : (
           <Link
             href={item.href}
-            className="inline-flex h-8 items-center rounded-md border border-strong bg-surface px-2.5 text-small font-semibold text-primary hover:bg-raised"
+            className="inline-flex h-8 items-center rounded-control border border-strong bg-surface px-2.5 text-small font-semibold text-primary hover:bg-sunken"
           >
             {item.actionLabel}
           </Link>
@@ -154,7 +154,7 @@ function AllyQueueItem({ item, loNmls }: { item: QueueItem; loNmls: string | nul
                 name="editedBody"
                 defaultValue={insight.body}
                 rows={8}
-                className="w-full rounded-md border border-strong bg-surface p-2.5 font-sans text-small leading-5 text-primary focus:border-action focus:outline-none"
+                className="w-full rounded-control border border-strong bg-surface p-2.5 font-sans text-small leading-5 text-primary focus:border-action focus:outline-none"
               />
             ) : null}
 

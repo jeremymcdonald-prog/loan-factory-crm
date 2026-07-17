@@ -143,7 +143,7 @@ export default async function MarketingPage({
         ) : null}
 
         {campaigns.length === 0 ? (
-          <div className="rounded-lg border border-subtle bg-surface px-6 py-14 text-center">
+          <div className="rounded-card border border-subtle bg-surface px-6 py-14 text-center">
             <Megaphone className="mx-auto size-6 text-disabled" aria-hidden />
             <p className="mt-3 text-h3 font-semibold text-primary">No campaigns yet</p>
             <p className="mx-auto mt-1 max-w-md text-body text-secondary">
@@ -179,7 +179,7 @@ export default async function MarketingPage({
                     return (
                       <li
                         key={c.id}
-                        className="rounded-lg border border-subtle bg-surface px-4 py-3"
+                        className="rounded-card border border-subtle bg-surface px-4 py-3"
                       >
                         <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
                           <div className="min-w-0">

@@ -94,7 +94,7 @@ export default async function TemplateLibraryPage({
                     "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-small font-semibold transition-colors",
                     active
                       ? "bg-action text-action-fg"
-                      : "text-secondary hover:bg-raised hover:text-primary",
+                      : "text-secondary hover:bg-sunken hover:text-primary",
                   )}
                 >
                   {tab.label}
@@ -115,7 +115,7 @@ export default async function TemplateLibraryPage({
         </div>
 
         {rows.length === 0 ? (
-          <div className="mt-4 rounded-lg border border-subtle bg-surface px-6 py-14 text-center">
+          <div className="mt-4 rounded-card border border-subtle bg-surface px-6 py-14 text-center">
             <LibraryBig className="mx-auto size-6 text-disabled" aria-hidden />
             <p className="mt-3 text-h3 font-semibold text-primary">
               {q ? `No template matches "${q}"` : "No template matches those filters"}
@@ -125,13 +125,13 @@ export default async function TemplateLibraryPage({
             </p>
             <Link
               href="/marketing/templates"
-              className="mt-4 inline-flex h-9 items-center rounded-md bg-action px-3.5 text-body font-semibold text-action-fg hover:bg-action-hover"
+              className="mt-4 inline-flex h-9 items-center rounded-control bg-action px-3.5 text-body font-semibold text-action-fg hover:bg-action-hover"
             >
               Show every template
             </Link>
           </div>
         ) : (
-          <div className="mt-4 overflow-hidden rounded-lg border border-subtle bg-surface">
+          <div className="mt-4 overflow-hidden rounded-card border border-subtle bg-surface">
             <table className="w-full text-body">
               <caption className="sr-only">Template library</caption>
               <thead>
@@ -157,7 +157,7 @@ export default async function TemplateLibraryPage({
                 {rows.map((row) => {
                   const read = policyRead(row.policy);
                   return (
-                    <tr key={row.id} className="border-b border-subtle last:border-0 hover:bg-raised">
+                    <tr key={row.id} className="border-b border-subtle last:border-0 hover:bg-sunken">
                       <td className="px-4 py-2.5 align-top">
                         <Link
                           href={`/marketing/templates/${row.id}`}

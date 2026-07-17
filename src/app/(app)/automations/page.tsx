@@ -55,7 +55,7 @@ export default async function AutomationsPage() {
 
       {rows.length === 0 ? (
         <div className="p-4 sm:p-6">
-          <div className="rounded-lg border border-subtle bg-surface px-6 py-14 text-center">
+          <div className="rounded-card border border-subtle bg-surface px-6 py-14 text-center">
             <Workflow className="mx-auto size-6 text-disabled" aria-hidden />
             <p className="mt-3 text-h3 font-semibold text-primary">No automations yet</p>
             <p className="mx-auto mt-1 max-w-md text-body text-secondary">
@@ -76,7 +76,7 @@ export default async function AutomationsPage() {
 
           {/* The ladder, spelled out. Every badge above is one of these four rungs. */}
           <section className="px-4 pb-6 sm:px-6" aria-labelledby="approval-ladder">
-            <div className="rounded-lg border border-subtle bg-surface p-4">
+            <div className="rounded-card border border-subtle bg-surface p-4">
               <h2 id="approval-ladder" className="text-h3 font-semibold text-primary">
                 How much each one is allowed to do
               </h2>

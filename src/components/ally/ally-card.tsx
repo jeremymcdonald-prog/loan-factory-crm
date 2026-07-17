@@ -68,7 +68,7 @@ export function AllyCard({
   return (
     <article
       className={cn(
-        "rounded-lg border border-ally-border bg-ally-bg/40 p-3.5",
+        "rounded-card border border-ally-border bg-ally-bg/40 p-3.5",
         className,
       )}
     >

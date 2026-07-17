@@ -42,10 +42,12 @@ export function Wordmark({
   className,
   onDark = false,
   showProduct = true,
+  size = "md",
 }: {
   className?: string;
   onDark?: boolean;
   showProduct?: boolean;
+  size?: "md" | "lg";
 }) {
   return (
     <span className={cn("inline-flex items-baseline gap-2", className)}>
@@ -53,12 +55,16 @@ export function Wordmark({
         src={onDark ? wordmarkLight : wordmark}
         alt="Loan Factory"
         priority
-        className="h-[18px] w-auto shrink-0 object-contain"
+        className={cn(
+          "w-auto shrink-0 object-contain",
+          size === "lg" ? "h-[22px]" : "h-[18px]",
+        )}
       />
       {showProduct ? (
         <span
           className={cn(
-            "text-body font-semibold tracking-tight",
+            "font-semibold tracking-tight",
+            size === "lg" ? "text-h3" : "text-body",
             onDark ? "text-sidebar-fg-muted" : "text-muted",
           )}
         >

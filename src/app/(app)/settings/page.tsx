@@ -87,7 +87,7 @@ export default async function SettingsPage() {
           {sections.map((section) => {
             const Icon = section.icon;
             return (
-              <Card key={section.href} className="transition-colors hover:bg-raised">
+              <Card key={section.href} className="transition-colors hover:bg-sunken">
                 <Link href={section.href} className="flex items-center gap-3 px-4 py-3.5">
                   <Icon className="size-5 shrink-0 text-muted" aria-hidden />
                   <div className="min-w-0 flex-1">

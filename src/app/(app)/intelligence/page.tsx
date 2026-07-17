@@ -48,7 +48,7 @@ export default async function IntelligencePage() {
       <>
         <PageHeader title="Intelligence" subtitle={subtitle} />
         <div className="p-4 sm:p-6">
-          <div className="rounded-lg border border-subtle bg-surface px-6 py-14 text-center">
+          <div className="rounded-card border border-subtle bg-surface px-6 py-14 text-center">
             <ChartNoAxesCombined className="mx-auto size-6 text-disabled" aria-hidden />
             <p className="mt-3 text-h3 font-semibold text-primary">
               There is nothing to report yet
@@ -60,7 +60,7 @@ export default async function IntelligencePage() {
             </p>
             <Link
               href="/people"
-              className="mt-4 inline-flex h-9 items-center rounded-md bg-action px-3.5 text-body font-semibold text-action-fg hover:bg-action-hover"
+              className="mt-4 inline-flex h-9 items-center rounded-control bg-action px-3.5 text-body font-semibold text-action-fg hover:bg-action-hover"
             >
               Go to People
             </Link>
@@ -83,7 +83,7 @@ export default async function IntelligencePage() {
         action={
           <Link
             href={action.href}
-            className="inline-flex h-9 items-center rounded-md bg-action px-3.5 text-body font-semibold text-action-fg hover:bg-action-hover"
+            className="inline-flex h-9 items-center rounded-control bg-action px-3.5 text-body font-semibold text-action-fg hover:bg-action-hover"
           >
             {action.label}
           </Link>
@@ -268,7 +268,7 @@ export default async function IntelligencePage() {
                     <li key={row.loanId}>
                       <Link
                         href={`/opportunities/${row.loanId}`}
-                        className="-mx-2 flex items-start justify-between gap-3 rounded px-2 py-1.5 hover:bg-raised"
+                        className="-mx-2 flex items-start justify-between gap-3 rounded px-2 py-1.5 hover:bg-sunken"
                       >
                         <span className="min-w-0">
                           <span className="block truncate font-semibold text-primary">

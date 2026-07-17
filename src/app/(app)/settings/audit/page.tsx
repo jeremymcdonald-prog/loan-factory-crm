@@ -67,14 +67,14 @@ export default async function AuditPage() {
 
       <div className="p-4 sm:p-6">
         {rows.length === 0 ? (
-          <div className="rounded-lg border border-subtle bg-surface px-6 py-14 text-center">
+          <div className="rounded-card border border-subtle bg-surface px-6 py-14 text-center">
             <p className="text-h3 font-semibold text-primary">Nothing recorded yet</p>
             <p className="mx-auto mt-1 max-w-sm text-body text-secondary">
               As your team works, every change lands here.
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-subtle bg-surface">
+          <div className="overflow-x-auto rounded-card border border-subtle bg-surface">
             <table className="w-full min-w-[720px] text-body">
               <caption className="sr-only">Audit log, newest first</caption>
               <thead>

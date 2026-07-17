@@ -43,7 +43,7 @@ export function NewAutomationButton() {
             type="button"
             onClick={() => setOpen(false)}
             aria-label="Close"
-            className="rounded p-1 text-muted hover:bg-raised hover:text-primary"
+            className="rounded p-1 text-muted hover:bg-sunken hover:text-primary"
           >
             <X className="size-4" aria-hidden />
           </button>
