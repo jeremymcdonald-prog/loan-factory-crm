@@ -1,15 +1,18 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Mail, Phone, Building2, ArrowRight, Handshake, MessagesSquare } from "lucide-react";
+import { Mail, Phone, Building2, ArrowRight, Handshake, MessagesSquare, ListChecks } from "lucide-react";
 import { and, desc, inArray, isNull } from "drizzle-orm";
 import { requireUser, queryAs } from "@/lib/auth";
 import {
   getPartner,
   partnerHealth,
+  partnerTasks,
+  partnerTimeline,
   QUIET_AFTER_DAYS,
   CHECKIN_APPROVED,
   type PartnerReferral,
+  type PartnerTimelineItem,
 } from "@/lib/queries/partners";
 import { campaign as campaignTable } from "@/db/schema";
 import { money, moneyCompact, relativeTime, initialsOf, phoneNumber } from "@/lib/format";
@@ -23,12 +26,12 @@ import { LogTouchButton } from "./log-touch-button";
 import { PartnerNotesForm } from "./partner-notes-form";
 import { CheckinActions } from "./checkin-actions";
 import { RecordTools } from "./record-tools";
+import { BioPanel } from "./bio-panel";
 import {
   PARTNER_KIND_LABELS,
   PARTNER_TIER_LABELS,
   PARTNER_TIER_HINTS,
   PARTNER_NEXT_ACTIONS,
-  CHANNEL_LABELS,
 } from "../vocabulary";
 
 export const dynamic = "force-dynamic";
@@ -53,6 +56,13 @@ export default async function PartnerPage({ params }: { params: Promise<{ id: st
     const record = await getPartner(db, user, id);
     if (!record) return null;
 
+    const fullName = `${record.partner.firstName} ${record.partner.lastName}`;
+
+    // Sequential on purpose — one pooled client per transaction (see
+    // marketing.ts, audienceSizes).
+    const timeline = await partnerTimeline(db, id, fullName);
+    const tasks = await partnerTasks(db, fullName);
+
     // The campaigns a partner can be enrolled in — anything not finished.
     const campaigns = await db
       .select({
@@ -70,13 +80,14 @@ export default async function PartnerPage({ params }: { params: Promise<{ id: st
       .orderBy(desc(campaignTable.createdAt))
       .limit(25);
 
-    return { ...record, campaigns };
+    return { ...record, timeline, tasks, campaigns };
   });
   if (!data) notFound();
 
-  const { partner, referrals, messages, verdict, enrollments, campaigns } = data;
+  const { partner, ownerName, referrals, verdict, enrollments, campaigns, timeline, tasks } = data;
   const now = new Date();
   const fullName = `${partner.firstName} ${partner.lastName}`;
+  const openTasks = tasks.filter((t) => t.status === "open");
   const health = partnerHealth(partner.tier, partner.lastTouchAt, now);
   const nextAction = PARTNER_NEXT_ACTIONS[partner.tier] ?? "Follow up";
 
@@ -298,44 +309,27 @@ export default async function PartnerPage({ params }: { params: Promise<{ id: st
             )}
           </Card>
 
-          {/* Contact history — what you've actually said to each other */}
+          <BioPanel
+            partnerId={partner.id}
+            bio={partner.bio}
+            socialLinks={partner.socialLinks}
+            bioResearchedAt={partner.bioResearchedAt ? partner.bioResearchedAt.toISOString() : null}
+            bioSources={partner.bioSources}
+          />
+
+          {/* Activity — the relationship's memory: contact history (touches,
+              notes, drafts — all recorded as messages, since `note` has no
+              partner column), tasks, and campaign enrollments, one timeline,
+              newest first. */}
           <Card>
             <div className="border-b border-subtle px-4 py-3">
-              <h2 className="text-h3 font-semibold text-primary">Contact history</h2>
+              <h2 className="text-h3 font-semibold text-primary">Activity</h2>
             </div>
             <div className="p-4">
-              {messages.length > 0 ? (
+              {timeline.length > 0 ? (
                 <ol className="space-y-3">
-                  {messages.map((m) => (
-                    <li key={m.id} className="border-l-2 border-subtle pl-3">
-                      {m.subject ? (
-                        <p className="text-small font-semibold text-primary">{m.subject}</p>
-                      ) : null}
-                      <p className="mt-0.5 whitespace-pre-wrap text-body text-secondary">
-                        {m.body}
-                      </p>
-                      <p className="mt-1 flex flex-wrap items-center gap-1.5 text-small text-muted">
-                        <span>
-                          {m.direction === "inbound"
-                            ? partner.firstName
-                            : (m.authorName ?? "You")}
-                        </span>
-                        <span aria-hidden>·</span>
-                        <span>{CHANNEL_LABELS[m.channel] ?? m.channel}</span>
-                        <span aria-hidden>·</span>
-                        <time
-                          dateTime={m.occurredAt.toISOString()}
-                          title={m.occurredAt.toLocaleString()}
-                          className="tnum"
-                        >
-                          {relativeTime(m.occurredAt, now)}
-                        </time>
-                        {m.status === "draft" ? (
-                          <Badge tone="neutral">Draft — not sent</Badge>
-                        ) : null}
-                        {m.preparedByAi ? <Badge tone="ai">AI drafted</Badge> : null}
-                      </p>
-                    </li>
+                  {timeline.map((item) => (
+                    <PartnerTimelineEntry key={item.id} item={item} />
                   ))}
                 </ol>
               ) : (
@@ -409,6 +403,43 @@ export default async function PartnerPage({ params }: { params: Promise<{ id: st
 
           <Card>
             <div className="border-b border-subtle px-4 py-3">
+              <h2 className="text-h3 font-semibold text-primary">
+                Tasks
+                {openTasks.length > 0 ? (
+                  <span className="ml-1.5 text-small font-normal text-muted tnum">
+                    {openTasks.length}
+                  </span>
+                ) : null}
+              </h2>
+            </div>
+            <div className="p-4">
+              {openTasks.length > 0 ? (
+                <ul className="space-y-2.5">
+                  {openTasks.map((t) => (
+                    <li key={t.id} className="flex items-start gap-2">
+                      <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-muted" aria-hidden />
+                      <span className="min-w-0">
+                        <span className="block text-body text-primary">{t.title}</span>
+                        <span className="block text-small text-muted tnum">
+                          {t.dueAt ? relativeTime(t.dueAt, now) : "No due date"}
+                        </span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="py-2 text-center">
+                  <ListChecks className="mx-auto size-5 text-disabled" aria-hidden />
+                  <p className="mt-2 text-small text-muted">
+                    Nothing open for {partner.firstName}.
+                  </p>
+                </div>
+              )}
+            </div>
+          </Card>
+
+          <Card>
+            <div className="border-b border-subtle px-4 py-3">
               <h2 className="text-h3 font-semibold text-primary">What to remember</h2>
             </div>
             <div className="p-4">
@@ -453,6 +484,12 @@ export default async function PartnerPage({ params }: { params: Promise<{ id: st
               </div>
               <div>
                 <dt className="text-label font-semibold uppercase tracking-wide text-muted">
+                  Owner
+                </dt>
+                <dd className="mt-0.5 text-body text-primary">{ownerName ?? "Unassigned"}</dd>
+              </div>
+              <div>
+                <dt className="text-label font-semibold uppercase tracking-wide text-muted">
                   Added
                 </dt>
                 <dd className="mt-0.5 text-body text-primary tnum">
@@ -464,6 +501,48 @@ export default async function PartnerPage({ params }: { params: Promise<{ id: st
         </div>
       </div>
     </div>
+  );
+}
+
+/** Tone for a timeline badge — status words map to the chip vocabulary. */
+function partnerBadgeTone(badge: string): "info" | "healthy" | "critical" | "neutral" {
+  if (badge === "Done") return "healthy";
+  if (badge === "Failed") return "critical";
+  if (badge.startsWith("Draft") || badge.startsWith("Awaiting") || badge.startsWith("Approved")) {
+    return "info";
+  }
+  return "neutral";
+}
+
+function PartnerTimelineEntry({ item }: { item: PartnerTimelineItem }) {
+  return (
+    <li className="border-l-2 border-subtle pl-3">
+      <p className="flex flex-wrap items-center gap-1.5">
+        <span className="text-small font-semibold text-primary">{item.title}</span>
+        {item.badge ? <Badge tone={partnerBadgeTone(item.badge)}>{item.badge}</Badge> : null}
+        {item.preparedByAi ? <Badge tone="ai">AI drafted</Badge> : null}
+      </p>
+      {item.body ? (
+        <p className="mt-0.5 line-clamp-3 whitespace-pre-wrap text-body text-secondary">
+          {item.body}
+        </p>
+      ) : null}
+      <p className="mt-1 flex flex-wrap items-center gap-1.5 text-small text-muted">
+        <span>{item.actorName ?? "System"}</span>
+        <span aria-hidden>·</span>
+        <time dateTime={item.at.toISOString()} title={item.at.toLocaleString()}>
+          {relativeTime(item.at)}
+        </time>
+        {item.href ? (
+          <>
+            <span aria-hidden>·</span>
+            <Link href={item.href} className="font-medium text-action hover:underline">
+              Open conversation
+            </Link>
+          </>
+        ) : null}
+      </p>
+    </li>
   );
 }
 

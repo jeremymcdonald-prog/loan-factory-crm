@@ -11,7 +11,7 @@
  * enters by logging a touch.
  */
 import "server-only";
-import { and, asc, eq, isNull, desc, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, isNull, desc, inArray, like, sql } from "drizzle-orm";
 import type { Db } from "@/db";
 import {
   partner,
@@ -21,6 +21,7 @@ import {
   conversation,
   message,
   event,
+  task,
   user as userTable,
 } from "@/db/schema";
 import { seesWholeBook } from "@/lib/roles";
@@ -246,6 +247,19 @@ export async function getPartner(db: Db, currentUser: CurrentUser, partnerId: st
 
   if (!row) return null;
 
+  // The book owner's name for display — a small extra lookup rather than a
+  // join on the row query above, so `row` stays a flat `partner` shape (the
+  // page reads its fields directly, e.g. `partner.firstName`).
+  let ownerName: string | null = null;
+  if (row.ownerUserId) {
+    const [owner] = await db
+      .select({ fullName: userTable.fullName })
+      .from(userTable)
+      .where(eq(userTable.id, row.ownerUserId))
+      .limit(1);
+    ownerName = owner?.fullName ?? null;
+  }
+
   // The people they sent, newest first, with what became of each file.
   const referrals = await db
     .select({
@@ -328,9 +342,201 @@ export async function getPartner(db: Db, currentUser: CurrentUser, partnerId: st
 
   return {
     partner: row,
+    ownerName,
     referrals: referrals as PartnerReferral[],
     messages: messages as PartnerMessage[],
     verdict: verdict ?? null,
     enrollments,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Tasks & activity timeline
+//
+// `task` has no partner column — the schema is fixed — so addPartnerTask and
+// bulkAddTask (partners/[id]/actions.ts, partners/actions.ts) both title the
+// task "<what> — <First> <Last>", and that suffix is the only handle left to
+// find it again here. This is a best-effort match: two partners who share an
+// identical first + last name would surface each other's tasks. That is the
+// same trade-off the write side already accepted; it is not made worse here.
+// ---------------------------------------------------------------------------
+
+export type PartnerTask = {
+  id: string;
+  title: string;
+  status: string;
+  dueAt: Date | null;
+};
+
+/** Open (and recently completed) tasks about a partner, for the Tasks card. */
+export async function partnerTasks(db: Db, fullName: string, limit = 10): Promise<PartnerTask[]> {
+  const rows = await db
+    .select({ id: task.id, title: task.title, status: task.status, dueAt: task.dueAt })
+    .from(task)
+    .where(
+      and(
+        isNull(task.deletedAt),
+        like(task.title, `%— ${fullName}`),
+        inArray(task.status, ["open", "done"]),
+      ),
+    )
+    .orderBy(desc(task.dueAt))
+    .limit(limit);
+  return rows;
+}
+
+export type PartnerTimelineItem = {
+  id: string;
+  kind: "message" | "task" | "event";
+  at: Date;
+  title: string;
+  body: string | null;
+  actorName: string | null;
+  /** Where to go for the full record (a conversation), when there is one. */
+  href: string | null;
+  /** Honest status chip text, e.g. "Draft — not sent". */
+  badge: string | null;
+  preparedByAi: boolean;
+};
+
+const TIMELINE_CHANNEL_LABELS: Record<string, string> = {
+  email: "Email",
+  sms: "Text",
+  video: "Video message",
+  call: "Call",
+  note: "Note",
+  app: "App message",
+};
+
+function timelineMessageTitle(channel: string, direction: string, status: string): string {
+  const label = TIMELINE_CHANNEL_LABELS[channel] ?? channel;
+  if (direction === "inbound") return `${label} received`;
+  if (status === "sent") return `${label} sent`;
+  return `${label} draft`;
+}
+
+function timelineMessageBadge(status: string): string | null {
+  if (status === "draft") return "Draft — not sent";
+  if (status === "awaiting_approval") return "Awaiting approval";
+  if (status === "approved") return "Approved — not sent";
+  if (status === "failed") return "Failed";
+  return null;
+}
+
+/**
+ * Everything that has happened with a partner, newest first: contact-history
+ * messages (which is also where logged touches and standalone notes live —
+ * see logPartnerTouch/addPartnerNote in actions.ts, both of which write to
+ * `message` because `note` has no partner column), tasks, and
+ * campaign-enrollment events, merged into one list. Mirrors personTimeline in
+ * queries/people.ts.
+ *
+ * Reads run sequentially on purpose — everything inside queryAs() shares one
+ * pooled client (see marketing.ts, audienceSizes).
+ */
+export async function partnerTimeline(
+  db: Db,
+  partnerId: string,
+  fullName: string,
+  limit = 60,
+): Promise<PartnerTimelineItem[]> {
+  const items: PartnerTimelineItem[] = [];
+
+  const messages = await db
+    .select({
+      id: message.id,
+      conversationId: message.conversationId,
+      channel: message.channel,
+      direction: message.direction,
+      status: message.status,
+      subject: message.subject,
+      body: message.body,
+      occurredAt: message.occurredAt,
+      preparedByAi: message.preparedByAi,
+      authorName: userTable.fullName,
+    })
+    .from(message)
+    .innerJoin(conversation, eq(conversation.id, message.conversationId))
+    .leftJoin(userTable, eq(userTable.id, message.authorUserId))
+    .where(eq(conversation.partnerId, partnerId))
+    .orderBy(desc(message.occurredAt))
+    .limit(limit);
+
+  for (const m of messages) {
+    items.push({
+      id: `message-${m.id}`,
+      kind: "message",
+      at: m.occurredAt,
+      title: m.subject
+        ? `${timelineMessageTitle(m.channel, m.direction, m.status)} · ${m.subject}`
+        : timelineMessageTitle(m.channel, m.direction, m.status),
+      body: m.body,
+      actorName: m.authorName,
+      href: `/conversations/${m.conversationId}`,
+      badge: timelineMessageBadge(m.status),
+      preparedByAi: m.preparedByAi,
+    });
+  }
+
+  const taskRows = await db
+    .select({
+      id: task.id,
+      title: task.title,
+      status: task.status,
+      createdAt: task.createdAt,
+      ownerName: userTable.fullName,
+    })
+    .from(task)
+    .leftJoin(userTable, eq(userTable.id, task.ownerUserId))
+    .where(and(isNull(task.deletedAt), like(task.title, `%— ${fullName}`)))
+    .orderBy(desc(task.createdAt))
+    .limit(limit);
+
+  for (const t of taskRows) {
+    items.push({
+      id: `task-${t.id}`,
+      kind: "task",
+      at: t.createdAt,
+      title: `Task: ${t.title}`,
+      body: null,
+      actorName: t.ownerName,
+      href: null,
+      badge: t.status === "done" ? "Done" : t.status === "cancelled" ? "Cancelled" : null,
+      preparedByAi: false,
+    });
+  }
+
+  const enrollmentRows = await db
+    .select({
+      id: event.id,
+      payload: event.payload,
+      createdAt: event.createdAt,
+      actorName: userTable.fullName,
+    })
+    .from(event)
+    .leftJoin(userTable, eq(userTable.id, event.actorUserId))
+    .where(
+      and(eq(event.kind, PARTNER_ENROLLED), sql`${event.payload}->>'partnerId' = ${partnerId}`),
+    )
+    .orderBy(desc(event.createdAt))
+    .limit(limit);
+
+  for (const e of enrollmentRows) {
+    const payload = (e.payload ?? {}) as Record<string, unknown>;
+    const campaignName =
+      typeof payload.campaignName === "string" ? payload.campaignName : "Campaign";
+    items.push({
+      id: `event-${e.id}`,
+      kind: "event",
+      at: e.createdAt,
+      title: `Added to drip campaign: ${campaignName}`,
+      body: null,
+      actorName: e.actorName,
+      href: null,
+      badge: "Enrolled — messages queue for sending when a provider is connected",
+      preparedByAi: false,
+    });
+  }
+
+  return items.sort((a, b) => b.at.getTime() - a.at.getTime()).slice(0, limit);
 }

@@ -3,15 +3,17 @@
 import { revalidatePath } from "next/cache";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
-import { partner, conversation, message, event, task, campaign } from "@/db/schema";
+import { partner, conversation, message, event, task, campaign, type BioSource } from "@/db/schema";
 import type { Db } from "@/db";
-import { requireUser, queryAs } from "@/lib/auth";
+import { requireUser, queryAs, seesWholeBook, type CurrentUser } from "@/lib/auth";
 import { recordAudit } from "@/lib/audit";
 import {
   CHECKIN_APPROVED,
   CHECKIN_SKIPPED,
   PARTNER_ENROLLED,
 } from "@/lib/queries/partners";
+import { draftBio, type BioDraft } from "@/lib/bio/mock";
+import { validateSocialLinks } from "@/lib/bio/validate";
 
 export type TouchState = { error?: string };
 
@@ -596,6 +598,297 @@ export async function enrollPartnerInCampaign(
       return { error: "They're already on that campaign." };
     }
     return { error: "We couldn't record that. Try again." };
+  }
+
+  revalidatePath(`/partners/${partnerId}`);
+  return {};
+}
+
+// ---------------------------------------------------------------------------
+// Bio & Online Presence
+//
+// Honesty rule (Jeremy, 2026-07-16): no web-search provider is connected here.
+// "Draft bio with AI" runs a local, pure mock generator (src/lib/bio/mock.ts)
+// and returns a preview — it never touches the network and never writes to
+// the database on its own. Only a human clicking Accept persists anything,
+// and only what's in the (possibly hand-edited) preview at that moment.
+// Same contract, same generator, same validator as the People bio panel
+// (people/[id]/actions.ts) — reused as-is, not reimplemented.
+// ---------------------------------------------------------------------------
+
+/**
+ * Load a partner and re-check book scope server-side (owner or a role that
+ * sees the whole book) — the client's word on who they can act on is never
+ * trusted, even though RLS already keeps the row inside the tenant.
+ */
+async function getScopedPartner(db: Db, user: CurrentUser, partnerId: string) {
+  const [target] = await db
+    .select()
+    .from(partner)
+    .where(and(eq(partner.id, partnerId), isNull(partner.deletedAt)))
+    .limit(1);
+  if (!target) throw new Error("not-visible");
+  if (!seesWholeBook(user.role) && target.ownerUserId !== user.userId) {
+    throw new Error("not-visible");
+  }
+  return target;
+}
+
+const SavePartnerBioSchema = z.object({
+  partnerId: z.string().uuid(),
+  bio: z.string().optional(),
+});
+
+/** Manual bio edit — the always-available path, independent of any AI draft. */
+export async function savePartnerBio(_prev: TouchState, formData: FormData): Promise<TouchState> {
+  const user = await requireUser();
+
+  const parsed = SavePartnerBioSchema.safeParse({
+    partnerId: formData.get("partnerId"),
+    bio: formData.get("bio") ?? undefined,
+  });
+  if (!parsed.success) {
+    return { error: "Check the bio and try again." };
+  }
+
+  const { partnerId } = parsed.data;
+  // An empty save clears the bio — "No bio yet" is an honest state, not a
+  // placeholder to fight around.
+  const bio = parsed.data.bio?.trim() || null;
+
+  try {
+    await queryAs(user, async (db) => {
+      const target = await getScopedPartner(db, user, partnerId);
+
+      await db
+        .update(partner)
+        .set({ bio, updatedAt: new Date() })
+        .where(eq(partner.id, partnerId));
+
+      await recordAudit(db, user, {
+        action: "partner.bio_updated",
+        entity: "partner",
+        entityId: partnerId,
+        changes: { bio: { from: target.bio, to: bio } },
+      });
+    });
+  } catch {
+    return { error: "We couldn't save that bio. Try again." };
+  }
+
+  revalidatePath(`/partners/${partnerId}`);
+  return {};
+}
+
+export type DraftPartnerBioState = {
+  draft?: BioDraft;
+  error?: string;
+  /** The seed used for the last draft — "Regenerate" bumps this by one. */
+  seed: number;
+};
+
+const DraftPartnerBioSchema = z.object({ partnerId: z.string().uuid() });
+
+/**
+ * Draft a bio with the mock generator. This is a preview only: it records an
+ * audit entry (so there's a trail that a demo draft was generated) but writes
+ * nothing to `partner` — Accept is the only path that persists anything.
+ */
+export async function draftPartnerBioWithAi(
+  prev: DraftPartnerBioState,
+  formData: FormData,
+): Promise<DraftPartnerBioState> {
+  const user = await requireUser();
+
+  const parsed = DraftPartnerBioSchema.safeParse({ partnerId: formData.get("partnerId") });
+  if (!parsed.success) {
+    return { ...prev, error: "We couldn't draft a bio for this record." };
+  }
+
+  const { partnerId } = parsed.data;
+  const nextSeed = prev.seed + 1;
+
+  try {
+    const info = await queryAs(user, async (db) => {
+      const target = await getScopedPartner(db, user, partnerId);
+
+      await recordAudit(db, user, {
+        action: "partner.bio_drafted",
+        entity: "partner",
+        entityId: partnerId,
+        changes: { seed: { from: prev.seed, to: nextSeed } },
+      });
+
+      return target;
+    });
+
+    const draft = draftBio({
+      firstName: info.firstName,
+      lastName: info.lastName,
+      company: info.company,
+      // `partner` has no city/address field today — only company, kind, and
+      // language feed the draft.
+      city: null,
+      role: info.kind,
+      language: info.preferredLanguage,
+      seed: nextSeed,
+    });
+
+    return { draft, seed: nextSeed };
+  } catch {
+    return { ...prev, error: "We couldn't draft a bio right now. Try again." };
+  }
+}
+
+export type AcceptPartnerBioState = { error?: string; accepted?: boolean };
+
+const AcceptPartnerBioSchema = z.object({
+  partnerId: z.string().uuid(),
+  bio: z.string().trim().min(1, "There's no draft text to save."),
+  sourcesJson: z.string(),
+});
+
+/**
+ * Accept a draft — the only step that writes to `partner`. Persists exactly
+ * the text on screen (edited or not), stamps `bioResearchedAt`, and saves the
+ * sources the draft cited, so the panel can keep showing where the last
+ * accepted draft said it looked. It does not touch `socialLinks` — suggested
+ * links are offered separately and only saved if the team explicitly adds
+ * them via the link editor.
+ */
+export async function acceptPartnerBioDraft(
+  _prev: AcceptPartnerBioState,
+  formData: FormData,
+): Promise<AcceptPartnerBioState> {
+  const user = await requireUser();
+
+  const parsed = AcceptPartnerBioSchema.safeParse({
+    partnerId: formData.get("partnerId"),
+    bio: formData.get("bio"),
+    sourcesJson: formData.get("sourcesJson"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "We couldn't save that draft." };
+  }
+
+  const { partnerId, bio } = parsed.data;
+
+  let sources: BioSource[] = [];
+  try {
+    const rawSources: unknown = JSON.parse(parsed.data.sourcesJson);
+    if (Array.isArray(rawSources)) {
+      sources = rawSources.filter(
+        (s): s is BioSource =>
+          Boolean(s) && typeof s === "object" && typeof (s as BioSource).label === "string",
+      );
+    }
+  } catch {
+    sources = [];
+  }
+
+  const now = new Date();
+
+  try {
+    await queryAs(user, async (db) => {
+      const target = await getScopedPartner(db, user, partnerId);
+
+      await db
+        .update(partner)
+        .set({ bio, bioResearchedAt: now, bioSources: sources, updatedAt: now })
+        .where(eq(partner.id, partnerId));
+
+      await recordAudit(db, user, {
+        action: "partner.bio_updated",
+        entity: "partner",
+        entityId: partnerId,
+        changes: {
+          bio: { from: target.bio, to: bio },
+          bioResearchedAt: { from: target.bioResearchedAt, to: now },
+        },
+      });
+    });
+  } catch {
+    return { error: "We couldn't save that bio. Try again." };
+  }
+
+  revalidatePath(`/partners/${partnerId}`);
+  return { accepted: true };
+}
+
+const SavePartnerSocialLinksSchema = z.object({
+  partnerId: z.string().uuid(),
+  facebook: z.string().optional(),
+  instagram: z.string().optional(),
+  tiktok: z.string().optional(),
+  linkedin: z.string().optional(),
+  youtube: z.string().optional(),
+  website: z.string().optional(),
+  otherJson: z.string().optional(),
+});
+
+/** Manual social-link editor — validated and normalized, never auto-saved. */
+export async function savePartnerSocialLinks(
+  _prev: TouchState,
+  formData: FormData,
+): Promise<TouchState> {
+  const user = await requireUser();
+
+  const parsed = SavePartnerSocialLinksSchema.safeParse({
+    partnerId: formData.get("partnerId"),
+    facebook: formData.get("facebook") ?? undefined,
+    instagram: formData.get("instagram") ?? undefined,
+    tiktok: formData.get("tiktok") ?? undefined,
+    linkedin: formData.get("linkedin") ?? undefined,
+    youtube: formData.get("youtube") ?? undefined,
+    website: formData.get("website") ?? undefined,
+    otherJson: formData.get("otherJson") ?? undefined,
+  });
+  if (!parsed.success) {
+    return { error: "Check the links and try again." };
+  }
+
+  let other: unknown = [];
+  if (parsed.data.otherJson) {
+    try {
+      other = JSON.parse(parsed.data.otherJson);
+    } catch {
+      return { error: "Something went wrong reading the extra links. Try again." };
+    }
+  }
+
+  const { links, errors } = validateSocialLinks({
+    facebook: parsed.data.facebook,
+    instagram: parsed.data.instagram,
+    tiktok: parsed.data.tiktok,
+    linkedin: parsed.data.linkedin,
+    youtube: parsed.data.youtube,
+    website: parsed.data.website,
+    other,
+  });
+  if (errors.length) {
+    return { error: errors[0] };
+  }
+
+  const { partnerId } = parsed.data;
+
+  try {
+    await queryAs(user, async (db) => {
+      const target = await getScopedPartner(db, user, partnerId);
+
+      await db
+        .update(partner)
+        .set({ socialLinks: links, updatedAt: new Date() })
+        .where(eq(partner.id, partnerId));
+
+      await recordAudit(db, user, {
+        action: "partner.links_updated",
+        entity: "partner",
+        entityId: partnerId,
+        changes: { socialLinks: { from: target.socialLinks, to: links } },
+      });
+    });
+  } catch {
+    return { error: "We couldn't save those links. Try again." };
   }
 
   revalidatePath(`/partners/${partnerId}`);
