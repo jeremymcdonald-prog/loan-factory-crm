@@ -127,6 +127,79 @@ export function audienceOption(type: string): AudienceOption | undefined {
   return AUDIENCES.find((a) => a.type === type);
 }
 
+// --- Campaign languages ------------------------------------------------------
+
+/**
+ * The languages a campaign can be written in. English is the default — the
+ * unmarked case everywhere in this app. The database enum also holds `zh`, but
+ * Chinese is not offered here yet: the template library carries no reviewed
+ * Chinese copy, and a language nobody has translation review for must not be
+ * one click away.
+ */
+export const CAMPAIGN_LANGUAGE_CODES = ["en", "es", "vi", "ru"] as const;
+
+export type CampaignLanguage = (typeof CAMPAIGN_LANGUAGE_CODES)[number];
+
+export const CAMPAIGN_LANGUAGES: { code: CampaignLanguage; name: string }[] = [
+  { code: "en", name: "English" },
+  { code: "es", name: "Spanish" },
+  { code: "vi", name: "Vietnamese" },
+  { code: "ru", name: "Russian" },
+];
+
+export function campaignLanguageName(code: string): string {
+  return CAMPAIGN_LANGUAGES.find((l) => l.code === code)?.name ?? code.toUpperCase();
+}
+
+export function isCampaignLanguage(value: string): value is CampaignLanguage {
+  return (CAMPAIGN_LANGUAGE_CODES as readonly string[]).includes(value);
+}
+
+// --- Who may manage campaigns ------------------------------------------------
+
+/**
+ * Everyone who runs marketing may manage campaigns: LOs and their assistants
+ * own their book's campaigns, leaders and admins see the whole book, the agent
+ * relationship manager runs partner campaigns, and the marketing coordinator's
+ * whole job is this module. Processors work files, not marketing — they are
+ * the one role left out. Which campaigns a manager can actually touch is still
+ * decided by book scope in @/lib/queries/marketing, not by this list.
+ */
+export const CAMPAIGN_MANAGER_ROLES = [
+  "lo",
+  "lo_assistant",
+  "team_leader",
+  "branch_leader",
+  "agent_rel_manager",
+  "marketing_coordinator",
+  "admin",
+] as const;
+
+export function canManageCampaigns(role: string): boolean {
+  return (CAMPAIGN_MANAGER_ROLES as readonly string[]).includes(role);
+}
+
+// --- Drip sequences ----------------------------------------------------------
+
+/** The channels a drip step can go out on. Calls are never dripped. */
+export const DRIP_CHANNELS = ["email", "sms"] as const;
+
+export type DripChannel = (typeof DRIP_CHANNELS)[number];
+
+export const DRIP_CHANNEL_LABELS: Record<DripChannel, string> = {
+  email: "Email",
+  sms: "Text message",
+};
+
+export type DripStep = { day: number; channel: string; subject: string };
+
+/** More steps than this is not a drip, it is a nuisance. */
+export const MAX_DRIP_STEPS = 12;
+
+export function dripChannelLabel(channel: string): string {
+  return DRIP_CHANNEL_LABELS[channel as DripChannel] ?? channel;
+}
+
 // --- Campaign status ---------------------------------------------------------
 
 /**
@@ -154,6 +227,23 @@ export const CAMPAIGN_STATUS: Record<CampaignStatus, { label: string; blurb: str
 export function campaignStatusLabel(status: string): string {
   return CAMPAIGN_STATUS[status as CampaignStatus]?.label ?? status;
 }
+
+/** Pause only stops something that is going: running is the one pausable state. */
+export function canPause(status: string): boolean {
+  return status === "running";
+}
+
+/** Draft, scheduled, and paused can all be set running. Finished stays finished. */
+export function canActivate(status: string): boolean {
+  return status === "draft" || status === "scheduled" || status === "paused";
+}
+
+/**
+ * What "Activate" honestly does in this demo. Shown wherever the button is, so
+ * nobody believes a click sends mail.
+ */
+export const ACTIVATE_HONESTY =
+  "Activate marks the campaign running in the CRM. Nothing sends yet — sends start when sending providers are connected, and drafts queue for approval first.";
 
 /**
  * Open rate, the only derived number on the dashboard. Null below one send —

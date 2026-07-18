@@ -16,6 +16,11 @@ const PREFS: { key: string; label: string; description: string }[] = [
     description: "A nudge when a task you own comes due.",
   },
   {
+    key: "leadAssigned",
+    label: "Lead assigned to me",
+    description: "The moment a new lead lands on your plate, so speed-to-contact stays fast.",
+  },
+  {
     key: "approvalAlerts",
     label: "AI approval alerts",
     description: "Know when the AI assistant has prepared something waiting on your approval.",

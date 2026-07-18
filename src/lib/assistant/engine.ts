@@ -18,7 +18,7 @@ import type { CurrentUser } from "@/lib/auth";
 import { seesWholeBook } from "@/lib/roles";
 import { buildQueue } from "@/lib/queries/today";
 import { pipelineTotals, listPipeline } from "@/lib/queries/pipeline";
-import { moneyCompact, shortDate } from "@/lib/format";
+import { moneyCompact, shortDate, countdown } from "@/lib/format";
 import { phaseOf, stageLabel, stallDays, type Stage } from "@/lib/stages";
 import { PREVIEW_NOTE, type AssistantIntent } from "./router";
 
@@ -54,27 +54,120 @@ function bookScope(u: CurrentUser) {
   return seesWholeBook(u.role) ? undefined : eq(loan.loUserId, u.userId);
 }
 
+/** How a lead's source reads inside a "Call X — new … lead" sentence. */
+const LEAD_SOURCE_PHRASES: Record<string, string> = {
+  facebook_ads: "Facebook",
+  lf_website: "website",
+  qm_pricer: "QM Pricer rate-alert",
+  partner_referral: "partner-referral",
+  csv_import: "imported",
+};
+
 async function focusToday(db: Db, user: CurrentUser, now: Date): Promise<string> {
   const items = await buildQueue(db, user, now);
   if (items.length === 0) {
     return `You're caught up — nothing needs you right now. A good use of the gap: pick one past client and check in.\n\n${PREVIEW_NOTE}`;
   }
 
-  const top = items.slice(0, 5);
-  const lines = top.map((i, n) => `${n + 1}. ${i.headline}`);
-  const approvals = items.filter((i) => i.cls === "ai_approval").length;
+  // New leads lead the answer, so they get a richer line than the queue
+  // headline: source and wait time make the recommended action concrete.
+  const waitingLeads = await db
+    .select({
+      firstName: person.firstName,
+      lastName: person.lastName,
+      capturedAt: lead.capturedAt,
+      channel: sql<string | null>`${lead.source}->>'channel'`,
+    })
+    .from(lead)
+    .innerJoin(loan, eq(loan.id, lead.loanId))
+    .innerJoin(person, eq(person.id, lead.personId))
+    .where(
+      and(
+        isNull(lead.firstResponseAt),
+        eq(loan.status, "active"),
+        isNull(loan.deletedAt),
+        bookScope(user),
+      ),
+    )
+    .orderBy(asc(lead.capturedAt))
+    .limit(5);
 
-  return [
-    `Here's your day, most urgent first:`,
-    "",
-    ...lines,
-    "",
-    approvals > 0
-      ? `${approvals} AI draft${approvals === 1 ? " is" : "s are"} waiting for your approval in the queue below.`
-      : `Nothing is waiting on an approval right now.`,
-    "",
-    PREVIEW_NOTE,
-  ].join("\n");
+  const followUps = items.filter((i) => i.cls === "overdue_task");
+  const stalled = items.filter((i) => i.cls === "stalled");
+  const locks = items.filter((i) => i.cls === "deadline" && i.id.startsWith("lock-"));
+  const expiredLocks = locks.filter((i) => i.headline.includes("expired"));
+  const upcomingLocks = locks.filter((i) => !i.headline.includes("expired"));
+  const closings = items.filter((i) => i.cls === "deadline" && i.id.startsWith("closing-"));
+  const approvals = items.filter((i) => i.cls === "ai_approval");
+
+  const sections: { title: string; lines: string[] }[] = [];
+
+  // 1. New leads needing contact — always first, always by name.
+  const leadCount = items.filter((i) => i.cls === "new_lead").length;
+  if (waitingLeads.length > 0) {
+    sections.push({
+      title: `New leads needing contact (${leadCount})`,
+      lines: waitingLeads.map((w) => {
+        const c = countdown(w.capturedAt, now);
+        const source = LEAD_SOURCE_PHRASES[w.channel ?? ""];
+        return `• Call ${w.firstName} ${w.lastName} — new ${source ? `${source} ` : ""}lead, no contact yet${c ? ` (waiting ${c.label})` : ""}`;
+      }),
+    });
+  }
+
+  // 2. Applications needing follow-up — the overdue work on files.
+  if (followUps.length > 0) {
+    sections.push({
+      title: `Applications needing follow-up (${followUps.length})`,
+      lines: followUps
+        .slice(0, 5)
+        .map(
+          (t) =>
+            `• ${t.personName ? `${t.personName} — ` : ""}${t.headline} (overdue)`,
+        ),
+    });
+  }
+
+  // 3. Loans needing attention — quiet files and locks already in trouble.
+  if (stalled.length > 0 || expiredLocks.length > 0) {
+    sections.push({
+      title: `Loans needing attention (${stalled.length + expiredLocks.length})`,
+      lines: [
+        ...expiredLocks.map((l) => `• ${l.headline} — this needs you personally`),
+        ...stalled.slice(0, 5).map((s) => `• ${s.headline} — a call restarts the file`),
+      ],
+    });
+  }
+
+  // 4. Approvals waiting — drafts never send themselves.
+  if (approvals.length > 0) {
+    sections.push({
+      title: `Approvals waiting (${approvals.length})`,
+      lines: [
+        ...approvals
+          .slice(0, 3)
+          .map((a) => `• ${a.headline}${a.personName ? ` — ${a.personName}` : ""}`),
+        `Nothing goes out until you approve it.`,
+      ],
+    });
+  }
+
+  // 5. Closings and expiring locks in the next 7 days.
+  if (closings.length > 0 || upcomingLocks.length > 0) {
+    sections.push({
+      title: `Closings and expiring locks in the next 7 days (${closings.length + upcomingLocks.length})`,
+      lines: [...closings, ...upcomingLocks].slice(0, 5).map((d) => `• ${d.headline}`),
+    });
+  }
+
+  const out: string[] = [
+    waitingLeads.length > 0
+      ? `Here's your day, in priority order — new leads first:`
+      : `Here's your day, in priority order:`,
+  ];
+  sections.forEach((s, i) => out.push("", `${i + 1}. ${s.title}`, ...s.lines));
+  out.push("", PREVIEW_NOTE);
+  return out.join("\n");
 }
 
 async function draftOverdueFollowups(db: Db, user: CurrentUser, now: Date): Promise<string> {

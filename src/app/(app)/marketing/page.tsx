@@ -193,7 +193,14 @@ export default async function MarketingPage({
                       >
                         <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
                           <div className="min-w-0">
-                            <h3 className="text-body font-semibold text-primary">{c.name}</h3>
+                            <h3 className="text-body font-semibold text-primary">
+                              <Link
+                                href={`/marketing/campaigns/${c.id}`}
+                                className="hover:text-action hover:underline"
+                              >
+                                {c.name}
+                              </Link>
+                            </h3>
 
                             {/* Who it goes to, in the words the LO chose it by. */}
                             <p className="mt-0.5 text-small text-secondary">

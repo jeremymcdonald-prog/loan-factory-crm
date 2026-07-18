@@ -1,15 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Users } from "lucide-react";
+import { Users, FileUp } from "lucide-react";
 import { requireUser, queryAs } from "@/lib/auth";
-import { listPeople, countPeopleByType } from "@/lib/queries/people";
-import { personUrgency } from "@/lib/person-urgency";
-import { moneyCompact, relativeTime, initialsOf } from "@/lib/format";
+import { listPeople, countPeopleByType, listCampaignChoices } from "@/lib/queries/people";
 import { PageHeader } from "@/components/shell/page-header";
-import { StageChip } from "@/components/crm/stage-chip";
-import { LanguageBadge } from "@/components/crm/language-badge";
-import { Badge, UrgencyDot } from "@/components/ui/badge";
 import { NewPersonButton } from "./new-person-button";
+import { PeopleTable } from "./people-table";
 import { cn } from "@/lib/cn";
 
 export const metadata: Metadata = { title: "People" };
@@ -31,19 +27,29 @@ export default async function PeoplePage({
   const { q, type = "all" } = await searchParams;
   const user = await requireUser();
 
-  const { rows, counts } = await queryAs(user, async (db) => ({
+  const { rows, counts, campaigns } = await queryAs(user, async (db) => ({
     rows: await listPeople(db, user, { q, type }),
     counts: await countPeopleByType(db, user),
+    campaigns: await listCampaignChoices(db, user),
   }));
-
-  const now = new Date();
 
   return (
     <>
       <PageHeader
         title="People"
         subtitle="Everyone you're working with — leads, borrowers, past clients, and your sphere."
-        action={<NewPersonButton />}
+        action={
+          <div className="flex items-center gap-2">
+            <Link
+              href="/people/import"
+              className="inline-flex h-9 items-center gap-2 rounded-control border border-strong bg-surface px-3.5 text-body font-semibold text-primary shadow-e1 hover:bg-sunken"
+            >
+              <FileUp className="size-4" aria-hidden />
+              Import
+            </Link>
+            <NewPersonButton />
+          </div>
+        }
       />
 
       <div className="px-4 py-4 sm:px-6">
@@ -101,100 +107,7 @@ export default async function PeoplePage({
             </p>
           </div>
         ) : (
-          <div className="mt-4 overflow-hidden rounded-card border border-subtle bg-surface">
-            <table className="w-full text-body">
-              <caption className="sr-only">People</caption>
-              <thead>
-                <tr className="border-b border-subtle bg-sunken text-label uppercase tracking-wide text-muted">
-                  <th scope="col" className="px-4 py-2 text-left font-semibold">
-                    Name
-                  </th>
-                  <th scope="col" className="hidden px-4 py-2 text-left font-semibold md:table-cell">
-                    Stage
-                  </th>
-                  <th scope="col" className="hidden px-4 py-2 text-left font-semibold lg:table-cell">
-                    Needs attention
-                  </th>
-                  <th scope="col" className="hidden px-4 py-2 text-right font-semibold sm:table-cell">
-                    Amount
-                  </th>
-                  <th scope="col" className="px-4 py-2 text-right font-semibold">
-                    Last activity
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => {
-                  const urgency = personUrgency(row, now);
-
-                  return (
-                    <tr
-                      key={row.id}
-                      className="border-b border-subtle last:border-0 hover:bg-sunken"
-                    >
-                      <td className="px-4 py-2.5">
-                        <Link href={`/people/${row.id}`} className="flex items-center gap-2.5">
-                          <span className="grid size-7 shrink-0 place-items-center rounded-full bg-sunken text-label font-semibold text-secondary">
-                            {initialsOf(`${row.firstName} ${row.lastName}`)}
-                          </span>
-                          <span className="min-w-0">
-                            <span className="flex items-center gap-1.5">
-                              <span className="truncate font-semibold text-primary">
-                                {row.firstName} {row.lastName}
-                              </span>
-                              <LanguageBadge language={row.preferredLanguage} />
-                              {row.doNotContact ? (
-                                <Badge tone="critical">Do not contact</Badge>
-                              ) : null}
-                            </span>
-                            <span className="block truncate text-small text-muted">
-                              {row.emails?.[0]?.address ?? "—"}
-                            </span>
-                          </span>
-                        </Link>
-                      </td>
-
-                      <td className="hidden px-4 py-2.5 md:table-cell">
-                        {row.stage ? (
-                          <StageChip stage={row.stage} />
-                        ) : (
-                          <span className="text-small text-muted">No opportunity</span>
-                        )}
-                      </td>
-
-                      <td className="hidden px-4 py-2.5 lg:table-cell">
-                        {urgency?.label && urgency.level !== "healthy" && urgency.level !== "neutral" ? (
-                          <span className="inline-flex items-center gap-1.5">
-                            <UrgencyDot tone={urgency.level} />
-                            <span
-                              className={cn(
-                                "text-small",
-                                urgency.level === "critical" && "font-semibold text-critical",
-                                urgency.level === "warning" && "text-warning",
-                                urgency.level === "info" && "text-info",
-                              )}
-                            >
-                              {urgency.label}
-                            </span>
-                          </span>
-                        ) : (
-                          <span className="text-small text-disabled">—</span>
-                        )}
-                      </td>
-
-                      <td className="hidden px-4 py-2.5 text-right text-secondary tnum sm:table-cell">
-                        {moneyCompact(row.amount)}
-                      </td>
-
-                      <td className="px-4 py-2.5 text-right text-small text-muted tnum">
-                        {relativeTime(row.lastActivityAt)}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <PeopleTable rows={rows} campaigns={campaigns} />
         )}
 
         {rows.length >= 200 ? (

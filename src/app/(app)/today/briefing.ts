@@ -61,8 +61,12 @@ export function buildBriefing(
 
   const sentences: string[] = [];
 
-  // 1. A one-line read of the day.
+  // 1. A one-line read of the day — leads first, mirroring the assistant's
+  //    priority order (new leads, then follow-ups, then deadline work).
   const dayRead: string[] = [];
+  if (newLeads.length) {
+    dayRead.push(`${newLeads.length} new lead${newLeads.length === 1 ? "" : "s"} to call`);
+  }
   if (closings.length) {
     dayRead.push(`${closings.length} closing${closings.length === 1 ? "" : "s"} this week`);
   }
@@ -75,7 +79,23 @@ export function buildBriefing(
       : `${dateLine}. Nothing is at a deadline today.`,
   );
 
-  // 2. Deadline risk comes first — it's what costs deals.
+  // 2. New leads come first — speed-to-lead is what wins deals.
+  if (newLeads.length) {
+    const oldest = newLeads[0];
+    sentences.push(
+      newLeads.length === 1
+        ? `One new lead is waiting on a first call: ${oldest.personName}. Call them first.`
+        : `${newLeads.length} new leads are waiting on a first call — the oldest is ${oldest.personName}. Start there.`,
+    );
+  }
+
+  // 3. What's slipping — follow-ups owed and files gone quiet.
+  const slipping: string[] = [];
+  if (overdue.length) slipping.push(`${overdue.length} overdue follow-up${overdue.length === 1 ? "" : "s"}`);
+  if (stalled.length) slipping.push(`${stalled.length} file${stalled.length === 1 ? "" : "s"} that ${stalled.length === 1 ? "has" : "have"} gone quiet`);
+  if (slipping.length) sentences.push(`You also have ${slipping.join(" and ")}.`);
+
+  // 4. Deadline risk — locks, then closings.
   for (const lock of locks.slice(0, 2)) {
     sentences.push(`${lock.headline}. ${lock.detail ?? ""}`.trim());
   }
@@ -88,28 +108,12 @@ export function buildBriefing(
     );
   }
 
-  // 3. Overnight inputs.
-  if (newLeads.length) {
-    const oldest = newLeads[0];
-    sentences.push(
-      newLeads.length === 1
-        ? `One new lead is waiting on a first call: ${oldest.personName}.`
-        : `${newLeads.length} new leads are waiting on a first call — the oldest is ${oldest.personName}.`,
-    );
-  }
-
-  // 4. Approvals waiting.
+  // 5. Approvals waiting.
   if (approvals.length) {
     sentences.push(
       `AI has ${approvals.length} thing${approvals.length === 1 ? "" : "s"} ready for your approval. Nothing goes out until you say so.`,
     );
   }
-
-  // 5. What's slipping.
-  const slipping: string[] = [];
-  if (overdue.length) slipping.push(`${overdue.length} overdue task${overdue.length === 1 ? "" : "s"}`);
-  if (stalled.length) slipping.push(`${stalled.length} file${stalled.length === 1 ? "" : "s"} that ${stalled.length === 1 ? "has" : "have"} gone quiet`);
-  if (slipping.length) sentences.push(`You also have ${slipping.join(" and ")}.`);
 
   if (appts.length) {
     sentences.push(
@@ -119,8 +123,12 @@ export function buildBriefing(
     );
   }
 
-  // 6. One suggested focus — the top three items by rank.
-  const top = items.slice(0, 3);
+  // 6. One suggested focus — the top three items in briefing priority order.
+  const prioritized = [...items].sort(
+    (a, b) =>
+      briefingRank(a) - briefingRank(b) || a.hours - b.hours || b.amount - a.amount,
+  );
+  const top = prioritized.slice(0, 3);
   const focus =
     top.length >= 2
       ? `If you only do three things today: ${top
@@ -137,8 +145,8 @@ export function buildBriefing(
 
   const trimmed = sentences.filter(Boolean).slice(0, 6);
 
-  // The three highest-ranked items become real, tappable actions.
-  const topActions: BriefingAction[] = items.slice(0, 3).map((item) => ({
+  // The three highest-priority items become real, tappable actions.
+  const topActions: BriefingAction[] = top.map((item) => ({
     label: capitalise(focusPhrase(item)),
     href: item.href,
     actionLabel: item.actionLabel,
@@ -153,6 +161,31 @@ export function buildBriefing(
     sentences: trimmed,
     focus,
   };
+}
+
+/**
+ * The briefing's own priority order — new leads first, then follow-ups, then
+ * files needing attention (quiet files and locks), then approvals, then
+ * closings. The queue keeps its deadline-first CLASS_RANK; this ordering is
+ * only for what the briefing surfaces most prominently.
+ */
+function briefingRank(item: QueueItem): number {
+  switch (item.cls) {
+    case "new_lead":
+      return 1;
+    case "overdue_task":
+      return 2;
+    case "stalled":
+      return 3;
+    case "deadline":
+      return item.id.startsWith("lock-") ? 3 : 5;
+    case "ai_approval":
+      return 4;
+    case "appointment":
+      return 6;
+    default:
+      return 7;
+  }
 }
 
 function focusPhrase(item: QueueItem): string {

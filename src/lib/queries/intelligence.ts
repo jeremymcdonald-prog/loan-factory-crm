@@ -1,311 +1,307 @@
 /**
- * Intelligence queries — the CRM's report on how the team actually works.
+ * Intelligence queries — production reporting for a loan officer or a team.
  *
- * Every number here is counted in SQL from rows the team entered themselves.
- * Nothing is modelled, forecast, or estimated. Nothing crosses the CRM boundary
- * (D-22): there is no revenue, no margin, no pricing, and no loan-of-record
- * data in this file. The questions are all relationship questions — how fast a
- * lead gets answered, whether follow-ups get done, which files have gone quiet.
+ * Every number is counted in SQL from rows the team entered themselves.
+ * Nothing is modelled, forecast, or estimated, and nothing crosses the CRM
+ * boundary (D-22): no revenue, no margin, no pricing. Volume is the sum of
+ * amounts the team typed on their own opportunities — a relationship fact.
  *
- * Where a metric has nothing behind it the query returns null rather than 0, so
- * the screen can say "no data yet" instead of implying a real zero.
+ * Two dimensions run through every read:
+ *  - scope: "own" (one loan officer's book) or "team" (the whole tenant's).
+ *    A leader (seesWholeBook) can toggle; everyone else is fenced to "own".
+ *  - range: [from, to) — inclusive start, exclusive end, resolved by the page.
+ *
+ * Where a metric has nothing behind it the query returns null rather than 0,
+ * so the screen can say "no data yet" instead of implying a real zero.
  */
 import "server-only";
-import { and, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
+import {
+  and,
+  desc,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  sql,
+  type AnyColumn,
+  type SQL,
+} from "drizzle-orm";
 import type { Db } from "@/db";
 import {
   campaign,
+  event,
   lead,
   loan,
   loanStageHistory,
   partner,
   partnerRelationship,
   person,
-  task,
-  user,
 } from "@/db/schema";
 import { seesWholeBook } from "@/lib/roles";
 import type { CurrentUser } from "@/lib/auth";
-import {
-  MACRO_PHASES,
-  PHASE_LABELS,
-  phaseOf,
-  stagesIn,
-  stallDays,
-  type MacroPhase,
-  type Stage,
-} from "@/lib/stages";
+import { stagesIn } from "@/lib/stages";
 
-// --- Scope -------------------------------------------------------------------
-// RLS already fences the tenant. These add the role rule on top: a loan officer
-// reads their own book, a leader reads the whole team's.
+// --- Scope & range -----------------------------------------------------------
 
-function ownBookOnly(u: CurrentUser): boolean {
-  return !seesWholeBook(u.role);
+export type ReportScope = "own" | "team";
+
+export type DateRange = { from: Date; to: Date };
+
+/**
+ * The scope this user is allowed to run the report at. A leader may ask for
+ * either; a loan officer always gets their own book no matter what the URL says.
+ */
+export function resolveScope(u: CurrentUser, requested: string | undefined): ReportScope {
+  if (!seesWholeBook(u.role)) return "own";
+  return requested === "me" ? "own" : "team";
 }
 
-const loanScope = (u: CurrentUser) => (ownBookOnly(u) ? eq(loan.loUserId, u.userId) : undefined);
-const taskScope = (u: CurrentUser) => (ownBookOnly(u) ? eq(task.ownerUserId, u.userId) : undefined);
-const leadScope = (u: CurrentUser) =>
-  ownBookOnly(u) ? eq(lead.assignedUserId, u.userId) : undefined;
-const partnerScope = (u: CurrentUser) =>
-  ownBookOnly(u) ? eq(partner.ownerUserId, u.userId) : undefined;
-const campaignScope = (u: CurrentUser) =>
-  ownBookOnly(u) ? eq(campaign.ownerUserId, u.userId) : undefined;
-const userScope = (u: CurrentUser) => (ownBookOnly(u) ? eq(user.id, u.userId) : undefined);
+// RLS already fences the tenant. These add the role rule on top: "own" reads
+// one person's book, "team" reads everything the tenant holds.
+const loanScope = (u: CurrentUser, s: ReportScope) =>
+  s === "own" ? eq(loan.loUserId, u.userId) : undefined;
+const leadScope = (u: CurrentUser, s: ReportScope) =>
+  s === "own" ? eq(lead.assignedUserId, u.userId) : undefined;
+const partnerScope = (u: CurrentUser, s: ReportScope) =>
+  s === "own" ? eq(partner.ownerUserId, u.userId) : undefined;
+const campaignScope = (u: CurrentUser, s: ReportScope) =>
+  s === "own" ? eq(campaign.ownerUserId, u.userId) : undefined;
+const personScope = (u: CurrentUser, s: ReportScope) =>
+  s === "own" ? eq(person.ownerUserId, u.userId) : undefined;
 
-/** Files that are still work: the same definition the pipeline board uses. */
-const openBook = () =>
-  and(ne(loan.status, "lost"), ne(loan.status, "withdrawn"), ne(loan.status, "denied"));
+/** `col >= from AND col < to` for a timestamptz column. */
+const inRange = (col: AnyColumn, r: DateRange): SQL =>
+  sql`(${col} >= ${r.from} AND ${col} < ${r.to})`;
 
-// --- 1. Lead response --------------------------------------------------------
+/** Same fence for a `date` column, which Postgres compares as a calendar day. */
+const isoDay = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const dateInRange = (col: AnyColumn, r: DateRange): SQL =>
+  sql`(${col} >= ${isoDay(r.from)} AND ${col} < ${isoDay(r.to)})`;
 
-export type LeadResponseRead = {
-  totalLeads: number;
-  answeredCount: number;
-  medianMinutes: number | null;
-  avgMinutes: number | null;
-  uncontactedCount: number;
-  oldestUncontactedHours: number | null;
+// --- 1–5. Production counts --------------------------------------------------
+
+/**
+ * The stage-history milestones this report counts. `application` is the file
+ * formally in motion; `preapproval` is the letter in the borrower's hand.
+ * `prequalification` is deliberately not counted as a preapproval — stages.ts
+ * keeps them separate steps, and a prequal is a conversation, not a milestone.
+ */
+const APPLICATION_STAGES = ["application"] as const;
+const PREAPPROVAL_STAGES = ["preapproval"] as const;
+
+export type ProductionRead = {
+  /** New leads captured in range. */
+  leads: number;
+  /** Distinct files that entered an application stage in range (stage history). */
+  applications: number;
+  /** Distinct files that entered the preapproval stage in range (stage history). */
+  preapprovals: number;
+  /** Active files right now — a point-in-time count, not a range count. */
+  activeLoans: number;
+  /** Files funded in range, by the team-entered funded date. */
+  closings: number;
+  /** Team-entered amounts on those funded files. */
+  closedVolume: number;
+};
+
+export async function production(
+  db: Db,
+  u: CurrentUser,
+  s: ReportScope,
+  r: DateRange,
+): Promise<ProductionRead> {
+  const [leadsRow] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(lead)
+    .where(and(inRange(lead.capturedAt, r), leadScope(u, s)));
+
+  const [historyRow] = await db
+    .select({
+      applications: sql<number>`count(DISTINCT ${loanStageHistory.loanId}) FILTER (
+        WHERE ${inArray(loanStageHistory.toStage, [...APPLICATION_STAGES])}
+      )::int`,
+      preapprovals: sql<number>`count(DISTINCT ${loanStageHistory.loanId}) FILTER (
+        WHERE ${inArray(loanStageHistory.toStage, [...PREAPPROVAL_STAGES])}
+      )::int`,
+    })
+    .from(loanStageHistory)
+    .innerJoin(loan, eq(loan.id, loanStageHistory.loanId))
+    .where(
+      and(
+        isNull(loan.deletedAt),
+        inRange(loanStageHistory.createdAt, r),
+        inArray(loanStageHistory.toStage, [...APPLICATION_STAGES, ...PREAPPROVAL_STAGES]),
+        loanScope(u, s),
+      ),
+    );
+
+  const [loanRow] = await db
+    .select({
+      activeLoans: sql<number>`count(*) FILTER (WHERE ${loan.status} = 'active')::int`,
+      closings: sql<number>`count(*) FILTER (WHERE ${dateInRange(loan.fundedAt, r)})::int`,
+      closedVolume: sql<number>`COALESCE(
+        sum(${loan.amount}) FILTER (WHERE ${dateInRange(loan.fundedAt, r)}), 0
+      )::float`,
+    })
+    .from(loan)
+    .where(and(isNull(loan.deletedAt), loanScope(u, s)));
+
+  return {
+    leads: leadsRow?.n ?? 0,
+    applications: historyRow?.applications ?? 0,
+    preapprovals: historyRow?.preapprovals ?? 0,
+    activeLoans: loanRow?.activeLoans ?? 0,
+    closings: loanRow?.closings ?? 0,
+    closedVolume: loanRow?.closedVolume ?? 0,
+  };
+}
+
+// --- 6. Conversion rates -----------------------------------------------------
+
+export type ConversionRead = {
+  /** Applications in range ÷ leads in range. Null when there were no leads. */
+  leadToApplication: number | null;
+  /** Closings in range ÷ applications in range. Null when there were none. */
+  applicationToClosing: number | null;
+  /** Closings in range ÷ leads in range. Null when there were no leads. */
+  leadToClosing: number | null;
 };
 
 /**
- * The speed-to-lead scoreboard: capture → first human response.
- *
- * `percentile_cont` and `avg` both skip null inputs, so leads that have never
- * been answered drop out of the timing maths on their own and are counted
- * separately as the ones still waiting.
+ * These compare activity volumes inside one window — the leads counted are not
+ * necessarily the same files as the closings counted, because a mortgage takes
+ * longer than most ranges. The screen says so; the maths just guards zero.
  */
-export async function leadResponse(db: Db, u: CurrentUser): Promise<LeadResponseRead> {
-  const [row] = await db
+export function conversionRates(p: ProductionRead): ConversionRead {
+  const ratio = (num: number, den: number) => (den > 0 ? num / den : null);
+  return {
+    leadToApplication: ratio(p.applications, p.leads),
+    applicationToClosing: ratio(p.closings, p.applications),
+    leadToClosing: ratio(p.closings, p.leads),
+  };
+}
+
+// --- 7. Lead source performance ----------------------------------------------
+
+/** Friendly names for the source channels the capture forms write. */
+const CHANNEL_LABELS: Record<string, string> = {
+  facebook_ads: "Facebook ads",
+  lf_website: "Loan Factory website",
+  qm_pricer: "QuickMatch pricer",
+  partner_referral: "Partner referral",
+  manual: "Added by hand",
+  unknown: "No source recorded",
+};
+
+export function channelLabel(channel: string): string {
+  return CHANNEL_LABELS[channel] ?? channel.replace(/_/g, " ");
+}
+
+export type LeadSourceRow = {
+  channel: string;
+  /** Leads captured in range from this source. */
+  leads: number;
+  /** Of those, how many have a first response recorded. */
+  contacted: number;
+  /** Of those leads' files, how many have funded — a lifetime outcome. */
+  closed: number;
+  closeRate: number | null;
+};
+
+export async function leadSourcePerformance(
+  db: Db,
+  u: CurrentUser,
+  s: ReportScope,
+  r: DateRange,
+): Promise<LeadSourceRow[]> {
+  const channelExpr = sql<string>`COALESCE(${lead.source}->>'channel', 'unknown')`;
+
+  const rows = await db
     .select({
-      totalLeads: sql<number>`count(*)::int`,
-      answeredCount: sql<number>`count(*) FILTER (WHERE ${lead.firstResponseAt} IS NOT NULL)::int`,
-      medianMinutes: sql<number | null>`percentile_cont(0.5) WITHIN GROUP (
-        ORDER BY EXTRACT(EPOCH FROM (${lead.firstResponseAt} - ${lead.capturedAt}))::float / 60
-      )`,
-      avgMinutes: sql<number | null>`avg(
-        EXTRACT(EPOCH FROM (${lead.firstResponseAt} - ${lead.capturedAt}))::float / 60
-      )`,
-      uncontactedCount: sql<number>`count(*) FILTER (WHERE ${lead.firstResponseAt} IS NULL)::int`,
-      oldestUncontactedHours: sql<number | null>`max(
-        EXTRACT(EPOCH FROM (now() - ${lead.capturedAt}))::float / 3600
-      ) FILTER (WHERE ${lead.firstResponseAt} IS NULL)`,
+      channel: channelExpr,
+      leads: sql<number>`count(*)::int`,
+      contacted: sql<number>`count(*) FILTER (WHERE ${lead.firstResponseAt} IS NOT NULL)::int`,
+      // The close is credited whenever it lands: a Facebook lead captured this
+      // month that funds in October still tells you Facebook leads close.
+      closed: sql<number>`count(*) FILTER (WHERE ${loan.fundedAt} IS NOT NULL)::int`,
     })
     .from(lead)
-    .where(leadScope(u));
+    .leftJoin(loan, and(eq(loan.id, lead.loanId), isNull(loan.deletedAt)))
+    .where(and(inRange(lead.capturedAt, r), leadScope(u, s)))
+    .groupBy(channelExpr)
+    .orderBy(desc(sql`count(*)`));
 
-  return (
-    row ?? {
-      totalLeads: 0,
-      answeredCount: 0,
-      medianMinutes: null,
-      avgMinutes: null,
-      uncontactedCount: 0,
-      oldestUncontactedHours: null,
-    }
-  );
+  return rows.map((row) => ({
+    ...row,
+    closeRate: row.leads > 0 ? row.closed / row.leads : null,
+  }));
 }
 
-// --- 2. Follow-up completion -------------------------------------------------
+// --- 8. Referral partner production ------------------------------------------
 
-export type FollowUpRead = {
-  openCount: number;
-  doneCount: number;
-  overdueCount: number;
-  completionRate: number | null;
-};
-
-/** Cancelled work was never owed, so it stays out of the completion rate. */
-export async function followUpCompletion(db: Db, u: CurrentUser): Promise<FollowUpRead> {
-  const [row] = await db
-    .select({
-      openCount: sql<number>`count(*) FILTER (WHERE ${task.status} = 'open')::int`,
-      doneCount: sql<number>`count(*) FILTER (WHERE ${task.status} = 'done')::int`,
-      overdueCount: sql<number>`count(*) FILTER (
-        WHERE ${task.status} = 'open' AND ${task.dueAt} < now()
-      )::int`,
-      completionRate: sql<number | null>`CASE
-        WHEN count(*) FILTER (WHERE ${task.status} IN ('open', 'done')) = 0 THEN NULL
-        ELSE count(*) FILTER (WHERE ${task.status} = 'done')::float
-             / count(*) FILTER (WHERE ${task.status} IN ('open', 'done'))::float
-      END`,
-    })
-    .from(task)
-    .where(and(isNull(task.deletedAt), taskScope(u)));
-
-  return row ?? { openCount: 0, doneCount: 0, overdueCount: 0, completionRate: null };
-}
-
-// --- 3. Pipeline movement ----------------------------------------------------
-
-export type PhaseCount = { phase: MacroPhase; count: number };
-
-export type MovementRead = {
-  advances30d: number;
-  byPhase: PhaseCount[];
-  openTotal: number;
-};
-
-export async function pipelineMovement(db: Db, u: CurrentUser): Promise<MovementRead> {
-  const [advances] = await db
-    .select({
-      // A file arriving at stage 1 is a file being created, not a file moving
-      // forward. Only a transition that has a previous stage is an advance.
-      advances30d: sql<number>`count(*) FILTER (
-        WHERE ${loanStageHistory.fromStage} IS NOT NULL
-          AND ${loanStageHistory.createdAt} >= now() - interval '30 days'
-      )::int`,
-    })
-    .from(loanStageHistory)
-    .innerJoin(loan, eq(loan.id, loanStageHistory.loanId))
-    .where(and(isNull(loan.deletedAt), loanScope(u)));
-
-  const stageRows = await db
-    .select({ stage: loan.stage, count: sql<number>`count(*)::int` })
-    .from(loan)
-    .where(and(isNull(loan.deletedAt), openBook(), loanScope(u)))
-    .groupBy(loan.stage);
-
-  // Macro-phase is derived, never a column — roll the stage counts up in TS
-  // through the one lookup that owns the mapping.
-  const totals = new Map<MacroPhase, number>(MACRO_PHASES.map((p) => [p, 0]));
-  for (const row of stageRows) {
-    const phase = phaseOf(row.stage as Stage);
-    totals.set(phase, (totals.get(phase) ?? 0) + row.count);
-  }
-
-  const byPhase = MACRO_PHASES.map((phase) => ({ phase, count: totals.get(phase) ?? 0 }));
-
-  return {
-    advances30d: advances?.advances30d ?? 0,
-    byPhase,
-    openTotal: byPhase.reduce((sum, p) => sum + p.count, 0),
-  };
-}
-
-// --- 4. Conversion -----------------------------------------------------------
-
-export type ConversionRead = {
-  totalCreated: number;
-  fundedCount: number;
-  lostCount: number;
-  activeCount: number;
-  otherCount: number;
-  funnel: { label: string; count: number }[];
-};
-
-export async function conversion(db: Db, u: CurrentUser): Promise<ConversionRead> {
-  const [outcomes] = await db
-    .select({
-      totalCreated: sql<number>`count(*)::int`,
-      fundedCount: sql<number>`count(*) FILTER (WHERE ${loan.status} = 'funded')::int`,
-      lostCount: sql<number>`count(*) FILTER (WHERE ${loan.status} = 'lost')::int`,
-      activeCount: sql<number>`count(*) FILTER (WHERE ${loan.status} = 'active')::int`,
-      // withdrawn / denied / on hold — small, but never silently dropped.
-      otherCount: sql<number>`count(*) FILTER (
-        WHERE ${loan.status} NOT IN ('funded', 'lost', 'active')
-      )::int`,
-    })
-    .from(loan)
-    .where(and(isNull(loan.deletedAt), loanScope(u)));
-
-  // The funnel reads stage history, not the current stage: a file that funded
-  // still counts as having reached Qualify on its way through. The phase → stage
-  // lists come from @/lib/stages so there is one definition of a phase.
-  const [reached] = await db
-    .select({
-      engage: sql<number>`count(DISTINCT ${loanStageHistory.loanId}) FILTER (
-        WHERE ${inArray(loanStageHistory.toStage, stagesIn("ENGAGE"))}
-      )::int`,
-      qualify: sql<number>`count(DISTINCT ${loanStageHistory.loanId}) FILTER (
-        WHERE ${inArray(loanStageHistory.toStage, stagesIn("QUALIFY"))}
-      )::int`,
-      transact: sql<number>`count(DISTINCT ${loanStageHistory.loanId}) FILTER (
-        WHERE ${inArray(loanStageHistory.toStage, stagesIn("TRANSACT"))}
-      )::int`,
-      funded: sql<number>`count(DISTINCT ${loanStageHistory.loanId}) FILTER (
-        WHERE ${eq(loanStageHistory.toStage, "funded")}
-      )::int`,
-    })
-    .from(loanStageHistory)
-    .innerJoin(loan, eq(loan.id, loanStageHistory.loanId))
-    .where(and(isNull(loan.deletedAt), loanScope(u)));
-
-  return {
-    totalCreated: outcomes?.totalCreated ?? 0,
-    fundedCount: outcomes?.fundedCount ?? 0,
-    lostCount: outcomes?.lostCount ?? 0,
-    activeCount: outcomes?.activeCount ?? 0,
-    otherCount: outcomes?.otherCount ?? 0,
-    funnel: [
-      { label: PHASE_LABELS.ENGAGE, count: reached?.engage ?? 0 },
-      { label: PHASE_LABELS.QUALIFY, count: reached?.qualify ?? 0 },
-      { label: PHASE_LABELS.TRANSACT, count: reached?.transact ?? 0 },
-      { label: "Funded", count: reached?.funded ?? 0 },
-    ],
-  };
-}
-
-// --- 5. Partner activity -----------------------------------------------------
-
-export type PartnerRow = {
+export type PartnerProductionRow = {
   partnerId: string;
   name: string;
   company: string | null;
-  referralCount: number;
-  referredVolume: number;
-  lastTouchAt: Date | null;
+  /** Referred files opened in range (falls back to the referral record date). */
+  referrals: number;
+  /** Referred files that funded in range. */
+  closings: number;
 };
 
-export type PartnerRead = {
-  top: PartnerRow[];
-  totalPartners: number;
-  quietCount: number;
-};
+export async function partnerProduction(
+  db: Db,
+  u: CurrentUser,
+  s: ReportScope,
+  r: DateRange,
+): Promise<{ top: PartnerProductionRow[]; totalPartners: number; quietCount: number }> {
+  // When a referral carries a file, the file's created date is when the business
+  // arrived; a bare referral record only has its own timestamp.
+  const referredAt = sql`COALESCE(${loan.createdAt}, ${partnerRelationship.createdAt})`;
+  const referredInRange = sql`${referredAt} >= ${r.from} AND ${referredAt} < ${r.to}`;
 
-export async function partnerActivity(db: Db, u: CurrentUser): Promise<PartnerRead> {
   const top = await db
     .select({
       partnerId: partner.id,
       name: sql<string>`${partner.firstName} || ' ' || ${partner.lastName}`,
       company: partner.company,
-      referralCount: sql<number>`count(DISTINCT ${partnerRelationship.id})::int`,
-      referredVolume: sql<number>`COALESCE(sum(${loan.amount}), 0)::float`,
-      lastTouchAt: partner.lastTouchAt,
+      referrals: sql<number>`count(DISTINCT ${partnerRelationship.id}) FILTER (
+        WHERE ${referredInRange}
+      )::int`,
+      closings: sql<number>`count(DISTINCT ${loan.id}) FILTER (
+        WHERE ${dateInRange(loan.fundedAt, r)}
+      )::int`,
     })
     .from(partner)
-    .leftJoin(
+    .innerJoin(
       partnerRelationship,
-      and(
-        eq(partnerRelationship.partnerId, partner.id),
-        eq(partnerRelationship.role, "referred"),
-      ),
+      and(eq(partnerRelationship.partnerId, partner.id), eq(partnerRelationship.role, "referred")),
     )
-    // Volume is what the referred files are worth; a referral with no amount
-    // recorded yet still counts as a referral and adds nothing to the sum.
     .leftJoin(loan, and(eq(loan.id, partnerRelationship.loanId), isNull(loan.deletedAt)))
-    .where(and(isNull(partner.deletedAt), partnerScope(u)))
-    .groupBy(partner.id, partner.firstName, partner.lastName, partner.company, partner.lastTouchAt)
-    .having(sql`count(${partnerRelationship.id}) > 0`)
-    .orderBy(
-      desc(sql`count(DISTINCT ${partnerRelationship.id})`),
-      desc(sql`COALESCE(sum(${loan.amount}), 0)`),
+    .where(and(isNull(partner.deletedAt), partnerScope(u, s)))
+    .groupBy(partner.id, partner.firstName, partner.lastName, partner.company)
+    .having(
+      sql`count(DISTINCT ${partnerRelationship.id}) FILTER (WHERE ${referredInRange}) > 0
+       OR count(DISTINCT ${loan.id}) FILTER (WHERE ${dateInRange(loan.fundedAt, r)}) > 0`,
     )
-    .limit(5);
+    .orderBy(
+      desc(sql`count(DISTINCT ${partnerRelationship.id}) FILTER (WHERE ${referredInRange})`),
+      desc(sql`count(DISTINCT ${loan.id}) FILTER (WHERE ${dateInRange(loan.fundedAt, r)})`),
+    )
+    .limit(6);
 
   const [totals] = await db
     .select({
       totalPartners: sql<number>`count(*)::int`,
-      // A partner who asked not to be contacted is not a partner you are
-      // neglecting, so they are not counted as quiet.
+      // A partner who asked not to be contacted is not being neglected.
       quietCount: sql<number>`count(*) FILTER (
         WHERE ${partner.doNotContact} = false
           AND (${partner.lastTouchAt} IS NULL OR ${partner.lastTouchAt} < now() - interval '60 days')
       )::int`,
     })
     .from(partner)
-    .where(and(isNull(partner.deletedAt), partnerScope(u)));
+    .where(and(isNull(partner.deletedAt), partnerScope(u, s)));
 
   return {
     top,
@@ -314,183 +310,425 @@ export async function partnerActivity(db: Db, u: CurrentUser): Promise<PartnerRe
   };
 }
 
-// --- 6. Campaign activity ----------------------------------------------------
+// --- 9. Active drip campaigns ------------------------------------------------
 
-export type CampaignRead = {
-  campaignCount: number;
-  sent: number;
-  opened: number;
-  replied: number;
-  openRate: number | null;
+export type DripRead = {
+  count: number;
+  campaigns: { id: string; name: string; audienceSize: number; steps: number }[];
 };
 
-/** Drafts and scheduled sends have not done anything yet, so they are excluded. */
-export async function campaignActivity(db: Db, u: CurrentUser): Promise<CampaignRead> {
-  const [row] = await db
+/** Campaigns running right now — a point-in-time fact, not a range one. */
+export async function activeDripCampaigns(
+  db: Db,
+  u: CurrentUser,
+  s: ReportScope,
+): Promise<DripRead> {
+  const rows = await db
     .select({
-      campaignCount: sql<number>`count(*)::int`,
-      sent: sql<number>`COALESCE(sum(${campaign.sentCount}), 0)::int`,
-      opened: sql<number>`COALESCE(sum(${campaign.openCount}), 0)::int`,
-      replied: sql<number>`COALESCE(sum(${campaign.replyCount}), 0)::int`,
-      openRate: sql<number | null>`CASE
-        WHEN COALESCE(sum(${campaign.sentCount}), 0) = 0 THEN NULL
-        ELSE sum(${campaign.openCount})::float / sum(${campaign.sentCount})::float
-      END`,
+      id: campaign.id,
+      name: campaign.name,
+      audienceSize: campaign.audienceSize,
+      steps: sql<number>`COALESCE(jsonb_array_length(${campaign.drip}), 0)::int`,
+    })
+    .from(campaign)
+    .where(
+      and(isNull(campaign.deletedAt), eq(campaign.status, "running"), campaignScope(u, s)),
+    )
+    .orderBy(desc(campaign.updatedAt))
+    .limit(8);
+
+  return { count: rows.length, campaigns: rows };
+}
+
+// --- 10. Newsletters sent ----------------------------------------------------
+
+export type NewsletterRow = {
+  id: string;
+  name: string;
+  status: string;
+  sent: number;
+  opened: number;
+};
+
+/**
+ * Campaigns that have actually sent something. Honest framing: the CRM records
+ * lifetime send totals per campaign, not per-send dates, so this list cannot be
+ * fenced to the selected range — the screen says exactly that.
+ */
+export async function newslettersSent(
+  db: Db,
+  u: CurrentUser,
+  s: ReportScope,
+): Promise<NewsletterRow[]> {
+  return db
+    .select({
+      id: campaign.id,
+      name: campaign.name,
+      status: campaign.status,
+      sent: campaign.sentCount,
+      opened: campaign.openCount,
     })
     .from(campaign)
     .where(
       and(
         isNull(campaign.deletedAt),
         inArray(campaign.status, ["finished", "running"]),
-        campaignScope(u),
+        sql`${campaign.sentCount} > 0`,
+        campaignScope(u, s),
+      ),
+    )
+    .orderBy(desc(campaign.sentCount))
+    .limit(8);
+}
+
+// --- 11. Database size -------------------------------------------------------
+
+export type DatabaseSizeRead = {
+  total: number;
+  byType: { type: string; count: number }[];
+};
+
+const PERSON_TYPE_ORDER = ["lead", "borrower", "past_client", "other"] as const;
+
+export const PERSON_TYPE_LABELS: Record<string, string> = {
+  lead: "Leads",
+  borrower: "Borrowers",
+  past_client: "Past clients",
+  other: "Other contacts",
+};
+
+export async function databaseSize(
+  db: Db,
+  u: CurrentUser,
+  s: ReportScope,
+): Promise<DatabaseSizeRead> {
+  const rows = await db
+    .select({ type: person.type, count: sql<number>`count(*)::int` })
+    .from(person)
+    .where(
+      and(isNull(person.deletedAt), isNull(person.mergedIntoPersonId), personScope(u, s)),
+    )
+    .groupBy(person.type);
+
+  const byType = PERSON_TYPE_ORDER.map((type) => ({
+    type,
+    count: rows.find((row) => row.type === type)?.count ?? 0,
+  }));
+
+  return { total: byType.reduce((sum, t) => sum + t.count, 0), byType };
+}
+
+// --- 12. Past client activity ------------------------------------------------
+
+export type PastClientTouch = {
+  personId: string;
+  name: string;
+  kind: string;
+  at: Date;
+};
+
+export type Anniversary = {
+  personId: string;
+  loanId: string;
+  name: string;
+  /** Which anniversary it is — "2" means two years since funding. */
+  years: number;
+  inDays: number;
+};
+
+export type PastClientRead = {
+  pastClientCount: number;
+  touchesInRange: number;
+  recent: PastClientTouch[];
+  /** Loan anniversaries landing in the next 45 days. */
+  anniversaries: Anniversary[];
+};
+
+export async function pastClientActivity(
+  db: Db,
+  u: CurrentUser,
+  s: ReportScope,
+  r: DateRange,
+): Promise<PastClientRead> {
+  const [counts] = await db
+    .select({ pastClientCount: sql<number>`count(*)::int` })
+    .from(person)
+    .where(
+      and(
+        isNull(person.deletedAt),
+        isNull(person.mergedIntoPersonId),
+        eq(person.type, "past_client"),
+        personScope(u, s),
       ),
     );
 
-  return row ?? { campaignCount: 0, sent: 0, opened: 0, replied: 0, openRate: null };
-}
+  const [touches] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(event)
+    .innerJoin(person, eq(person.id, event.personId))
+    .where(
+      and(
+        isNull(person.deletedAt),
+        eq(person.type, "past_client"),
+        inRange(event.createdAt, r),
+        personScope(u, s),
+      ),
+    );
 
-// --- 7. Stale opportunities --------------------------------------------------
-
-export type StaleRow = {
-  loanId: string;
-  personName: string;
-  stage: Stage;
-  phase: MacroPhase;
-  amount: string | null;
-  idleDays: number;
-  thresholdDays: number;
-};
-
-export type StaleRead = { rows: StaleRow[]; totalStale: number };
-
-/** The shortest stall threshold on the board — the safe SQL pre-filter. */
-const MIN_STALL_DAYS = Math.min(...MACRO_PHASES.map(stallDays));
-
-/**
- * Active files nobody has touched inside the limit for their stage.
- *
- * The limit is per macro-phase and that rule already lives in @/lib/stages, so
- * SQL pre-filters on the shortest limit — a safe superset — and the exact
- * per-phase rule is applied here. One definition of "gone quiet", not two.
- */
-export async function staleOpportunities(db: Db, u: CurrentUser): Promise<StaleRead> {
-  const candidates = await db
+  const recent = await db
     .select({
+      personId: person.id,
+      name: sql<string>`${person.firstName} || ' ' || ${person.lastName}`,
+      kind: event.kind,
+      at: event.createdAt,
+    })
+    .from(event)
+    .innerJoin(person, eq(person.id, event.personId))
+    .where(
+      and(
+        isNull(person.deletedAt),
+        eq(person.type, "past_client"),
+        inRange(event.createdAt, r),
+        personScope(u, s),
+      ),
+    )
+    .orderBy(desc(event.createdAt))
+    .limit(5);
+
+  // The next anniversary of the funded date. age() gives whole years elapsed,
+  // so funded + (years + 1) is the next one coming — computed in SQL because
+  // date arithmetic across leap years is Postgres's job, not ours.
+  const nextAnniversary = sql`(${loan.fundedAt}::date + make_interval(
+    years => EXTRACT(YEAR FROM age(now(), ${loan.fundedAt}::date))::int + 1
+  ))`;
+
+  const anniversaries = await db
+    .select({
+      personId: person.id,
       loanId: loan.id,
-      personName: sql<string>`${person.firstName} || ' ' || ${person.lastName}`,
-      stage: loan.stage,
-      amount: loan.amount,
-      idleDays: sql<number>`EXTRACT(EPOCH FROM (now() - ${loan.lastActivityAt}))::float / 86400`,
+      name: sql<string>`${person.firstName} || ' ' || ${person.lastName}`,
+      years: sql<number>`EXTRACT(YEAR FROM age(now(), ${loan.fundedAt}::date))::int + 1`,
+      inDays: sql<number>`floor(
+        EXTRACT(EPOCH FROM (${nextAnniversary} - now())) / 86400
+      )::int`,
     })
     .from(loan)
     .innerJoin(person, eq(person.id, loan.personId))
     .where(
       and(
         isNull(loan.deletedAt),
-        eq(loan.status, "active"),
-        sql`${loan.lastActivityAt} < now() - make_interval(days => ${MIN_STALL_DAYS})`,
-        loanScope(u),
+        isNull(person.deletedAt),
+        isNotNull(loan.fundedAt),
+        sql`${nextAnniversary} < now() + interval '45 days'`,
+        loanScope(u, s),
       ),
     )
-    .orderBy(loan.lastActivityAt)
-    .limit(100);
+    .orderBy(sql`${nextAnniversary}`)
+    .limit(8);
 
-  const stale = candidates
-    .map((row) => {
-      const stage = row.stage as Stage;
-      const phase = phaseOf(stage);
-      return { ...row, stage, phase, thresholdDays: stallDays(phase) };
-    })
-    .filter((row) => row.idleDays >= row.thresholdDays);
-
-  return { rows: stale.slice(0, 5), totalStale: stale.length };
+  return {
+    pastClientCount: counts?.pastClientCount ?? 0,
+    touchesInRange: touches?.n ?? 0,
+    recent,
+    anniversaries,
+  };
 }
 
-// --- 8. Team workload --------------------------------------------------------
+// --- 13. Opportunities to improve --------------------------------------------
 
-export type WorkloadRow = {
-  userId: string;
-  fullName: string;
-  role: string;
-  openTasks: number;
-  activeOpportunities: number;
+export type Opportunity = {
+  finding: string;
+  nextStep: string;
+  href: string;
 };
 
-export async function teamWorkload(db: Db, u: CurrentUser): Promise<WorkloadRow[]> {
-  const people = await db
-    .select({ userId: user.id, fullName: user.fullName, role: user.role })
-    .from(user)
-    .where(and(isNull(user.deletedAt), eq(user.status, "active"), userScope(u)));
+/** The extra scalar facts the opportunities list needs beyond the main reads. */
+type HealthRead = {
+  uncontactedLeads: number;
+  staleFiles: number;
+  anniversaryCampaignLive: boolean;
+};
 
-  const taskRows = await db
-    .select({ userId: task.ownerUserId, count: sql<number>`count(*)::int` })
-    .from(task)
-    .where(and(isNull(task.deletedAt), eq(task.status, "open"), taskScope(u)))
-    .groupBy(task.ownerUserId);
+async function health(db: Db, u: CurrentUser, s: ReportScope): Promise<HealthRead> {
+  const [leads] = await db
+    .select({ n: sql<number>`count(*) FILTER (WHERE ${lead.firstResponseAt} IS NULL)::int` })
+    .from(lead)
+    .where(leadScope(u, s));
 
-  const loanRows = await db
-    .select({ userId: loan.loUserId, count: sql<number>`count(*)::int` })
+  // Gone quiet past the stall limit for its stage: 3 days in Transact, 7
+  // elsewhere — the same thresholds stages.ts gives the pipeline board.
+  const transact = stagesIn("TRANSACT");
+  const [stale] = await db
+    .select({
+      n: sql<number>`(
+        count(*) FILTER (
+          WHERE ${inArray(loan.stage, transact)}
+            AND ${loan.lastActivityAt} < now() - interval '3 days'
+        )
+        + count(*) FILTER (
+          WHERE NOT (${inArray(loan.stage, transact)})
+            AND ${loan.lastActivityAt} < now() - interval '7 days'
+        )
+      )::int`,
+    })
     .from(loan)
-    .where(and(isNull(loan.deletedAt), eq(loan.status, "active"), loanScope(u)))
-    .groupBy(loan.loUserId);
+    .where(and(isNull(loan.deletedAt), eq(loan.status, "active"), loanScope(u, s)));
 
-  const tasksBy = new Map(taskRows.map((r) => [r.userId, r.count]));
-  const loansBy = new Map(loanRows.map((r) => [r.userId, r.count]));
-
-  // Everyone active is listed, including the people carrying nothing — an empty
-  // row is the whole point of a workload view.
-  return people
-    .map((p) => ({
-      ...p,
-      openTasks: tasksBy.get(p.userId) ?? 0,
-      activeOpportunities: loansBy.get(p.userId) ?? 0,
-    }))
-    .sort(
-      (a, b) =>
-        b.openTasks + b.activeOpportunities - (a.openTasks + a.activeOpportunities) ||
-        a.fullName.localeCompare(b.fullName),
+  const [anniversary] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(campaign)
+    .where(
+      and(
+        isNull(campaign.deletedAt),
+        inArray(campaign.status, ["running", "scheduled"]),
+        sql`${campaign.audience}->>'type' = 'anniversary'`,
+        campaignScope(u, s),
+      ),
     );
+
+  return {
+    uncontactedLeads: leads?.n ?? 0,
+    staleFiles: stale?.n ?? 0,
+    anniversaryCampaignLive: (anniversary?.n ?? 0) > 0,
+  };
+}
+
+function pct(rate: number): string {
+  return `${Math.round(rate * 100)}%`;
+}
+
+/**
+ * Plain-language findings computed from the counts above — worst first, capped
+ * at six. If the book is genuinely clean, fewer than three appear; nothing is
+ * manufactured to fill space.
+ */
+function buildOpportunities(
+  h: HealthRead,
+  sources: LeadSourceRow[],
+  partners: { quietCount: number; totalPartners: number },
+  pastClients: PastClientRead,
+  drips: DripRead,
+): Opportunity[] {
+  const out: Opportunity[] = [];
+
+  if (h.uncontactedLeads > 0) {
+    out.push({
+      finding: `${h.uncontactedLeads} ${
+        h.uncontactedLeads === 1 ? "lead has" : "leads have"
+      } never been contacted.`,
+      nextStep: "Work the lead list today — a first call beats any campaign.",
+      href: "/people?type=lead",
+    });
+  }
+
+  // Compare close rates only where both sources have enough leads to mean it.
+  const rated = sources.filter((row) => row.leads >= 3 && row.closeRate !== null);
+  if (rated.length >= 2) {
+    const best = rated.reduce((a, b) => (b.closeRate! > a.closeRate! ? b : a));
+    const worst = rated.reduce((a, b) => (b.closeRate! < a.closeRate! ? b : a));
+    if (best.channel !== worst.channel && best.closeRate! >= worst.closeRate! * 2) {
+      out.push({
+        finding: `${channelLabel(worst.channel)} leads close at ${pct(
+          worst.closeRate!,
+        )} — less than half the ${pct(best.closeRate!)} that ${channelLabel(
+          best.channel,
+        )} leads close at.`,
+        nextStep: `Tighten follow-up on ${channelLabel(
+          worst.channel,
+        )} leads, or shift that effort toward ${channelLabel(best.channel)}.`,
+        href: "/people?type=lead",
+      });
+    }
+  }
+
+  if (pastClients.anniversaries.length > 0 && !h.anniversaryCampaignLive) {
+    const n = pastClients.anniversaries.length;
+    out.push({
+      finding: `${n} past ${
+        n === 1 ? "client hits a loan anniversary" : "clients hit loan anniversaries"
+      } in the next 45 days with no anniversary campaign running.`,
+      nextStep: "Launch the anniversary campaign, or put a personal call on the calendar.",
+      href: "/marketing",
+    });
+  }
+
+  if (partners.quietCount > 0) {
+    out.push({
+      finding: `${partners.quietCount} of ${partners.totalPartners} referral ${
+        partners.quietCount === 1 ? "partner has" : "partners have"
+      } had no recorded touch in 60 days or more.`,
+      nextStep: "Book coffee or a call with the quiet ones — referrals follow attention.",
+      href: "/partners",
+    });
+  }
+
+  if (h.staleFiles > 0) {
+    out.push({
+      finding: `${h.staleFiles} active ${
+        h.staleFiles === 1 ? "file has" : "files have"
+      } gone quiet past the limit for their stage.`,
+      nextStep: "Open the pipeline and touch the oldest ones first.",
+      href: "/pipeline",
+    });
+  }
+
+  if (drips.count === 0) {
+    out.push({
+      finding: "No drip campaign is running right now.",
+      nextStep: "Start one — leads captured this week should hear from you next week too.",
+      href: "/marketing",
+    });
+  }
+
+  return out.slice(0, 6);
 }
 
 // --- The whole report --------------------------------------------------------
 
 export type IntelligenceReport = {
   /** Which book these numbers cover — drives the subtitle, and it must be said. */
-  scope: "own" | "team";
-  leads: LeadResponseRead;
-  followUp: FollowUpRead;
-  movement: MovementRead;
+  scope: ReportScope;
+  production: ProductionRead;
   conversion: ConversionRead;
-  partners: PartnerRead;
-  campaigns: CampaignRead;
-  stale: StaleRead;
-  workload: WorkloadRow[];
+  sources: LeadSourceRow[];
+  partners: Awaited<ReturnType<typeof partnerProduction>>;
+  drips: DripRead;
+  newsletters: NewsletterRow[];
+  database: DatabaseSizeRead;
+  pastClients: PastClientRead;
+  opportunities: Opportunity[];
 };
 
 export async function intelligenceReport(
   db: Db,
   u: CurrentUser,
+  scope: ReportScope,
+  range: DateRange,
 ): Promise<IntelligenceReport> {
+  const prod = await production(db, u, scope, range);
+  const sources = await leadSourcePerformance(db, u, scope, range);
+  const partners = await partnerProduction(db, u, scope, range);
+  const drips = await activeDripCampaigns(db, u, scope);
+  const newsletters = await newslettersSent(db, u, scope);
+  const database = await databaseSize(db, u, scope);
+  const pastClients = await pastClientActivity(db, u, scope, range);
+  const h = await health(db, u, scope);
+
   return {
-    scope: ownBookOnly(u) ? "own" : "team",
-    leads: await leadResponse(db, u),
-    followUp: await followUpCompletion(db, u),
-    movement: await pipelineMovement(db, u),
-    conversion: await conversion(db, u),
-    partners: await partnerActivity(db, u),
-    campaigns: await campaignActivity(db, u),
-    stale: await staleOpportunities(db, u),
-    workload: await teamWorkload(db, u),
+    scope,
+    production: prod,
+    conversion: conversionRates(prod),
+    sources,
+    partners,
+    drips,
+    newsletters,
+    database,
+    pastClients,
+    opportunities: buildOpportunities(h, sources, partners, pastClients, drips),
   };
 }
 
-/** True when there is genuinely nothing to report — not merely a quiet week. */
+/** True when there is genuinely nothing in the book — not merely a quiet range. */
 export function hasNothingToReport(report: IntelligenceReport): boolean {
-  return (
-    report.conversion.totalCreated === 0 &&
-    report.leads.totalLeads === 0 &&
-    report.followUp.openCount + report.followUp.doneCount === 0 &&
-    report.partners.totalPartners === 0 &&
-    report.campaigns.campaignCount === 0
-  );
+  return report.database.total === 0 && report.partners.totalPartners === 0;
 }

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { sql } from "drizzle-orm";
-import { ShieldCheck } from "lucide-react";
+import { ChevronRight, ShieldCheck, UserCircle } from "lucide-react";
 import { requireUser, queryAs } from "@/lib/auth";
 import { aiInsight, template } from "@/db/schema";
 import { PageHeader } from "@/components/shell/page-header";
@@ -90,6 +91,20 @@ export default async function AISettingsPage() {
             </p>
           </div>
         </div>
+
+        <Card className="transition-colors hover:bg-sunken">
+          <Link href="/settings/profile" className="flex items-center gap-3 px-4 py-3.5">
+            <UserCircle className="size-5 shrink-0 text-muted" aria-hidden />
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold text-primary">My AI persona</p>
+              <p className="text-small text-muted">
+                Upload a private document on your profile so the assistant writes like you —
+                and switch it on or off there.
+              </p>
+            </div>
+            <ChevronRight className="size-4 shrink-0 text-muted" aria-hidden />
+          </Link>
+        </Card>
 
         <Card>
           <div className="border-b border-subtle px-4 py-3">

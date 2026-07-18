@@ -34,20 +34,33 @@ describe("the morning briefing", () => {
     expect(b.focus).toBeNull();
   });
 
-  it("puts deadline risk before everything else", () => {
+  it("puts new leads before everything else, deadlines included", () => {
     const b = buildBriefing(
       "Minh",
       [
         item({ id: "lock-1", cls: "deadline", headline: "Thanh Nguyễn — rate lock expires in 2d" }),
-        item({ id: "lead-1", cls: "new_lead", headline: "New lead: Maria Torres" }),
+        item({ id: "lead-1", cls: "new_lead", headline: "New lead: Maria Torres", personName: "Maria Torres" }),
       ],
       STATS,
       NOW,
     );
     const lockIndex = b.sentences.findIndex((s) => s.includes("rate lock"));
     const leadIndex = b.sentences.findIndex((s) => s.includes("waiting on a first call"));
-    expect(lockIndex).toBeGreaterThan(-1);
-    expect(lockIndex).toBeLessThan(leadIndex);
+    expect(leadIndex).toBeGreaterThan(-1);
+    expect(leadIndex).toBeLessThan(lockIndex);
+  });
+
+  it("makes the first tappable action a new lead when one is waiting", () => {
+    const b = buildBriefing(
+      "Minh",
+      [
+        item({ id: "lock-1", cls: "deadline", personName: "Thanh Nguyễn" }),
+        item({ id: "lead-1", cls: "new_lead", personName: "Maria Torres" }),
+      ],
+      STATS,
+      NOW,
+    );
+    expect(b.topActions[0].label).toMatch(/Maria/);
   });
 
   it("states the approval contract whenever AI has drafts waiting", () => {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import Link from "next/link";
 import { updateProfile, type ProfileState } from "./actions";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select } from "@/components/ui/field";
@@ -54,19 +55,22 @@ export function ProfileForm({
         <Field label="NMLS ID" htmlFor="nmlsId" hint="Appears on every outbound message.">
           <Input id="nmlsId" name="nmlsId" defaultValue={nmlsId} inputMode="numeric" />
         </Field>
-        <Field
-          label="Team"
-          htmlFor="teamName"
-          hint="Set by an administrator in Team members."
-        >
-          <Input
-            id="teamName"
-            name="teamName"
-            defaultValue={teamName ?? "No team assigned"}
-            readOnly
-            disabled
-          />
-        </Field>
+        <div className="space-y-1.5">
+          <span className="block text-label font-semibold text-secondary">Team</span>
+          <div className="flex h-10 w-full items-center rounded-control border border-strong bg-sunken px-3 text-body text-primary">
+            {teamName ?? "No team assigned"}
+          </div>
+          <p className="text-small text-muted">
+            Change this on the{" "}
+            <Link
+              href="/team"
+              className="font-semibold text-action hover:underline"
+            >
+              Team page
+            </Link>
+            .
+          </p>
+        </div>
         <Field label="Timezone" htmlFor="timezone" hint="Used for reminders and daily summaries.">
           <Select id="timezone" name="timezone" defaultValue={timezone}>
             <option value="">Not set</option>

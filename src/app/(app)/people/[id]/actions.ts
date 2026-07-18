@@ -1,11 +1,32 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { eq, and, isNull } from "drizzle-orm";
+import { redirect } from "next/navigation";
+import { eq, and, isNull, desc, sql } from "drizzle-orm";
 import { z } from "zod";
-import { note, loan, event, lead, person } from "@/db/schema";
-import { requireUser, queryAs } from "@/lib/auth";
+import {
+  note,
+  loan,
+  event,
+  lead,
+  person,
+  task,
+  conversation,
+  message,
+  campaign,
+} from "@/db/schema";
+import { requireUser, queryAs, requireRole, type CurrentUser } from "@/lib/auth";
+import { ROLES } from "@/lib/roles";
 import { recordAudit } from "@/lib/audit";
+
+/**
+ * Every staff role may act on people they can see (RLS + book scope do the
+ * narrowing). The check still runs so a session carrying an unknown role
+ * never reaches a write.
+ */
+function requireStaff(user: CurrentUser) {
+  requireRole(user, [...ROLES]);
+}
 
 export type NoteState = { error?: string };
 
@@ -175,5 +196,332 @@ export async function logTouch(_prev: NoteState, formData: FormData): Promise<No
   revalidatePath(`/people/${personId}`);
   revalidatePath("/today");
   revalidatePath("/pipeline");
+  return {};
+}
+
+// --- Record actions ----------------------------------------------------------
+
+const DRAFT_CHANNELS = ["email", "sms", "video"] as const;
+
+const DraftSchema = z.object({
+  personId: z.string().uuid(),
+  loanId: z.string().uuid().nullable(),
+  channel: z.enum(DRAFT_CHANNELS),
+  subject: z.string().trim().optional(),
+  body: z.string().trim().min(1, "Write the message first."),
+});
+
+const CHANNEL_NOUN: Record<(typeof DRAFT_CHANNELS)[number], string> = {
+  email: "email",
+  sms: "text",
+  video: "video message",
+};
+
+/**
+ * Start (or continue) a conversation with a draft message.
+ *
+ * This writes an outbound message with status `draft` and `sent_at` null. It
+ * does not send anything and it never will on its own: no email, texting, or
+ * video provider is connected to this CRM, so there is nothing to hand the
+ * message to. The draft sits on the thread until a human sends it once an
+ * account is linked — the same honesty rule as the conversations reply box.
+ */
+export async function createDraftMessage(
+  _prev: NoteState,
+  formData: FormData,
+): Promise<NoteState> {
+  const user = await requireUser();
+
+  try {
+    requireStaff(user);
+  } catch {
+    return { error: "You do not have permission to do that." };
+  }
+
+  const parsed = DraftSchema.safeParse({
+    personId: formData.get("personId"),
+    loanId: formData.get("loanId") || null,
+    channel: formData.get("channel"),
+    subject: formData.get("subject") ?? undefined,
+    body: formData.get("body"),
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Check the message and try again." };
+  }
+
+  const { personId, loanId, channel, subject, body } = parsed.data;
+  const now = new Date();
+  let conversationId: string;
+
+  try {
+    conversationId = await queryAs(user, async (db) => {
+      // RLS scopes this, but check the person is visible before writing a
+      // child row — a clear failure beats a foreign-key error.
+      const [target] = await db
+        .select({ id: person.id, doNotContact: person.doNotContact })
+        .from(person)
+        .where(and(eq(person.id, personId), isNull(person.deletedAt)))
+        .limit(1);
+      if (!target) throw new Error("not-visible");
+
+      // Do-not-contact is absolute, and it is checked here rather than only
+      // in the dialog, because the dialog is not the last line of defence.
+      if (target.doNotContact) throw new Error("do-not-contact");
+
+      // Continue the person's newest thread on this channel, or open one.
+      const [existing] = await db
+        .select({ id: conversation.id })
+        .from(conversation)
+        .where(and(eq(conversation.personId, personId), eq(conversation.channel, channel)))
+        .orderBy(desc(conversation.lastMessageAt))
+        .limit(1);
+
+      let threadId = existing?.id;
+      if (!threadId) {
+        const [created] = await db
+          .insert(conversation)
+          .values({
+            tenantId: user.tenantId,
+            channel,
+            subject: channel === "email" ? subject || null : null,
+            personId,
+            loanId,
+            ownerUserId: user.userId,
+            lastMessageAt: now,
+          })
+          .returning({ id: conversation.id });
+        threadId = created.id;
+      }
+
+      await db.insert(message).values({
+        tenantId: user.tenantId,
+        conversationId: threadId,
+        channel,
+        direction: "outbound",
+        status: "draft",
+        subject: channel === "email" ? subject || null : null,
+        body,
+        // A person typed this. AI had nothing to do with it.
+        preparedByAi: false,
+        authorUserId: user.userId,
+        sentAt: null,
+        occurredAt: now,
+      });
+
+      await db
+        .update(conversation)
+        .set({ lastMessageAt: now, updatedAt: now })
+        .where(eq(conversation.id, threadId));
+
+      await recordAudit(db, user, {
+        action: "message.draft_saved",
+        entity: "conversation",
+        entityId: threadId,
+        changes: { channel: { from: null, to: channel } },
+      });
+
+      return threadId;
+    });
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : "";
+    if (reason === "do-not-contact") {
+      return {
+        error:
+          "This contact asked not to be contacted, so the draft wasn't saved. Talk to your manager before reaching out.",
+      };
+    }
+    return { error: `We couldn't save that ${CHANNEL_NOUN[channel]} draft. Try again.` };
+  }
+
+  revalidatePath(`/people/${personId}`);
+  revalidatePath("/conversations");
+  redirect(`/conversations/${conversationId}`);
+}
+
+const EnrollSchema = z.object({
+  personId: z.string().uuid(),
+  campaignId: z.string().uuid("Pick a campaign."),
+});
+
+export type EnrollState = { error?: string; enrolled?: string };
+
+/**
+ * Enroll a person in a drip campaign.
+ *
+ * This records the enrollment (an event row) and grows the campaign's
+ * audience count. It does not send anything: no provider is connected, so the
+ * campaign's messages queue for sending once one is. The UI says exactly that.
+ */
+export async function enrollInCampaign(
+  _prev: EnrollState,
+  formData: FormData,
+): Promise<EnrollState> {
+  const user = await requireUser();
+
+  try {
+    requireStaff(user);
+  } catch {
+    return { error: "You do not have permission to do that." };
+  }
+
+  const parsed = EnrollSchema.safeParse({
+    personId: formData.get("personId"),
+    campaignId: formData.get("campaignId"),
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Pick a campaign." };
+  }
+
+  const { personId, campaignId } = parsed.data;
+  let campaignName: string;
+
+  try {
+    campaignName = await queryAs(user, async (db) => {
+      const [target] = await db
+        .select({ id: person.id, doNotContact: person.doNotContact })
+        .from(person)
+        .where(and(eq(person.id, personId), isNull(person.deletedAt)))
+        .limit(1);
+      if (!target) throw new Error("not-visible");
+      if (target.doNotContact) throw new Error("do-not-contact");
+
+      const [chosen] = await db
+        .select({ id: campaign.id, name: campaign.name, status: campaign.status })
+        .from(campaign)
+        .where(and(eq(campaign.id, campaignId), isNull(campaign.deletedAt)))
+        .limit(1);
+      if (!chosen) throw new Error("no-campaign");
+      if (chosen.status === "finished") throw new Error("finished");
+
+      // One enrollment per person per campaign — check the event trail.
+      const [already] = await db
+        .select({ id: event.id })
+        .from(event)
+        .where(
+          and(
+            eq(event.kind, "campaign.enrolled"),
+            eq(event.personId, personId),
+            sql`${event.payload}->>'campaignId' = ${campaignId}`,
+          ),
+        )
+        .limit(1);
+      if (already) throw new Error("already-enrolled");
+
+      await db.insert(event).values({
+        tenantId: user.tenantId,
+        kind: "campaign.enrolled",
+        personId,
+        actorUserId: user.userId,
+        payload: { campaignId, campaignName: chosen.name },
+      });
+
+      await db
+        .update(campaign)
+        .set({
+          audienceSize: sql`${campaign.audienceSize} + 1`,
+          updatedAt: new Date(),
+        })
+        .where(eq(campaign.id, campaignId));
+
+      await recordAudit(db, user, {
+        action: "campaign.enrolled",
+        entity: "campaign",
+        entityId: campaignId,
+        changes: { personId: { from: null, to: personId } },
+      });
+
+      return chosen.name;
+    });
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : "";
+    if (reason === "do-not-contact") {
+      return { error: "This contact asked not to be contacted, so they can't be enrolled." };
+    }
+    if (reason === "already-enrolled") {
+      return { error: "They're already enrolled in that campaign." };
+    }
+    if (reason === "finished") {
+      return { error: "That campaign has finished. Pick one that's still open." };
+    }
+    if (reason === "no-campaign") {
+      return { error: "That campaign isn't in your book any more." };
+    }
+    return { error: "We couldn't enroll them. Nothing was changed — try again." };
+  }
+
+  revalidatePath(`/people/${personId}`);
+  revalidatePath("/marketing");
+  return {
+    enrolled: `Enrolled in "${campaignName}" — messages queue for sending when a provider is connected.`,
+  };
+}
+
+const TaskSchema = z.object({
+  personId: z.string().uuid(),
+  loanId: z.string().uuid().nullable(),
+  title: z.string().trim().min(1, "Say what needs doing."),
+  dueAt: z.string().trim().optional(),
+});
+
+/** Add a follow-up task tied to this person, owned by whoever added it. */
+export async function addTask(_prev: NoteState, formData: FormData): Promise<NoteState> {
+  const user = await requireUser();
+
+  try {
+    requireStaff(user);
+  } catch {
+    return { error: "You do not have permission to do that." };
+  }
+
+  const parsed = TaskSchema.safeParse({
+    personId: formData.get("personId"),
+    loanId: formData.get("loanId") || null,
+    title: formData.get("title"),
+    dueAt: formData.get("dueAt") ?? undefined,
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Check the task and try again." };
+  }
+
+  const { personId, loanId, title } = parsed.data;
+  const dueAt = parsed.data.dueAt ? new Date(parsed.data.dueAt) : null;
+  if (dueAt && Number.isNaN(dueAt.getTime())) {
+    return { error: "That due date didn't read as a real date." };
+  }
+
+  try {
+    await queryAs(user, async (db) => {
+      const [target] = await db
+        .select({ id: person.id })
+        .from(person)
+        .where(and(eq(person.id, personId), isNull(person.deletedAt)))
+        .limit(1);
+      if (!target) throw new Error("not-visible");
+
+      await db.insert(task).values({
+        tenantId: user.tenantId,
+        title,
+        ownerUserId: user.userId,
+        dueAt,
+        personId,
+        loanId,
+      });
+
+      await recordAudit(db, user, {
+        action: "task.created",
+        entity: "person",
+        entityId: personId,
+        changes: { title: { from: null, to: title } },
+      });
+    });
+  } catch {
+    return { error: "We couldn't add that task. Try again." };
+  }
+
+  revalidatePath(`/people/${personId}`);
+  revalidatePath("/today");
   return {};
 }

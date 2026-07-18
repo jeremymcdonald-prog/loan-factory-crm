@@ -8,7 +8,7 @@
 import "server-only";
 import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
 import type { Db } from "@/db";
-import { automation, automationRun, person, template } from "@/db/schema";
+import { automation, automationRun, campaign, person, template } from "@/db/schema";
 
 /**
  * How many runs this automation has parked for a human.
@@ -32,6 +32,8 @@ const AUTOMATION_FIELDS = {
   triggerText: automation.triggerText,
   audienceText: automation.audienceText,
   actionText: automation.actionText,
+  source: automation.source,
+  timingText: automation.timingText,
   tier: automation.tier,
   status: automation.status,
   runCount: automation.runCount,
@@ -39,6 +41,8 @@ const AUTOMATION_FIELDS = {
   createdAt: automation.createdAt,
   templateRef: template.ref,
   templateName: template.name,
+  campaignId: automation.campaignId,
+  campaignName: campaign.name,
   waitingCount,
 };
 
@@ -51,6 +55,7 @@ export async function listAutomations(db: Db) {
     .select(AUTOMATION_FIELDS)
     .from(automation)
     .leftJoin(template, eq(template.id, automation.templateId))
+    .leftJoin(campaign, eq(campaign.id, automation.campaignId))
     .where(isNull(automation.deletedAt))
     .orderBy(
       sql`CASE ${automation.status} WHEN 'active' THEN 0 WHEN 'paused' THEN 1 ELSE 2 END`,
@@ -68,6 +73,7 @@ export async function getAutomation(db: Db, automationId: string) {
     .select(AUTOMATION_FIELDS)
     .from(automation)
     .leftJoin(template, eq(template.id, automation.templateId))
+    .leftJoin(campaign, eq(campaign.id, automation.campaignId))
     .where(and(eq(automation.id, automationId), isNull(automation.deletedAt)))
     .limit(1);
 
@@ -102,3 +108,18 @@ export async function listAutomationRuns(db: Db, automationId: string, limit = 5
 }
 
 export type AutomationRunRow = Awaited<ReturnType<typeof listAutomationRuns>>[number];
+
+/**
+ * Every campaign an automation could enroll people into, for the picker on the
+ * edit form. RLS scopes the list to the caller's tenant; automations are
+ * tenant-wide, so no owner scope applies here either.
+ */
+export async function listCampaignChoices(db: Db) {
+  return db
+    .select({ id: campaign.id, name: campaign.name, status: campaign.status })
+    .from(campaign)
+    .where(isNull(campaign.deletedAt))
+    .orderBy(asc(campaign.name));
+}
+
+export type CampaignChoice = Awaited<ReturnType<typeof listCampaignChoices>>[number];

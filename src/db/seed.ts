@@ -25,12 +25,22 @@ import {
   DEMO_LOS,
   generateDemoBooks,
   generateDemoPartners,
+  mulberry32,
   MULTILINGUAL_THREADS,
   MULTILINGUAL_INSIGHTS,
 } from "./demo-data";
 import { STAGES, phaseOf } from "../lib/stages";
 
 config({ path: ".env.local" });
+
+// Deterministic RNG for the seeder's own draws (stage-trail cadence, referral
+// ages). Fixed seed — re-running the seed reproduces the same branch.
+const seedRand = mulberry32(0x5eed1234);
+
+/** Deterministic integer in [min, max]. */
+function sInt(min: number, max: number): number {
+  return Math.floor(min + seedRand() * (max - min + 1));
+}
 
 const TENANT_ID = "0a9c8f42-1d3e-4b7a-9c21-8f6d5e4b3a20";
 
@@ -243,6 +253,31 @@ async function main() {
     const stalled =
       (l.daysSinceActivity ?? 0) > (phase === "TRANSACT" ? 3 : 7) && l.status !== "funded";
 
+    // Full stage trail: when the file entered each stage it has walked, so
+    // period-bound metrics (applications taken, preapprovals issued) see real
+    // history. Funded files anchor to the funding date; active files to their
+    // last activity.
+    const currentIndex = STAGES.indexOf(l.stage);
+    const fundedIdx = STAGES.indexOf("funded");
+    const trailStep = 4;
+    const entryDaysAgo: number[] = [];
+    if (l.status === "funded" && l.fundedDaysAgo !== undefined) {
+      // Days after funding when the post-funding stages begin.
+      const postFunding = [45, 365, 500, 560];
+      for (let i = 0; i <= currentIndex; i++) {
+        entryDaysAgo[i] =
+          i <= fundedIdx
+            ? l.fundedDaysAgo + (fundedIdx - i) * trailStep
+            : Math.max(1, l.fundedDaysAgo - postFunding[i - fundedIdx - 1]);
+      }
+    } else {
+      const anchor = l.daysSinceActivity ?? 0;
+      for (let i = 0; i <= currentIndex; i++) {
+        entryDaysAgo[i] = anchor + (currentIndex - i) * trailStep;
+      }
+    }
+    const openedDaysAgo = entryDaysAgo[0] + 1;
+
     const [loanRow] = await db
       .insert(schema.loan)
       .values({
@@ -279,14 +314,14 @@ async function main() {
         lostReason: l.status === "lost" ? "Chose another lender — rate shopped" : null,
         applicationLink: "https://loanfactory.com/minh/apply",
         lastActivityAt: lastActivity,
+        // Backdated to match the file's stage age, not the seed run.
+        createdAt: daysFromNow(-openedDaysAgo),
       })
       .returning({ id: schema.loan.id });
 
     loanIds.set(p.key, loanRow.id);
 
     // Stage history: the path this file walked to reach its current stage.
-    const currentIndex = STAGES.indexOf(l.stage);
-    const totalDays = Math.max(currentIndex * 4, 1);
     for (let i = 0; i <= currentIndex; i++) {
       await db.insert(schema.loanStageHistory).values({
         tenantId: TENANT_ID,
@@ -294,7 +329,7 @@ async function main() {
         fromStage: i === 0 ? null : STAGES[i - 1],
         toStage: STAGES[i],
         changedByUserId: U.minh,
-        createdAt: daysFromNow(-(totalDays - i * 4)),
+        createdAt: daysFromNow(-entryDaysAgo[i]),
       });
     }
 
@@ -404,22 +439,25 @@ async function main() {
         emails: [{ address: p.email, label: "work" }],
         phones: [{ number: p.phone, label: "mobile", smsCapable: true }],
         ownerUserId: U.minh,
-        lastTouchAt: daysFromNow(-p.lastTouchDaysAgo),
+        // Targets have never been touched — that's what puts them on the list.
+        lastTouchAt: p.lastTouchDaysAgo === null ? null : daysFromNow(-p.lastTouchDaysAgo),
         notesSummary: p.notesSummary,
       })
       .returning({ id: schema.partner.id });
 
     partnerIds.set(p.key, row.id);
 
-    for (const personKey of p.referred) {
-      const personId = personIds.get(personKey);
+    for (const ref of p.referred) {
+      const personId = personIds.get(ref.personKey);
       if (!personId) continue;
       await db.insert(schema.partnerRelationship).values({
         tenantId: TENANT_ID,
         partnerId: row.id,
         personId,
-        loanId: loanIds.get(personKey) ?? null,
+        loanId: loanIds.get(ref.personKey) ?? null,
         role: "referred",
+        // When the referral actually arrived, not when the seed ran.
+        createdAt: daysFromNow(-ref.daysAgo),
       });
     }
   }
@@ -445,18 +483,23 @@ async function main() {
       .returning({ id: schema.conversation.id });
 
     for (const m of thread.messages) {
+      const status = m.status ?? (m.direction === "inbound" ? "received" : "sent");
       await db.insert(schema.message).values({
         tenantId: TENANT_ID,
         conversationId: conv.id,
         channel: thread.channel,
         direction: m.direction,
-        status: m.status ?? (m.direction === "inbound" ? "received" : "sent"),
+        status,
         subject: thread.channel === "email" ? thread.subject : null,
         body: m.body,
         preparedByAi: m.preparedByAi ?? false,
         templateRef: m.templateRef ?? null,
         authorUserId: m.direction === "outbound" ? U.minh : null,
-        sentAt: m.direction === "outbound" ? hoursFromNow(-m.hoursAgo) : null,
+        // Honesty rule: only messages that actually went out carry sentAt.
+        // Approved drafts carry approvedAt and a NULL sentAt.
+        approvedByUserId: status === "approved" ? U.minh : null,
+        approvedAt: status === "approved" ? hoursFromNow(-m.hoursAgo) : null,
+        sentAt: status === "sent" ? hoursFromNow(-m.hoursAgo) : null,
         occurredAt: hoursFromNow(-m.hoursAgo),
         meta: m.meta ?? {},
       });
@@ -500,20 +543,34 @@ async function main() {
   }
 
   // --- Campaigns -----------------------------------------------------------
+  // Name → id map so automations can point at the campaign they enroll into.
+  const campaignIdByName = new Map<string, string>();
   for (const c of CAMPAIGNS) {
-    await db.insert(schema.campaign).values({
-      tenantId: TENANT_ID,
-      name: c.name,
-      status: c.status,
-      templateId: templateIds.get(c.templateRef) ?? null,
-      audience: c.audience,
-      audienceSize: c.audienceSize,
-      scheduledFor: c.scheduledInDays !== undefined ? daysFromNow(c.scheduledInDays) : null,
-      ownerUserId: U.minh,
-      sentCount: c.sentCount ?? 0,
-      openCount: c.openCount ?? 0,
-      replyCount: c.replyCount ?? 0,
-    });
+    const [row] = await db
+      .insert(schema.campaign)
+      .values({
+        tenantId: TENANT_ID,
+        name: c.name,
+        status: c.status,
+        templateId: c.templateRef ? (templateIds.get(c.templateRef) ?? null) : null,
+        language: c.language ?? "en",
+        emailBody: c.emailBody ?? null,
+        smsBody: c.smsBody ?? null,
+        videoMeta: c.videoMeta ?? null,
+        drip: c.drip ?? [],
+        audience: c.audience,
+        audienceSize: c.audienceSize,
+        scheduledFor: c.scheduledInDays !== undefined ? daysFromNow(c.scheduledInDays) : null,
+        ownerUserId: U.minh,
+        sentCount: c.sentCount ?? 0,
+        openCount: c.openCount ?? 0,
+        replyCount: c.replyCount ?? 0,
+        // Staggered so the Team leaderboard's marketing column has real
+        // differences across its time windows.
+        createdAt: daysFromNow(-(c.createdDaysAgo ?? 0)),
+      })
+      .returning({ id: schema.campaign.id });
+    campaignIdByName.set(c.name, row.id);
   }
 
   // --- Automations ---------------------------------------------------------
@@ -531,6 +588,9 @@ async function main() {
         tier: a.tier,
         status: a.status,
         templateId: a.templateRef ? (templateIds.get(a.templateRef) ?? null) : null,
+        source: a.source ?? null,
+        timingText: a.timingText ?? null,
+        campaignId: a.campaignName ? (campaignIdByName.get(a.campaignName) ?? null) : null,
         runCount: a.runCount,
         lastRunAt: a.lastRunDaysAgo !== undefined ? daysFromNow(-a.lastRunDaysAgo) : null,
       })
@@ -549,6 +609,45 @@ async function main() {
       });
     }
   }
+
+  // --- Campaign-enrollment events ------------------------------------------
+  // Convention: kind 'campaign.enrolled' with { campaignId, campaignName } in
+  // the payload; partner enrollments use 'partner.campaign_enrolled' with the
+  // partnerId alongside.
+  const welcomeCampaign = campaignIdByName.get("New lead welcome — first 10 days")!;
+  const checkinCampaign = campaignIdByName.get("Past client check-in — summer")!;
+  const partnerMonthly = campaignIdByName.get("Agent partner monthly update")!;
+  await db.insert(schema.event).values([
+    {
+      tenantId: TENANT_ID,
+      kind: "campaign.enrolled",
+      personId: personIds.get("torres")!,
+      loanId: loanIds.get("torres") ?? null,
+      actorUserId: U.minh,
+      payload: { campaignId: welcomeCampaign, campaignName: "New lead welcome — first 10 days" },
+      createdAt: hoursFromNow(-5),
+    },
+    {
+      tenantId: TENANT_ID,
+      kind: "campaign.enrolled",
+      personId: personIds.get("whitmore")!,
+      loanId: loanIds.get("whitmore") ?? null,
+      actorUserId: U.minh,
+      payload: { campaignId: checkinCampaign, campaignName: "Past client check-in — summer" },
+      createdAt: daysFromNow(-2),
+    },
+    {
+      tenantId: TENANT_ID,
+      kind: "partner.campaign_enrolled",
+      actorUserId: U.minh,
+      payload: {
+        partnerId: partnerIds.get("alvarez_agent"),
+        campaignId: partnerMonthly,
+        campaignName: "Agent partner monthly update",
+      },
+      createdAt: daysFromNow(-1),
+    },
+  ]);
 
   // --- How-to video library ------------------------------------------------
   // Seeded placeholders: none has a real recording yet, so url stays null and
@@ -676,6 +775,30 @@ async function main() {
       const stalled =
         l.status === "active" && l.daysSinceActivity > (phase === "TRANSACT" ? 3 : 7);
 
+      // Full stage trail with a per-loan cadence, so entries into
+      // `application` and `preapproval` scatter across every leaderboard
+      // window at a different density per LO. Funded files anchor to the
+      // funding date; everything else to recent activity.
+      const stageIdx = STAGES.indexOf(l.stage);
+      const fundedIdx = STAGES.indexOf("funded");
+      const trailStep = sInt(2, 8);
+      const entryDaysAgo: number[] = [];
+      if (l.status === "funded" && l.fundedDaysAgo !== undefined) {
+        const postFunding = [45, 365, 500, 560];
+        for (let i = 0; i <= stageIdx; i++) {
+          entryDaysAgo[i] =
+            i <= fundedIdx
+              ? l.fundedDaysAgo + (fundedIdx - i) * trailStep
+              : Math.max(1, l.fundedDaysAgo - postFunding[i - fundedIdx - 1]);
+        }
+      } else {
+        const anchor = l.daysSinceActivity + sInt(0, 6);
+        for (let i = 0; i <= stageIdx; i++) {
+          entryDaysAgo[i] = anchor + (stageIdx - i) * trailStep;
+        }
+      }
+      const openedDaysAgo = entryDaysAgo[0] + sInt(1, 3);
+
       const [loanRow] = await db
         .insert(schema.loan)
         .values({
@@ -701,26 +824,29 @@ async function main() {
           stalledSince: stalled ? lastActivity : null,
           lostReason: l.status === "lost" ? "Went with another lender" : null,
           lastActivityAt: lastActivity,
-          createdAt: daysFromNow(-(l.fundedDaysAgo ?? l.daysSinceActivity + 30)),
+          createdAt: daysFromNow(-openedDaysAgo),
         })
         .returning({ id: schema.loan.id });
       loanId = loanRow.id;
 
-      // A short stage trail so pipeline-movement metrics have history.
-      const stageIdx = STAGES.indexOf(l.stage);
-      const trailStart = Math.max(0, stageIdx - 2);
-      for (let s = trailStart; s <= stageIdx; s++) {
+      // The full stage trail, from new_lead to today.
+      for (let s = 0; s <= stageIdx; s++) {
         await db.insert(schema.loanStageHistory).values({
           tenantId: TENANT_ID,
           loanId,
           fromStage: s === 0 ? null : STAGES[s - 1],
           toStage: STAGES[s],
           changedByUserId: loUserId,
-          createdAt: daysFromNow(-(l.daysSinceActivity + (stageIdx - s) * 6)),
+          createdAt: daysFromNow(-entryDaysAgo[s]),
         });
       }
 
       if (l.lead) {
+        // Genuinely new leads keep their recent capture times (that's the
+        // speed-to-lead queue); every deeper file's capture anchors to when
+        // the file opened, spreading capturedAt across the past ~6 months.
+        const capturedHoursAgo =
+          stageIdx <= 1 ? l.lead.capturedHoursAgo : openedDaysAgo * 24 - sInt(0, 12);
         await db.insert(schema.lead).values({
           tenantId: TENANT_ID,
           personId: personRow.id,
@@ -728,10 +854,10 @@ async function main() {
           source: { channel: l.lead.channel },
           intent: l.purpose === "refinance" ? "refinance" : "purchase",
           assignedUserId: loUserId,
-          capturedAt: hoursFromNow(-l.lead.capturedHoursAgo),
+          capturedAt: hoursFromNow(-capturedHoursAgo),
           firstResponseAt:
             l.lead.firstResponseMinutes !== null
-              ? hoursFromNow(-l.lead.capturedHoursAgo + l.lead.firstResponseMinutes / 60)
+              ? hoursFromNow(-capturedHoursAgo + l.lead.firstResponseMinutes / 60)
               : null,
         });
       }
@@ -787,6 +913,53 @@ async function main() {
       active: gp.loan?.status === "active",
     });
     generatedPeople.set(gp.loKey, list);
+  }
+
+  // --- Lead-only people: captured manually, no opportunity opened yet -------
+  // A person can exist as a lead before anyone opens a file — the People
+  // screen shows them; the Pipeline doesn't.
+  const LEAD_ONLY_PEOPLE = [
+    {
+      firstName: "Tessa",
+      lastName: "Bright",
+      email: "tessa.bright@example.com",
+      phone: "(206) 555-0411",
+      language: "en" as const,
+      city: "Seattle",
+      loKey: "priya",
+    },
+    {
+      firstName: "Rogelio",
+      lastName: "Cisneros",
+      email: "rogelio.cisneros@example.com",
+      phone: "(253) 555-0412",
+      language: "es" as const,
+      city: "Tacoma",
+      loKey: "carlos",
+    },
+    {
+      firstName: "Owen",
+      lastName: "Mercer",
+      email: "owen.mercer@example.com",
+      phone: "(425) 555-0413",
+      language: "en" as const,
+      city: "Kirkland",
+      loKey: "grace",
+    },
+  ];
+  for (const lp of LEAD_ONLY_PEOPLE) {
+    await db.insert(schema.person).values({
+      tenantId: TENANT_ID,
+      firstName: lp.firstName,
+      lastName: lp.lastName,
+      emails: [{ address: lp.email, label: "personal" }],
+      phones: [{ number: lp.phone, label: "mobile", smsCapable: true }],
+      mailingAddress: { city: lp.city, state: "WA" },
+      preferredLanguage: lp.language,
+      type: "lead",
+      ownerUserId: loIds.get(lp.loKey)!,
+      source: { channel: "manual" },
+    });
   }
 
   // Appointments this week across the team.
@@ -846,12 +1019,16 @@ async function main() {
 
     const book = (generatedPeople.get(gp.loKey) ?? []).filter((p) => p.loanId);
     for (const referred of book.slice(0, Math.min(2, book.length))) {
+      // Staggered referral history: some arrived this week, some months back.
+      const roll = seedRand();
+      const relDaysAgo = roll < 0.3 ? sInt(1, 7) : roll < 0.65 ? sInt(30, 90) : sInt(190, 320);
       await db.insert(schema.partnerRelationship).values({
         tenantId: TENANT_ID,
         partnerId: partnerRow.id,
         personId: referred.personId,
         loanId: referred.loanId,
         role: "referred",
+        createdAt: daysFromNow(-relDaysAgo),
       });
     }
   }
@@ -935,32 +1112,111 @@ async function main() {
 
   // --- Additional campaigns, including multilingual ones --------------------
   const extraCampaigns = [
-    { name: "Boletín mensual — clientes hispanohablantes", status: "running" as const, ownerKey: "carlos", audience: "Spanish-speaking past clients and leads", size: 31, sent: 31, open: 19, reply: 5 },
-    { name: "Bản tin quý — khách hàng người Việt", status: "finished" as const, ownerKey: "thuy", audience: "Vietnamese-speaking clients", size: 24, sent: 24, open: 17, reply: 6 },
-    { name: "Ежеквартальная рассылка — русскоязычные клиенты", status: "scheduled" as const, ownerKey: "elena", audience: "Russian-speaking clients", size: 18, sent: 0, open: 0, reply: 0 },
-    { name: "Spring open-house partner push", status: "finished" as const, ownerKey: "priya", audience: "All referral partners", size: 22, sent: 22, open: 15, reply: 4 },
+    {
+      name: "Boletín mensual — clientes hispanohablantes",
+      status: "running" as const,
+      ownerKey: "carlos",
+      language: "es" as const,
+      audience: "Spanish-speaking past clients and leads",
+      size: 31,
+      sent: 31,
+      open: 19,
+      reply: 5,
+      createdDaysAgo: 4,
+      emailBody:
+        "Hola {{BorrowerName}},\n\nAquí está el boletín de este mes: qué están haciendo las tasas, cuánto inventario hay en nuestras ciudades, y una respuesta clara a la pregunta que más me hacen: \"¿es buen momento para comprar?\"\n\nSi algo de esto le toca de cerca, respóndame — con gusto lo revisamos juntos, sin compromiso.\n\nCarlos Mendoza\nNMLS 1764201 — Company NMLS 320841\nEsto no es un compromiso de préstamo. Todos los préstamos están sujetos a aprobación de crédito.\nIgualdad de Oportunidades en la Vivienda.",
+      smsBody:
+        "Hola {{BorrowerName}} — Carlos de Loan Factory. Salió el boletín de este mes; revise su correo. ¿Preguntas? Responda aquí. Responda STOP para cancelar.",
+    },
+    {
+      name: "Bản tin quý — khách hàng người Việt",
+      status: "finished" as const,
+      ownerKey: "thuy",
+      language: "vi" as const,
+      audience: "Vietnamese-speaking clients",
+      size: 24,
+      sent: 24,
+      open: 17,
+      reply: 6,
+      createdDaysAgo: 16,
+      emailBody:
+        "Chào anh chị,\n\nBản tin quý này: lãi suất đang đi về đâu, thị trường nhà quanh Seattle thế nào, và ba điều nên chuẩn bị nếu anh chị định mua hoặc tái tài trợ trong năm nay.\n\nCó câu hỏi nào, anh chị cứ trả lời email này — em luôn sẵn sàng.\n\nThúy Phạm\nNMLS 1901288 — Company NMLS 320841\nĐây không phải là cam kết cho vay. Mọi khoản vay đều phải được duyệt tín dụng.\nCơ hội Nhà ở Bình đẳng.",
+      smsBody:
+        "Chào anh chị — Thúy ở Loan Factory. Bản tin quý đã gửi qua email, anh chị xem nhé. Có câu hỏi cứ nhắn lại. Nhắn STOP để ngưng nhận tin.",
+    },
+    {
+      name: "Ежеквартальная рассылка — русскоязычные клиенты",
+      status: "scheduled" as const,
+      ownerKey: "elena",
+      language: "ru" as const,
+      audience: "Russian-speaking clients",
+      size: 18,
+      sent: 0,
+      open: 0,
+      reply: 0,
+      createdDaysAgo: 28,
+      emailBody:
+        "Здравствуйте, {{BorrowerName}}!\n\nКвартальный обзор: куда движутся ставки, что происходит с ценами на жильё в нашем регионе, и когда рефинансирование действительно имеет смысл — а когда нет.\n\nЕсли что-то из этого касается вас, просто ответьте на это письмо.\n\nElena Petrova\nNMLS 1922845 — Company NMLS 320841\nЭто не обязательство по кредитованию. Все кредиты подлежат одобрению.\nРавные жилищные возможности.",
+    },
+    {
+      name: "Spring open-house partner push",
+      status: "finished" as const,
+      ownerKey: "priya",
+      language: "en" as const,
+      audience: "All referral partners",
+      size: 22,
+      sent: 22,
+      open: 15,
+      reply: 4,
+      createdDaysAgo: 45,
+      emailBody:
+        "Hi {{PartnerName}},\n\nOpen-house season is here. I'm offering same-weekend preapproval turnarounds for your sign-in-sheet buyers, plus a co-branded financing flyer for your listings.\n\nSend me your open-house schedule and I'll have materials to you by Friday.\n\nPriya Sharma\nNMLS 1899310 — Company NMLS 320841\nEqual Housing Opportunity.",
+      smsBody:
+        "Hi {{PartnerName}} — Priya at Loan Factory. Open-house flyers are ready; want a set for this weekend? Reply STOP to opt out.",
+    },
   ];
   for (const c of extraCampaigns) {
-    await db.insert(schema.campaign).values({
-      tenantId: TENANT_ID,
-      name: c.name,
-      status: c.status,
-      audience: { label: c.audience, type: "custom_demo" },
-      audienceSize: c.size,
-      scheduledFor: c.status === "scheduled" ? daysFromNow(3) : null,
-      ownerUserId: loIds.get(c.ownerKey)!,
-      sentCount: c.sent,
-      openCount: c.open,
-      replyCount: c.reply,
-    });
+    const [row] = await db
+      .insert(schema.campaign)
+      .values({
+        tenantId: TENANT_ID,
+        name: c.name,
+        status: c.status,
+        language: c.language,
+        emailBody: c.emailBody,
+        smsBody: c.smsBody ?? null,
+        audience: { label: c.audience, type: "custom_demo" },
+        audienceSize: c.size,
+        scheduledFor: c.status === "scheduled" ? daysFromNow(3) : null,
+        ownerUserId: loIds.get(c.ownerKey)!,
+        sentCount: c.sent,
+        openCount: c.open,
+        replyCount: c.reply,
+        createdAt: daysFromNow(-c.createdDaysAgo),
+      })
+      .returning({ id: schema.campaign.id });
+    campaignIdByName.set(c.name, row.id);
   }
 
   // --- Video-message demo drafts (composer examples) ------------------------
-  const videoDrafts = [
+  // Authored by different LOs across recent weeks so the Team leaderboard's
+  // marketing column differs by window. One is approved-but-unsent: it carries
+  // approvedAt and a NULL sentAt (nothing goes out without a send).
+  const videoDrafts: {
+    ownerKey: string;
+    subject: string;
+    language: "en" | "es" | "vi" | "ru";
+    intro: string;
+    video: { title: string; caption: string; durationSeconds: number };
+    channel?: "email" | "video";
+    createdDaysAgo?: number;
+    approved?: boolean;
+  }[] = [
     {
       ownerKey: "linh",
       subject: "July market update — video newsletter",
       language: "en" as const,
+      approved: true,
       intro:
         "Hi everyone,\n\nI recorded a short update on what we're seeing this month — inventory, buyer activity, and what it means if you're waiting to make a move.",
       video: { title: "July market update", caption: "3-minute update from Linh", durationSeconds: 184 },
@@ -985,9 +1241,39 @@ async function main() {
       ownerKey: "elena",
       subject: "Год после покупки — короткое видео для вас",
       language: "ru" as const,
+      createdDaysAgo: 2,
       intro:
         "Здравствуйте, Виктор!\n\nЗаписала для вас короткое видео: год после покупки — хороший момент посмотреть, всё ли работает на вас. Три минуты, без обязательств.",
       video: { title: "Годовой обзор", caption: "Видео 3 минуты", durationSeconds: 178 },
+    },
+    {
+      ownerKey: "priya",
+      subject: "A 90-second answer to your escrow question",
+      language: "en" as const,
+      channel: "video",
+      createdDaysAgo: 1,
+      intro:
+        "Hi,\n\nYou asked how your escrow account actually works — here's the 90-second version, with your numbers on screen.",
+      video: { title: "Your escrow, explained", caption: "90 seconds, your numbers", durationSeconds: 94 },
+    },
+    {
+      ownerKey: "marcus",
+      subject: "Walkthrough: your loan estimate, page by page",
+      language: "en" as const,
+      channel: "video",
+      createdDaysAgo: 9,
+      intro:
+        "Hi,\n\nBefore we talk tomorrow, here's a short walkthrough of your loan estimate so the numbers aren't new when we go through them together.",
+      video: { title: "Your loan estimate, page by page", caption: "4-minute walkthrough", durationSeconds: 246 },
+    },
+    {
+      ownerKey: "grace",
+      subject: "Welcome — here's how I work",
+      language: "en" as const,
+      createdDaysAgo: 20,
+      intro:
+        "Hi,\n\nA short hello before our first call: who I am, how I communicate, and what you can expect week to week while we get you home.",
+      video: { title: "Hello from Grace", caption: "2-minute introduction", durationSeconds: 121 },
     },
   ];
 
@@ -996,16 +1282,18 @@ async function main() {
     const ownerId = d.ownerKey === "linh" ? leaderId : loIds.get(d.ownerKey)!;
     const book = generatedPeople.get(d.ownerKey === "linh" ? "minh" : d.ownerKey) ?? [];
     const match = book.find((p) => p.language === d.language) ?? book[0];
+    const channel = d.channel ?? "email";
+    const when = daysFromNow(-(d.createdDaysAgo ?? 0));
 
     const [conv] = await db
       .insert(schema.conversation)
       .values({
         tenantId: TENANT_ID,
         subject: d.subject,
-        channel: "email",
+        channel,
         personId: match?.personId ?? null,
         ownerUserId: ownerId,
-        lastMessageAt: daysFromNow(0),
+        lastMessageAt: when,
         awaitingReply: false,
       })
       .returning({ id: schema.conversation.id });
@@ -1013,15 +1301,19 @@ async function main() {
     await db.insert(schema.message).values({
       tenantId: TENANT_ID,
       conversationId: conv.id,
-      channel: "email",
+      channel,
       direction: "outbound",
-      status: "draft",
+      status: d.approved ? "approved" : "draft",
       subject: d.subject,
       body: `${d.intro}\n\n[Video: ${d.video.title}]\n\nIf the video doesn't load, use this link instead.`,
       preparedByAi: false,
       languageCode: d.language,
       authorUserId: ownerId,
-      occurredAt: daysFromNow(0),
+      // Approved means a human signed off — it still has not been sent.
+      approvedByUserId: d.approved ? ownerId : null,
+      approvedAt: d.approved ? hoursFromNow(-2) : null,
+      occurredAt: when,
+      createdAt: when,
       meta: { video: { ...d.video, demo: true } },
     });
   }

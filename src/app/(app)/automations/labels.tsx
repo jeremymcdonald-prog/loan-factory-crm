@@ -24,6 +24,40 @@ export type RunState =
 /** The approval ladder, least autonomy first. This order is the whole point. */
 export const TIER_LADDER: Tier[] = ["t0", "t1", "t2", "t3"];
 
+/**
+ * Where the triggering lead or event comes from. Stored as plain text on
+ * `automation.source`; these are the values the picker offers. "crm event"
+ * covers everything that starts inside the CRM itself — a stage change, an
+ * anniversary date arriving — rather than a lead walking in from outside.
+ */
+export const SOURCES = [
+  "facebook",
+  "instagram",
+  "website",
+  "open house",
+  "agent referral",
+  "past client referral",
+  "crm event",
+] as const;
+
+export type Source = (typeof SOURCES)[number];
+
+export const SOURCE_LABEL: Record<Source, string> = {
+  facebook: "Facebook",
+  instagram: "Instagram",
+  website: "Website",
+  "open house": "Open house",
+  "agent referral": "Agent referral",
+  "past client referral": "Past client referral",
+  "crm event": "CRM event",
+};
+
+/** The column stores free text, so tolerate a value the picker never offered. */
+export function sourceLabel(source: string | null): string | null {
+  if (!source) return null;
+  return SOURCE_LABEL[source as Source] ?? source;
+}
+
 export const TIER_LABEL: Record<Tier, string> = {
   t0: "Never automated — you handle it",
   t1: "Runs on its own",

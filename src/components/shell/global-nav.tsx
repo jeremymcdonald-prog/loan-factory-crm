@@ -26,7 +26,7 @@ export function GlobalNav({ approvalCount = 0 }: { approvalCount?: number }) {
       aria-label="Main"
       className="flex h-full w-[236px] shrink-0 flex-col bg-sidebar text-sidebar-fg-muted"
     >
-      <div className="flex h-16 items-center px-5">
+      <div className="flex h-16 items-center overflow-hidden pl-5 pr-7">
         {/* The logo is the brand anchor; the "CRM" tag would only crowd it here
             (it stays in the tab title and on the sign-in screen). */}
         <Wordmark onDark size="lg" showProduct={false} />

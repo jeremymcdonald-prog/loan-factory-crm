@@ -74,6 +74,79 @@ export async function listCampaigns(db: Db, u: CurrentUser): Promise<CampaignRow
   return rows as CampaignRow[];
 }
 
+export type CampaignDetail = {
+  id: string;
+  name: string;
+  status: string;
+  language: string;
+  emailBody: string | null;
+  smsBody: string | null;
+  videoMeta: Record<string, unknown> | null;
+  drip: { day: number; channel: string; subject: string }[];
+  audience: { label?: string; type?: string } | null;
+  audienceSize: number;
+  scheduledFor: Date | null;
+  sentCount: number;
+  openCount: number;
+  replyCount: number;
+  createdAt: Date;
+  updatedAt: Date;
+  ownerUserId: string | null;
+  ownerName: string | null;
+  templateId: string | null;
+  templateRef: string | null;
+  templateName: string | null;
+  templatePolicy: string | null;
+  templateSubject: string | null;
+  templateBody: string | null;
+};
+
+/**
+ * One campaign, whole — for the detail page and every action that edits it.
+ * Book-scoped like the list: a campaign the caller may not see is a campaign
+ * the caller may not touch, so actions resolve their target through this too.
+ */
+export async function getCampaign(
+  db: Db,
+  u: CurrentUser,
+  id: string,
+): Promise<CampaignDetail | null> {
+  const [row] = await db
+    .select({
+      id: campaign.id,
+      name: campaign.name,
+      status: campaign.status,
+      language: campaign.language,
+      emailBody: campaign.emailBody,
+      smsBody: campaign.smsBody,
+      videoMeta: campaign.videoMeta,
+      drip: campaign.drip,
+      audience: campaign.audience,
+      audienceSize: campaign.audienceSize,
+      scheduledFor: campaign.scheduledFor,
+      sentCount: campaign.sentCount,
+      openCount: campaign.openCount,
+      replyCount: campaign.replyCount,
+      createdAt: campaign.createdAt,
+      updatedAt: campaign.updatedAt,
+      ownerUserId: campaign.ownerUserId,
+      ownerName: user.fullName,
+      templateId: campaign.templateId,
+      templateRef: template.ref,
+      templateName: template.name,
+      templatePolicy: template.policy,
+      templateSubject: template.subject,
+      templateBody: template.body,
+    })
+    .from(campaign)
+    .leftJoin(template, eq(template.id, campaign.templateId))
+    .leftJoin(user, eq(user.id, campaign.ownerUserId))
+    .where(and(eq(campaign.id, id), isNull(campaign.deletedAt), bookScope(u)))
+    .limit(1);
+
+  return (row as CampaignDetail | undefined) ?? null;
+}
+
 export type CampaignTotals = {
   runningCount: number;
   scheduledCount: number;

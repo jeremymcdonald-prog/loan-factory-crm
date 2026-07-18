@@ -3,16 +3,25 @@ import { relativeTime } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { AutomationLines } from "./automation-lines";
-import { AutomationControls } from "./automation-controls";
+import { AutomationControls, type CampaignChoice } from "./automation-controls";
 import { AutomationStateBadge, TierBadge } from "./labels";
 import type { AutomationRow } from "@/lib/queries/automations";
 
 /**
  * One automation, read top to bottom: what it is called and whether it is on,
- * the three lines it does, and — last, because it is the promise the whole
- * screen rests on — how much it is allowed to do without you.
+ * the lines it does — source in, campaign out, timing — and, last, because it
+ * is the promise the whole screen rests on, how much it is allowed to do
+ * without you.
  */
-export function AutomationCard({ automation }: { automation: AutomationRow }) {
+export function AutomationCard({
+  automation,
+  campaignChoices,
+  canSetTier,
+}: {
+  automation: AutomationRow;
+  campaignChoices: CampaignChoice[];
+  canSetTier: boolean;
+}) {
   const runSummary = [
     automation.ref,
     automation.runCount === 0
@@ -51,9 +60,14 @@ export function AutomationCard({ automation }: { automation: AutomationRow }) {
             triggerText: automation.triggerText,
             audienceText: automation.audienceText,
             actionText: automation.actionText,
+            source: automation.source,
+            campaignId: automation.campaignId,
+            timingText: automation.timingText,
             tier: automation.tier,
             status: automation.status,
           }}
+          campaignChoices={campaignChoices}
+          canSetTier={canSetTier}
         />
       </div>
 
@@ -62,6 +76,10 @@ export function AutomationCard({ automation }: { automation: AutomationRow }) {
           triggerText={automation.triggerText}
           audienceText={automation.audienceText}
           actionText={automation.actionText}
+          source={automation.source}
+          campaignId={automation.campaignId}
+          campaignName={automation.campaignName}
+          timingText={automation.timingText}
         />
       </div>
 

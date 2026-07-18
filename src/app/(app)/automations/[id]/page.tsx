@@ -3,14 +3,25 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { FileText, ShieldAlert } from "lucide-react";
 import { requireUser, queryAs } from "@/lib/auth";
-import { getAutomation, listAutomationRuns } from "@/lib/queries/automations";
+import {
+  getAutomation,
+  listAutomationRuns,
+  listCampaignChoices,
+} from "@/lib/queries/automations";
+import { seesWholeBook } from "@/lib/roles";
 import { relativeTime, absoluteTime, fullName } from "@/lib/format";
 import { PageHeader } from "@/components/shell/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, SectionLabel } from "@/components/ui/card";
 import { AutomationLines } from "../automation-lines";
 import { AutomationControls } from "../automation-controls";
-import { AutomationStateBadge, RunStateBadge, TierBadge, TIER_MEANING } from "../labels";
+import {
+  AutomationStateBadge,
+  RunStateBadge,
+  TierBadge,
+  TIER_MEANING,
+  sourceLabel,
+} from "../labels";
 import { cn } from "@/lib/cn";
 
 export const dynamic = "force-dynamic";
@@ -34,12 +45,17 @@ export default async function AutomationPage({ params }: { params: Promise<{ id:
   const data = await queryAs(user, async (db) => {
     const record = await getAutomation(db, id);
     if (!record) return null;
-    return { record, runs: await listAutomationRuns(db, id) };
+    const [runs, campaignChoices] = await Promise.all([
+      listAutomationRuns(db, id),
+      listCampaignChoices(db),
+    ]);
+    return { record, runs, campaignChoices };
   });
 
   if (!data) notFound();
 
-  const { record, runs } = data;
+  const { record, runs, campaignChoices } = data;
+  const canSetTier = seesWholeBook(user.role);
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -65,9 +81,14 @@ export default async function AutomationPage({ params }: { params: Promise<{ id:
               triggerText: record.triggerText,
               audienceText: record.audienceText,
               actionText: record.actionText,
+              source: record.source,
+              campaignId: record.campaignId,
+              timingText: record.timingText,
               tier: record.tier,
               status: record.status,
             }}
+            campaignChoices={campaignChoices}
+            canSetTier={canSetTier}
             onRecord
           />
         }
@@ -100,6 +121,10 @@ export default async function AutomationPage({ params }: { params: Promise<{ id:
                 triggerText={record.triggerText}
                 audienceText={record.audienceText}
                 actionText={record.actionText}
+                source={record.source}
+                campaignId={record.campaignId}
+                campaignName={record.campaignName}
+                timingText={record.timingText}
               />
             </div>
             <div className="border-t border-subtle px-4 py-3">
@@ -184,6 +209,39 @@ export default async function AutomationPage({ params }: { params: Promise<{ id:
           <Card>
             <CardHeader title="Details" />
             <dl className="space-y-3 p-4">
+              {record.source ? (
+                <div>
+                  <dt className="text-label font-semibold uppercase tracking-wide text-muted">
+                    Lead source
+                  </dt>
+                  <dd className="mt-0.5 text-body text-primary">
+                    {sourceLabel(record.source)}
+                  </dd>
+                </div>
+              ) : null}
+              {record.campaignId && record.campaignName ? (
+                <div>
+                  <dt className="text-label font-semibold uppercase tracking-wide text-muted">
+                    Campaign it starts
+                  </dt>
+                  <dd className="mt-0.5">
+                    <Link
+                      href={`/marketing/campaigns/${record.campaignId}`}
+                      className="text-body font-semibold text-action hover:underline"
+                    >
+                      {record.campaignName}
+                    </Link>
+                  </dd>
+                </div>
+              ) : null}
+              {record.timingText ? (
+                <div>
+                  <dt className="text-label font-semibold uppercase tracking-wide text-muted">
+                    Timing
+                  </dt>
+                  <dd className="mt-0.5 text-body text-primary">{record.timingText}</dd>
+                </div>
+              ) : null}
               {record.templateName ? (
                 <div>
                   <dt className="text-label font-semibold uppercase tracking-wide text-muted">

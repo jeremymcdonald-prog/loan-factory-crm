@@ -2,9 +2,21 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
-import { person, loan, lead, event, note, loanStageHistory } from "@/db/schema";
-import { requireUser, queryAs } from "@/lib/auth";
+import {
+  person,
+  loan,
+  lead,
+  event,
+  note,
+  task,
+  campaign,
+  loanStageHistory,
+} from "@/db/schema";
+import type { Db } from "@/db";
+import { requireUser, queryAs, requireRole, type CurrentUser } from "@/lib/auth";
+import { ROLES, seesWholeBook } from "@/lib/roles";
 import { recordAudit } from "@/lib/audit";
 
 export type PersonFormState = { error?: string };
@@ -167,4 +179,307 @@ export async function createPerson(
   revalidatePath("/people");
   revalidatePath("/today");
   redirect(`/people/${personId}`);
+}
+
+// --- Bulk actions ------------------------------------------------------------
+
+export type BulkState = { error?: string; done?: string };
+
+const IdListSchema = z.array(z.string().uuid()).min(1).max(200);
+
+/**
+ * Every staff role may act on people they can see; the book scope below does
+ * the narrowing. The check still runs so a session carrying an unknown role
+ * never reaches a write.
+ */
+function requireStaff(user: CurrentUser) {
+  requireRole(user, [...ROLES]);
+}
+
+/** The selected people this user is actually allowed to touch. */
+async function visiblePeople(db: Db, user: CurrentUser, ids: string[]) {
+  return db
+    .select({
+      id: person.id,
+      firstName: person.firstName,
+      lastName: person.lastName,
+      emails: person.emails,
+      phones: person.phones,
+      type: person.type,
+      preferredLanguage: person.preferredLanguage,
+      tags: person.tags,
+      doNotContact: person.doNotContact,
+      createdAt: person.createdAt,
+    })
+    .from(person)
+    .where(
+      and(
+        inArray(person.id, ids),
+        isNull(person.deletedAt),
+        seesWholeBook(user.role) ? undefined : eq(person.ownerUserId, user.userId),
+      ),
+    );
+}
+
+function readIds(formData: FormData): string[] | null {
+  const parsed = IdListSchema.safeParse(formData.getAll("ids"));
+  return parsed.success ? parsed.data : null;
+}
+
+/**
+ * Enroll the selected people in a drip campaign. Enrollment records an event
+ * per person and grows the campaign's audience count — nothing sends, because
+ * no provider is connected. Do-not-contact people are skipped, never enrolled.
+ */
+export async function bulkEnrollInCampaign(
+  _prev: BulkState,
+  formData: FormData,
+): Promise<BulkState> {
+  const user = await requireUser();
+
+  try {
+    requireStaff(user);
+  } catch {
+    return { error: "You do not have permission to do that." };
+  }
+
+  const ids = readIds(formData);
+  if (!ids) return { error: "Select at least one person first." };
+
+  const campaignId = formData.get("campaignId");
+  if (typeof campaignId !== "string" || !z.string().uuid().safeParse(campaignId).success) {
+    return { error: "Pick a campaign." };
+  }
+
+  let summary: string;
+
+  try {
+    summary = await queryAs(user, async (db) => {
+      const [chosen] = await db
+        .select({ id: campaign.id, name: campaign.name, status: campaign.status })
+        .from(campaign)
+        .where(and(eq(campaign.id, campaignId), isNull(campaign.deletedAt)))
+        .limit(1);
+      if (!chosen) throw new Error("no-campaign");
+      if (chosen.status === "finished") throw new Error("finished");
+
+      const people = await visiblePeople(db, user, ids);
+      if (people.length === 0) throw new Error("none-visible");
+
+      const contactable = people.filter((p) => !p.doNotContact);
+      const skippedDnc = people.length - contactable.length;
+
+      // One enrollment per person per campaign — check the event trail.
+      const priorRows = contactable.length
+        ? await db
+            .select({ personId: event.personId })
+            .from(event)
+            .where(
+              and(
+                eq(event.kind, "campaign.enrolled"),
+                inArray(
+                  event.personId,
+                  contactable.map((p) => p.id),
+                ),
+                sql`${event.payload}->>'campaignId' = ${campaignId}`,
+              ),
+            )
+        : [];
+      const prior = new Set(priorRows.map((r) => r.personId));
+
+      const toEnroll = contactable.filter((p) => !prior.has(p.id));
+
+      if (toEnroll.length > 0) {
+        await db.insert(event).values(
+          toEnroll.map((p) => ({
+            tenantId: user.tenantId,
+            kind: "campaign.enrolled",
+            personId: p.id,
+            actorUserId: user.userId,
+            payload: { campaignId, campaignName: chosen.name },
+          })),
+        );
+
+        await db
+          .update(campaign)
+          .set({
+            audienceSize: sql`${campaign.audienceSize} + ${toEnroll.length}`,
+            updatedAt: new Date(),
+          })
+          .where(eq(campaign.id, campaignId));
+      }
+
+      await recordAudit(db, user, {
+        action: "campaign.enrolled",
+        entity: "campaign",
+        entityId: campaignId,
+        changes: {
+          people: { from: null, to: toEnroll.length },
+          skippedDoNotContact: { from: null, to: skippedDnc },
+          alreadyEnrolled: { from: null, to: prior.size },
+        },
+      });
+
+      const parts = [
+        `${toEnroll.length} enrolled in "${chosen.name}" — messages queue for sending when a provider is connected.`,
+      ];
+      if (prior.size > 0) parts.push(`${prior.size} already enrolled.`);
+      if (skippedDnc > 0) parts.push(`${skippedDnc} skipped (do not contact).`);
+      return parts.join(" ");
+    });
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : "";
+    if (reason === "no-campaign") return { error: "That campaign isn't in your book any more." };
+    if (reason === "finished") {
+      return { error: "That campaign has finished. Pick one that's still open." };
+    }
+    if (reason === "none-visible") {
+      return { error: "None of the selected people are in your book." };
+    }
+    return { error: "We couldn't enroll them. Nothing was changed — try again." };
+  }
+
+  revalidatePath("/people");
+  revalidatePath("/marketing");
+  return { done: summary };
+}
+
+/** Add the same follow-up task for each selected person. */
+export async function bulkAddTask(_prev: BulkState, formData: FormData): Promise<BulkState> {
+  const user = await requireUser();
+
+  try {
+    requireStaff(user);
+  } catch {
+    return { error: "You do not have permission to do that." };
+  }
+
+  const ids = readIds(formData);
+  if (!ids) return { error: "Select at least one person first." };
+
+  const title = String(formData.get("title") ?? "").trim();
+  if (!title) return { error: "Say what needs doing." };
+
+  const dueRaw = String(formData.get("dueAt") ?? "").trim();
+  const dueAt = dueRaw ? new Date(dueRaw) : null;
+  if (dueAt && Number.isNaN(dueAt.getTime())) {
+    return { error: "That due date didn't read as a real date." };
+  }
+
+  let count: number;
+
+  try {
+    count = await queryAs(user, async (db) => {
+      const people = await visiblePeople(db, user, ids);
+      if (people.length === 0) throw new Error("none-visible");
+
+      await db.insert(task).values(
+        people.map((p) => ({
+          tenantId: user.tenantId,
+          title,
+          ownerUserId: user.userId,
+          dueAt,
+          personId: p.id,
+        })),
+      );
+
+      await recordAudit(db, user, {
+        action: "task.bulk_created",
+        entity: "task",
+        changes: {
+          title: { from: null, to: title },
+          people: { from: null, to: people.length },
+        },
+      });
+
+      return people.length;
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message === "none-visible") {
+      return { error: "None of the selected people are in your book." };
+    }
+    return { error: "We couldn't add those tasks. Nothing was changed — try again." };
+  }
+
+  revalidatePath("/people");
+  revalidatePath("/today");
+  return { done: `Task added for ${count} ${count === 1 ? "person" : "people"}.` };
+}
+
+/**
+ * A CSV cell that can't lie to a spreadsheet: quoted, quotes doubled, and
+ * formula-leading characters neutralised so nothing executes on open.
+ */
+function csvCell(value: string): string {
+  const guarded = /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
+  return `"${guarded.replaceAll('"', '""')}"`;
+}
+
+export type ExportResult = { error?: string; csv?: string; fileName?: string };
+
+/** Export the selected people as CSV. The download happens in the browser. */
+export async function exportPeopleCsv(ids: string[]): Promise<ExportResult> {
+  const user = await requireUser();
+
+  try {
+    requireStaff(user);
+  } catch {
+    return { error: "You do not have permission to do that." };
+  }
+
+  const parsed = IdListSchema.safeParse(ids);
+  if (!parsed.success) return { error: "Select at least one person first." };
+
+  try {
+    return await queryAs(user, async (db) => {
+      const people = await visiblePeople(db, user, parsed.data);
+      if (people.length === 0) {
+        return { error: "None of the selected people are in your book." };
+      }
+
+      const header = [
+        "First name",
+        "Last name",
+        "Email",
+        "Phone",
+        "Type",
+        "Preferred language",
+        "Tags",
+        "Do not contact",
+        "Added",
+      ];
+
+      const lines = [header.map(csvCell).join(",")];
+      for (const p of people) {
+        lines.push(
+          [
+            p.firstName,
+            p.lastName,
+            p.emails?.[0]?.address ?? "",
+            p.phones?.[0]?.number ?? "",
+            p.type,
+            p.preferredLanguage,
+            (p.tags ?? []).join("; "),
+            p.doNotContact ? "yes" : "no",
+            p.createdAt.toISOString().slice(0, 10),
+          ]
+            .map(csvCell)
+            .join(","),
+        );
+      }
+
+      await recordAudit(db, user, {
+        action: "people.exported",
+        entity: "person",
+        changes: { count: { from: null, to: people.length } },
+      });
+
+      return {
+        csv: `${lines.join("\r\n")}\r\n`,
+        fileName: `people-export-${new Date().toISOString().slice(0, 10)}.csv`,
+      };
+    });
+  } catch {
+    return { error: "The export failed. Nothing was changed — try again." };
+  }
 }

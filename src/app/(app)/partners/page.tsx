@@ -1,13 +1,18 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Handshake } from "lucide-react";
+import { Handshake, Upload } from "lucide-react";
 import { requireUser, queryAs } from "@/lib/auth";
 import { listPartners, countPartnersByTier, partnerHealth } from "@/lib/queries/partners";
 import { relativeTime, initialsOf } from "@/lib/format";
 import { PageHeader } from "@/components/shell/page-header";
-import { Badge } from "@/components/ui/badge";
 import { NewPartnerButton } from "./new-partner-button";
-import { PARTNER_KIND_LABELS, PARTNER_TIER_TABS } from "./vocabulary";
+import { PartnersTable, type PartnerTableRow } from "./partners-table";
+import {
+  PARTNER_KIND_LABELS,
+  PARTNER_TIER_TABS,
+  PARTNER_TIER_EXPLAINERS,
+  PARTNER_NEXT_ACTIONS,
+} from "./vocabulary";
 import { cn } from "@/lib/cn";
 
 export const metadata: Metadata = { title: "Partners" };
@@ -36,16 +41,79 @@ export default async function PartnersPage({
   const activeTab = PARTNER_TIER_TABS.find((t) => t.key === tier);
   const hasAnyPartners = (counts.all ?? 0) > 0;
 
+  // Everything the client table needs, computed once on the server: the health
+  // read (one rule, every surface) and the dates preformatted so server and
+  // browser can't disagree about what "3 weeks ago" means.
+  const tableRows: PartnerTableRow[] = rows.map((row) => {
+    const health = partnerHealth(row.tier, row.lastTouchAt, now);
+    return {
+      id: row.id,
+      firstName: row.firstName,
+      lastName: row.lastName,
+      company: row.company,
+      email: row.emails?.[0]?.address ?? null,
+      kindLabel: PARTNER_KIND_LABELS[row.kind] ?? row.kind,
+      tier: row.tier,
+      healthLevel: health.level,
+      healthLabel: health.label,
+      referralCount: row.referralCount,
+      closingCount: row.closingCount,
+      lastReferral: row.lastReferralAt ? relativeTime(row.lastReferralAt, now) : "—",
+      lastTouch: row.lastTouchAt ? relativeTime(row.lastTouchAt, now) : "—",
+      ownerName: row.ownerName,
+      nextAction: PARTNER_NEXT_ACTIONS[row.tier] ?? "Follow up",
+      initials: initialsOf(`${row.firstName} ${row.lastName}`),
+    };
+  });
+
   return (
     <>
       <PageHeader
         title="Partners"
         subtitle="The agents, builders, and advisors who send you business — ordered by who has waited longest to hear from you."
-        action={<NewPartnerButton />}
+        action={
+          <div className="flex items-center gap-2">
+            <Link
+              href="/partners/import"
+              className="inline-flex h-9 items-center gap-2 whitespace-nowrap rounded-control border border-strong bg-surface px-3.5 text-body font-semibold text-primary shadow-e1 transition-colors hover:bg-sunken"
+            >
+              <Upload className="size-4" aria-hidden />
+              Import
+            </Link>
+            <NewPartnerButton />
+          </div>
+        }
       />
 
       <div className="px-4 py-4 sm:px-6">
-        <nav className="flex flex-wrap gap-1" aria-label="Filter by relationship">
+        {/* The tier system, in plain language. Five relationships, five moves. */}
+        <section
+          aria-label="How partner tiers work"
+          className="grid gap-px overflow-hidden rounded-card border border-subtle bg-subtle sm:grid-cols-2 lg:grid-cols-5"
+        >
+          {PARTNER_TIER_EXPLAINERS.map((t) => (
+            <Link
+              key={t.key}
+              href={`/partners?tier=${t.key}`}
+              className="block bg-surface px-3.5 py-3 transition-colors hover:bg-sunken"
+            >
+              <p className="flex items-baseline justify-between gap-2">
+                <span className="text-label font-semibold uppercase tracking-wide text-secondary">
+                  {t.label}
+                </span>
+                <span className="text-small font-semibold text-muted tnum">
+                  {counts[t.key] ?? 0}
+                </span>
+              </p>
+              <p className="mt-1 text-small text-secondary">{t.description}</p>
+              <p className="mt-1.5 text-small font-semibold text-action">
+                {PARTNER_NEXT_ACTIONS[t.key]}
+              </p>
+            </Link>
+          ))}
+        </section>
+
+        <nav className="mt-4 flex flex-wrap gap-1" aria-label="Filter by relationship">
           {PARTNER_TIER_TABS.map((tab) => {
             const active = tier === tab.key;
             const count = counts[tab.key] ?? 0;
@@ -85,74 +153,8 @@ export default async function PartnersPage({
             </p>
           </div>
         ) : (
-          <div className="mt-4 overflow-hidden rounded-card border border-subtle bg-surface">
-            <table className="w-full text-body">
-              <caption className="sr-only">Referral partners</caption>
-              <thead>
-                <tr className="border-b border-subtle bg-sunken text-label uppercase tracking-wide text-muted">
-                  <th scope="col" className="px-4 py-2 text-left font-semibold">
-                    Name
-                  </th>
-                  <th scope="col" className="hidden px-4 py-2 text-left font-semibold md:table-cell">
-                    What they do
-                  </th>
-                  <th scope="col" className="px-4 py-2 text-left font-semibold">
-                    Relationship
-                  </th>
-                  <th scope="col" className="hidden px-4 py-2 text-right font-semibold sm:table-cell">
-                    Referrals
-                  </th>
-                  <th scope="col" className="px-4 py-2 text-right font-semibold">
-                    Last touch
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => {
-                  const health = partnerHealth(row.tier, row.lastTouchAt, now);
-                  const name = `${row.firstName} ${row.lastName}`;
-
-                  return (
-                    <tr
-                      key={row.id}
-                      className="border-b border-subtle last:border-0 hover:bg-sunken"
-                    >
-                      <td className="px-4 py-2.5">
-                        <Link href={`/partners/${row.id}`} className="flex items-center gap-2.5">
-                          <span className="grid size-7 shrink-0 place-items-center rounded-full bg-sunken text-label font-semibold text-secondary">
-                            {initialsOf(name)}
-                          </span>
-                          <span className="min-w-0">
-                            <span className="block truncate font-semibold text-primary">
-                              {name}
-                            </span>
-                            <span className="block truncate text-small text-muted">
-                              {row.company ?? row.emails?.[0]?.address ?? "—"}
-                            </span>
-                          </span>
-                        </Link>
-                      </td>
-
-                      <td className="hidden px-4 py-2.5 text-secondary md:table-cell">
-                        {PARTNER_KIND_LABELS[row.kind] ?? row.kind}
-                      </td>
-
-                      <td className="px-4 py-2.5">
-                        <Badge tone={health.level}>{health.label}</Badge>
-                      </td>
-
-                      <td className="hidden px-4 py-2.5 text-right text-secondary tnum sm:table-cell">
-                        {row.referralCount > 0 ? row.referralCount : "—"}
-                      </td>
-
-                      <td className="px-4 py-2.5 text-right text-small text-muted tnum">
-                        {row.lastTouchAt ? relativeTime(row.lastTouchAt, now) : "—"}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+          <div className="mt-4">
+            <PartnersTable rows={tableRows} />
           </div>
         )}
 

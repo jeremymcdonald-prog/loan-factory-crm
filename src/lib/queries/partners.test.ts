@@ -76,6 +76,40 @@ describe("partner referral counts", () => {
     expect(total).toBe(truth[0].n);
   });
 
+  it("counts closings as funded, undeleted loans that came through the partner", async () => {
+    const rows = await listPartners(db, LEADER);
+
+    for (const row of rows) {
+      const { rows: truth } = await pool.query(
+        `SELECT count(*)::int AS n
+           FROM partner_relationship pr
+           JOIN loan l ON l.id = pr.loan_id AND l.deleted_at IS NULL
+          WHERE pr.partner_id = $1 AND l.status = 'funded'`,
+        [row.id],
+      );
+      expect(row.closingCount, `${row.firstName} ${row.lastName} closings`).toBe(truth[0].n);
+      // A closing is a referral that funded — it can never outnumber referrals.
+      expect(row.closingCount).toBeLessThanOrEqual(row.referralCount);
+    }
+  });
+
+  it("reports each partner's most recent referral date", async () => {
+    const rows = await listPartners(db, LEADER);
+
+    for (const row of rows) {
+      const { rows: truth } = await pool.query(
+        `SELECT max(created_at) AS latest FROM partner_relationship WHERE partner_id = $1`,
+        [row.id],
+      );
+      const expected: Date | null = truth[0].latest;
+      if (expected === null) {
+        expect(row.lastReferralAt, `${row.firstName} ${row.lastName} last referral`).toBeNull();
+      } else {
+        expect(new Date(row.lastReferralAt!).getTime()).toBe(expected.getTime());
+      }
+    }
+  });
+
   it("puts the partner who has waited longest at the top", async () => {
     const rows = await listPartners(db, LEADER);
     const touched = rows.filter((r) => r.lastTouchAt !== null);

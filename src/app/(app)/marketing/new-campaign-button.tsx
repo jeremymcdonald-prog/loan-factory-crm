@@ -4,7 +4,14 @@ import { useActionState, useMemo, useState } from "react";
 import Link from "next/link";
 import { Megaphone, X, ShieldAlert, ExternalLink } from "lucide-react";
 import { createCampaign, type CampaignFormState } from "./actions";
-import { policyRead, type AudienceOption } from "./vocabulary";
+import {
+  CAMPAIGN_LANGUAGES,
+  campaignLanguageName,
+  isCampaignLanguage,
+  policyRead,
+  type AudienceOption,
+  type CampaignLanguage,
+} from "./vocabulary";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Field, Input, Select } from "@/components/ui/field";
@@ -44,6 +51,8 @@ export function NewCampaignButton({
   const [open, setOpen] = useState(false);
   const [templateId, setTemplateId] = useState(defaultTemplateId);
   const [audienceType, setAudienceType] = useState(audiences[0]?.type ?? "past_clients");
+  // English is the default: every campaign starts in it unless deliberately changed.
+  const [language, setLanguage] = useState<CampaignLanguage>("en");
   const [timing, setTiming] = useState<"draft" | "scheduled">("draft");
   const [state, formAction, pending] = useActionState<CampaignFormState, FormData>(
     createCampaign,
@@ -207,6 +216,34 @@ export function NewCampaignButton({
                   today. Anyone who asked not to be contacted is already left out.
                 </>
               )}
+            </p>
+          ) : null}
+
+          <Field
+            label="Language"
+            htmlFor="language"
+            hint="English is the default. Non-English campaigns need a human translation review before they send."
+          >
+            <Select
+              id="language"
+              name="language"
+              value={language}
+              onChange={(e) => {
+                if (isCampaignLanguage(e.target.value)) setLanguage(e.target.value);
+              }}
+            >
+              {CAMPAIGN_LANGUAGES.map((l) => (
+                <option key={l.code} value={l.code}>
+                  {l.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+
+          {language !== "en" ? (
+            <p className="-mt-1 rounded-md border border-warning-border bg-warning-bg px-3 py-1.5 text-small font-semibold text-warning">
+              Written in {campaignLanguageName(language)} — a human translation review is
+              required before this sends.
             </p>
           ) : null}
 

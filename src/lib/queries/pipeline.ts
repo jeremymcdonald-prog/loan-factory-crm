@@ -27,13 +27,17 @@ export type PipelineCard = {
   loanNumber: string | null;
   rateLockExpiresAt: string | null;
   closingDate: string | null;
+  fundedAt: string | null;
   docsNeeded: boolean;
   docsNeededSince: Date | null;
   preapprovalExpiresAt: string | null;
   lastActivityAt: Date;
   capturedAt: Date | null;
   firstResponseAt: Date | null;
+  ownerUserId: string | null;
   ownerName: string | null;
+  /** The lead's acquisition channel (lead.source->>'channel'), when known. */
+  leadChannel: string | null;
 };
 
 function bookScope(u: CurrentUser) {
@@ -73,13 +77,16 @@ export async function listPipeline(
       loanNumber: loan.loanNumber,
       rateLockExpiresAt: loan.rateLockExpiresAt,
       closingDate: loan.closingDate,
+      fundedAt: loan.fundedAt,
       docsNeeded: loan.docsNeeded,
       docsNeededSince: loan.docsNeededSince,
       preapprovalExpiresAt: loan.preapprovalExpiresAt,
       lastActivityAt: loan.lastActivityAt,
       capturedAt: lead.capturedAt,
       firstResponseAt: lead.firstResponseAt,
+      ownerUserId: loan.loUserId,
       ownerName: user.fullName,
+      leadChannel: sql<string | null>`${lead.source}->>'channel'`,
     })
     .from(loan)
     .innerJoin(person, eq(person.id, loan.personId))
@@ -136,4 +143,65 @@ export async function pipelineTotals(
       closingNext7: 0,
     }
   );
+}
+
+export type LeadOnlyContact = {
+  personId: string;
+  firstName: string;
+  lastName: string;
+  preferredLanguage: string;
+  leadChannel: string | null;
+  ownerUserId: string | null;
+  ownerName: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+/**
+ * People of type `lead` with no opportunity yet. Normal capture creates a loan
+ * row in the same transaction, so these are the manually added inquiries — the
+ * Leads view shows them so nobody falls between the cracks.
+ *
+ * The NOT EXISTS is a correlated subquery: it must be a nested sql fragment
+ * referencing the table objects (see pendingApprovals in queries/team.ts) —
+ * bare columns would bind to the wrong table.
+ */
+export async function listLeadOnlyContacts(
+  db: Db,
+  currentUser: CurrentUser,
+): Promise<LeadOnlyContact[]> {
+  const scope = seesWholeBook(currentUser.role)
+    ? undefined
+    : eq(person.ownerUserId, currentUser.userId);
+
+  const conditions = [
+    isNull(person.deletedAt),
+    eq(person.type, "lead"),
+    sql`NOT EXISTS (
+      SELECT 1 FROM ${loan}
+       WHERE ${loan.personId} = ${person.id}
+         AND ${loan.deletedAt} IS NULL
+    )`,
+    scope,
+  ].filter(Boolean);
+
+  const rows = await db
+    .select({
+      personId: person.id,
+      firstName: person.firstName,
+      lastName: person.lastName,
+      preferredLanguage: person.preferredLanguage,
+      leadChannel: sql<string | null>`${person.source}->>'channel'`,
+      ownerUserId: person.ownerUserId,
+      ownerName: user.fullName,
+      createdAt: person.createdAt,
+      updatedAt: person.updatedAt,
+    })
+    .from(person)
+    .leftJoin(user, eq(user.id, person.ownerUserId))
+    .where(and(...conditions))
+    .orderBy(desc(person.updatedAt))
+    .limit(200);
+
+  return rows;
 }

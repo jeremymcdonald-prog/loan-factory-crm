@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
+  ArrowDown,
   ArrowLeft,
   ArrowRight,
   Clock,
@@ -9,16 +10,25 @@ import {
   ShieldAlert,
   ShieldCheck,
   Sparkles,
+  Video,
 } from "lucide-react";
 import { requireUser, queryAs } from "@/lib/auth";
-import { getThread, type ThreadMessage, type Counterparty } from "@/lib/queries/conversations";
+import { seesWholeBook } from "@/lib/roles";
+import {
+  getThread,
+  type Channel,
+  type ComposeChannel,
+  type ThreadMessage,
+  type Counterparty,
+} from "@/lib/queries/conversations";
 import { relativeTime, absoluteTime, phoneNumber } from "@/lib/format";
 import { PageHeader } from "@/components/shell/page-header";
 import { LanguageBadge } from "@/components/crm/language-badge";
 import { Badge, type Urgency } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { ChannelIcon, CHANNEL_LABELS } from "../channel";
+import { ChannelIcon, CHANNEL_LABELS, sendsTo } from "../channel";
 import { ReplyBox } from "./reply-box";
+import { MessageActions } from "./message-actions";
 import { cn } from "@/lib/cn";
 
 export const dynamic = "force-dynamic";
@@ -42,8 +52,11 @@ export async function generateMetadata({
  */
 const STATUS_NOTES: Partial<Record<string, { label: string; tone: Urgency }>> = {
   draft: { label: "Draft — not sent", tone: "warning" },
-  awaiting_approval: { label: "Waiting for your approval — not sent", tone: "warning" },
-  approved: { label: "Approved — not sent yet", tone: "warning" },
+  awaiting_approval: { label: "Waiting for approval — not sent", tone: "warning" },
+  approved: {
+    label: "Approved — queues for sending when email/SMS providers are connected",
+    tone: "warning",
+  },
   failed: { label: "Didn't send", tone: "critical" },
 };
 
@@ -147,16 +160,35 @@ function CallEvent({
   );
 }
 
+/** `meta.video` is free-form jsonb — read it defensively, show only what's there. */
+function videoMetaOf(meta: Record<string, unknown> | null) {
+  const v = meta?.video;
+  if (!v || typeof v !== "object") return null;
+  const video = v as Record<string, unknown>;
+  const title = typeof video.title === "string" ? video.title : null;
+  if (!title) return null;
+  const caption = typeof video.caption === "string" && video.caption ? video.caption : null;
+  const duration = video.durationSeconds;
+  const seconds =
+    typeof duration === "number" && Number.isFinite(duration) && duration > 0
+      ? Math.round(duration)
+      : null;
+  return { title, caption, seconds };
+}
+
 function MessageBubble({
   message: m,
   now,
   counterpartyName,
+  canApprove,
 }: {
   message: ThreadMessage;
   now: Date;
   counterpartyName: string;
+  canApprove: boolean;
 }) {
   const outbound = m.direction === "outbound";
+  const video = videoMetaOf(m.meta);
   const sender = outbound ? (m.authorName ?? "Someone on the team") : counterpartyName;
   const note = STATUS_NOTES[m.status];
   // Dashed edges carry the same news as the badge: this one never went out.
@@ -183,6 +215,25 @@ function MessageBubble({
         </p>
 
         <p className="mt-1.5 whitespace-pre-wrap text-body text-primary">{m.body}</p>
+
+        {video ? (
+          <div className="mt-2 rounded-md border border-subtle bg-sunken/60 px-2.5 py-2">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Video className="size-3.5 text-muted" aria-hidden />
+              <Badge tone="neutral">Demo video attachment</Badge>
+              <span className="text-small font-semibold text-secondary">{video.title}</span>
+              {video.seconds !== null ? (
+                <span className="text-small text-muted tnum">{callLength(video.seconds)}</span>
+              ) : null}
+            </div>
+            {video.caption ? (
+              <p className="mt-1 text-small text-secondary">{video.caption}</p>
+            ) : null}
+            <p className="mt-1 text-micro text-muted">
+              The recording stays on the sender&rsquo;s device — only these details are stored.
+            </p>
+          </div>
+        ) : null}
 
         {typeof m.meta?.translationEn === "string" ? (
           <details className="mt-2 rounded-control border border-subtle bg-sunken/60 px-2.5 py-1.5">
@@ -211,6 +262,10 @@ function MessageBubble({
             ) : null}
           </div>
         ) : null}
+
+        {outbound ? (
+          <MessageActions messageId={m.id} status={m.status} canApprove={canApprove} />
+        ) : null}
       </div>
     </li>
   );
@@ -223,22 +278,28 @@ function ConsentLine({
   fromEmail,
 }: {
   contact: Counterparty;
-  channel: "email" | "sms" | "call" | "note";
+  channel: Channel;
   fromEmail: string;
 }) {
+  const via = sendsTo(channel);
   const address =
-    channel === "email" ? contact.emails[0]?.address : contact.phones[0]?.number;
-  const missing = channel === "email" ? "No email address on file" : "No phone number on file";
+    via === "email" ? contact.emails[0]?.address : via === "phone" ? contact.phones[0]?.number : null;
+  const missing = via === "email" ? "No email address on file" : "No phone number on file";
 
   return (
     <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-small text-muted">
       <span className="inline-flex items-center gap-1.5">
         <ChannelIcon channel={channel} className="size-3.5" />
-        {address ? (
+        {via === "app" ? (
+          // The borrower app has no address — and it isn't connected, so say so.
+          <span>
+            To <span className="text-secondary">their borrower app</span> (not connected yet)
+          </span>
+        ) : address ? (
           <>
             To{" "}
             <span className="text-secondary">
-              {channel === "email" ? address : phoneNumber(address)}
+              {via === "email" ? address : phoneNumber(address)}
             </span>
           </>
         ) : (
@@ -280,10 +341,14 @@ export default async function ThreadPage({ params }: { params: Promise<{ id: str
   const firstName = contact.name.split(" ")[0] ?? contact.name;
   // A local const so the composable check narrows the channel for the reply box.
   const channel = thread.channel;
-  const canCompose = channel === "email" || channel === "sms";
+  const canCompose =
+    channel === "email" || channel === "sms" || channel === "video" || channel === "app";
+  const composeChannel: ComposeChannel | null = canCompose ? channel : null;
   // A reply is only on the table for a channel you can write on, to someone
   // who hasn't asked you to stop.
   const canReply = canCompose && !contact.doNotContact;
+  // Leadership approves outbound drafts — the same set that sees the whole book.
+  const canApprove = seesWholeBook(user.role);
 
   const panelTitle = !canCompose
     ? `About this ${CHANNEL_LABELS[channel].toLowerCase()}`
@@ -335,28 +400,10 @@ export default async function ThreadPage({ params }: { params: Promise<{ id: str
         }
       />
 
-      {thread.messages.length === 0 ? (
-        <div className="px-4 py-4 sm:px-6">
-          <div className="rounded-card border border-subtle bg-surface px-6 py-10 text-center">
-            <p className="text-h3 font-semibold text-primary">Nothing on this thread yet</p>
-            <p className="mx-auto mt-1 max-w-sm text-body text-secondary">
-              Once there&rsquo;s a message here, it will show up with who said it and when.
-            </p>
-          </div>
-        </div>
-      ) : (
-        <ol className="space-y-3 px-4 py-4 sm:px-6">
-          {thread.messages.map((m) =>
-            m.channel === "call" ? (
-              <CallEvent key={m.id} message={m} now={now} counterpartyName={contact.name} />
-            ) : (
-              <MessageBubble key={m.id} message={m} now={now} counterpartyName={contact.name} />
-            ),
-          )}
-        </ol>
-      )}
-
-      <div className="px-4 pb-6 sm:px-6">
+      {/* The reply panel sits above the messages: with the thread newest-first,
+          this keeps the reading order continuous — what you write next, then
+          the latest thing said, then history. */}
+      <div className="px-4 pt-4 sm:px-6">
         <Card>
           <div className="border-b border-subtle px-4 py-3">
             <h2 className="text-h3 font-semibold text-primary">{panelTitle}</h2>
@@ -377,11 +424,13 @@ export default async function ThreadPage({ params }: { params: Promise<{ id: str
                   a mistake.
                 </p>
               </div>
-            ) : canCompose ? (
-              <ReplyBox conversationId={thread.id} channel={channel} toName={firstName} />
+            ) : composeChannel ? (
+              <ReplyBox conversationId={thread.id} channel={composeChannel} toName={firstName} />
             ) : (
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="max-w-xl text-small text-secondary">{NOT_COMPOSABLE[channel]}</p>
+                <p className="max-w-xl text-small text-secondary">
+                  {NOT_COMPOSABLE[channel as "call" | "note"]}
+                </p>
                 {contact.href ? (
                   <Link
                     href={contact.href}
@@ -395,6 +444,40 @@ export default async function ThreadPage({ params }: { params: Promise<{ id: str
           </div>
         </Card>
       </div>
+
+      {thread.messages.length === 0 ? (
+        <div className="px-4 py-4 sm:px-6">
+          <div className="rounded-card border border-subtle bg-surface px-6 py-10 text-center">
+            <p className="text-h3 font-semibold text-primary">Nothing on this thread yet</p>
+            <p className="mx-auto mt-1 max-w-sm text-body text-secondary">
+              Once there&rsquo;s a message here, it will show up with who said it and when.
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div className="px-4 py-4 sm:px-6">
+          {/* Say the order out loud — a silent reversal would read as a bug. */}
+          <p className="mb-2 inline-flex items-center gap-1 text-micro font-semibold uppercase tracking-wide text-muted">
+            <ArrowDown className="size-3" aria-hidden />
+            Newest first
+          </p>
+          <ol className="space-y-3">
+            {thread.messages.map((m) =>
+              m.channel === "call" ? (
+                <CallEvent key={m.id} message={m} now={now} counterpartyName={contact.name} />
+              ) : (
+                <MessageBubble
+                  key={m.id}
+                  message={m}
+                  now={now}
+                  counterpartyName={contact.name}
+                  canApprove={canApprove}
+                />
+              ),
+            )}
+          </ol>
+        </div>
+      )}
     </div>
   );
 }

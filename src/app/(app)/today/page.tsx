@@ -45,10 +45,11 @@ export default async function TodayPage() {
   const visible = items.slice(0, 20);
   const approvals = items.filter((i) => i.cls === "ai_approval").length;
 
+  // Leads lead — the stat order mirrors the day's priorities.
   const statTiles = [
+    { label: "Leads this week", value: String(stats.leadsThisWeek) },
     { label: "Active files", value: String(stats.activeCount) },
     { label: "Funded this month", value: moneyCompact(stats.fundedMtdVolume) },
-    { label: "Leads this week", value: String(stats.leadsThisWeek) },
     { label: "Closing in 7 days", value: String(stats.closingNext7) },
   ];
 

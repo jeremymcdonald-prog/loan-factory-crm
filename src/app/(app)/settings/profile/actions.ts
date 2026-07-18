@@ -287,7 +287,13 @@ export async function updateSignature(
 // Notification preferences
 // ---------------------------------------------------------------------------
 
-const PREF_KEYS = ["dailySummary", "taskReminders", "approvalAlerts", "teamActivity"] as const;
+const PREF_KEYS = [
+  "dailySummary",
+  "taskReminders",
+  "leadAssigned",
+  "approvalAlerts",
+  "teamActivity",
+] as const;
 
 export async function updateNotificationPrefs(
   _prev: ProfileState,

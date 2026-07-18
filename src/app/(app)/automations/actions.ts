@@ -2,12 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
-import { automation, automationRun } from "@/db/schema";
+import { automation, automationRun, campaign } from "@/db/schema";
 import { requireUser, queryAs } from "@/lib/auth";
 import { recordAudit, diff } from "@/lib/audit";
-import { TEST_RUN_OUTCOME } from "./labels";
+import { seesWholeBook } from "@/lib/roles";
+import { SOURCES, TEST_RUN_OUTCOME } from "./labels";
 
 export type AutomationActionState = { error?: string; tested?: boolean };
 export type AutomationFormState = { error?: string };
@@ -96,14 +97,24 @@ export async function createAutomation(
   redirect(`/automations/${automationId}`);
 }
 
-const EditSchema = WordsSchema.extend({ automationId: z.string().uuid() });
+const EditSchema = WordsSchema.extend({
+  automationId: z.string().uuid(),
+  /** "" means "no source" — an empty <select> option, not a typo. */
+  source: z.enum(SOURCES).or(z.literal("")).optional(),
+  /** "" means "no campaign linked". */
+  campaignId: z.string().uuid().or(z.literal("")).optional(),
+  timingText: z.string().trim().optional(),
+  tier: z.enum(["t0", "t1", "t2", "t3"]),
+  status: z.enum(["active", "paused", "draft"]),
+});
 
 /**
- * Rewrite the words.
- *
- * The approval level is not editable here on purpose: changing what an
- * automation says and changing what it is allowed to do are two different acts,
- * and only the second one is dangerous.
+ * Rewrite an automation: its words, its source, the campaign it enrolls people
+ * into, its timing, its status — and, only for roles that see the whole book,
+ * its approval level. Changing what an automation says and changing what it is
+ * allowed to do are two different acts, and only the second one is dangerous,
+ * so the tier is re-checked against the caller's role here rather than trusted
+ * from the form.
  */
 export async function updateAutomation(formData: FormData): Promise<AutomationFormState> {
   const user = await requireUser();
@@ -111,18 +122,28 @@ export async function updateAutomation(formData: FormData): Promise<AutomationFo
   const parsed = EditSchema.safeParse({
     ...wordsFrom(formData),
     automationId: formData.get("automationId"),
+    source: formData.get("source") ?? undefined,
+    campaignId: formData.get("campaignId") ?? undefined,
+    timingText: formData.get("timingText") ?? undefined,
+    tier: formData.get("tier"),
+    status: formData.get("status"),
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Check the details and try again." };
   }
 
-  const { automationId, ...words } = parsed.data;
+  const { automationId, tier, status, ...words } = parsed.data;
   const after = {
     name: words.name,
     description: words.description || null,
     triggerText: words.triggerText,
     audienceText: words.audienceText,
     actionText: words.actionText,
+    source: words.source || null,
+    campaignId: words.campaignId || null,
+    timingText: words.timingText || null,
+    tier,
+    status,
   };
 
   try {
@@ -134,12 +155,33 @@ export async function updateAutomation(formData: FormData): Promise<AutomationFo
           triggerText: automation.triggerText,
           audienceText: automation.audienceText,
           actionText: automation.actionText,
+          source: automation.source,
+          campaignId: automation.campaignId,
+          timingText: automation.timingText,
+          tier: automation.tier,
+          status: automation.status,
         })
         .from(automation)
         .where(and(eq(automation.id, automationId), isNull(automation.deletedAt)))
         .limit(1);
 
       if (!before) throw new Error("not-visible");
+
+      // Moving the approval level is the one edit reserved for leadership.
+      if (after.tier !== before.tier && !seesWholeBook(user.role)) {
+        throw new Error("tier-forbidden");
+      }
+
+      // The campaign must be one this tenant can actually see. RLS scopes the
+      // lookup, so a foreign or deleted campaign simply fails to appear.
+      if (after.campaignId && after.campaignId !== before.campaignId) {
+        const [linked] = await db
+          .select({ id: campaign.id })
+          .from(campaign)
+          .where(and(eq(campaign.id, after.campaignId), isNull(campaign.deletedAt)))
+          .limit(1);
+        if (!linked) throw new Error("campaign-not-visible");
+      }
 
       // Only what actually moved reaches the audit log, so the history reads as
       // a list of edits rather than a list of saves.
@@ -158,7 +200,16 @@ export async function updateAutomation(formData: FormData): Promise<AutomationFo
         changes,
       });
     });
-  } catch {
+  } catch (err) {
+    if (err instanceof Error && err.message === "tier-forbidden") {
+      return {
+        error:
+          "Only a team leader, branch leader, or admin can change how much an automation is allowed to do. Nothing was changed.",
+      };
+    }
+    if (err instanceof Error && err.message === "campaign-not-visible") {
+      return { error: "We couldn't find that campaign. Nothing was changed." };
+    }
     return { error: "We couldn't save that. Nothing was changed." };
   }
 
@@ -229,8 +280,9 @@ const TestSchema = z.object({ automationId: z.string().uuid() });
  * outcome text is chosen by tier, because a t0 automation drafts nothing and
  * saying otherwise would be a lie told by the safety feature itself.
  *
- * `runCount` and `lastRunAt` are deliberately untouched: a test is not a run,
- * and those two have to keep meaning what they say.
+ * A test counts as a run: it appears in the run history immediately, so
+ * `runCount` and `lastRunAt` move with it — the row itself says plainly that it
+ * was a test and that nothing was sent.
  */
 export async function testAutomation(
   _prev: AutomationActionState,
@@ -259,6 +311,15 @@ export async function testAutomation(
         status: "queued_for_approval",
         outcome: TEST_RUN_OUTCOME[row.tier],
       });
+
+      await db
+        .update(automation)
+        .set({
+          runCount: sql`${automation.runCount} + 1`,
+          lastRunAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(automation.id, automationId));
 
       await recordAudit(db, user, {
         action: "automation.tested",

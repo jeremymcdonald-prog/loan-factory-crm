@@ -6,12 +6,24 @@
  * sees the team's) is applied on top.
  */
 import "server-only";
-import { and, or, eq, ilike, isNull, desc, sql, inArray } from "drizzle-orm";
+import { and, or, eq, ne, ilike, isNull, desc, sql, inArray } from "drizzle-orm";
 import type { Db } from "@/db";
-import { person, loan, lead } from "@/db/schema";
+import {
+  person,
+  loan,
+  lead,
+  note,
+  task,
+  event,
+  message,
+  conversation,
+  campaign,
+  loanStageHistory,
+  user as userTable,
+} from "@/db/schema";
 import { seesWholeBook } from "@/lib/roles";
 import type { CurrentUser } from "@/lib/auth";
-import type { Stage } from "@/lib/stages";
+import { stageLabel, type Stage } from "@/lib/stages";
 
 export type PersonListRow = {
   id: string;
@@ -173,4 +185,280 @@ export async function countPeopleByType(
     counts.all += r.value;
   }
   return counts;
+}
+
+// --- Campaign choices --------------------------------------------------------
+
+export type CampaignChoice = {
+  id: string;
+  name: string;
+  status: string;
+  audienceSize: number;
+};
+
+/**
+ * Campaigns a person can be enrolled in — the "Add to drip campaign" picker.
+ * Finished campaigns are over; everything else (draft, scheduled, running,
+ * paused) can still take people. Book-scoped like campaigns everywhere else.
+ */
+export async function listCampaignChoices(db: Db, user: CurrentUser): Promise<CampaignChoice[]> {
+  const scope = seesWholeBook(user.role) ? undefined : eq(campaign.ownerUserId, user.userId);
+
+  return db
+    .select({
+      id: campaign.id,
+      name: campaign.name,
+      status: campaign.status,
+      audienceSize: campaign.audienceSize,
+    })
+    .from(campaign)
+    .where(and(isNull(campaign.deletedAt), ne(campaign.status, "finished"), scope))
+    .orderBy(desc(campaign.createdAt))
+    .limit(100);
+}
+
+// --- Import dedupe -----------------------------------------------------------
+
+/**
+ * Every email address already on a person in this tenant, lowercased.
+ * RLS scopes the read; the import dedupes uploads against this set so the
+ * same contact never lands in the book twice.
+ */
+export async function existingEmailSet(db: Db): Promise<Set<string>> {
+  const rows = await db
+    .select({ emails: person.emails })
+    .from(person)
+    .where(isNull(person.deletedAt));
+
+  const set = new Set<string>();
+  for (const row of rows) {
+    for (const entry of row.emails ?? []) {
+      if (entry.address) set.add(entry.address.toLowerCase());
+    }
+  }
+  return set;
+}
+
+// --- Activity timeline -------------------------------------------------------
+
+export type TimelineItem = {
+  id: string;
+  kind: "note" | "message" | "event" | "task" | "stage";
+  at: Date;
+  title: string;
+  body: string | null;
+  actorName: string | null;
+  /** Where to go for the full record (a conversation), when there is one. */
+  href: string | null;
+  /** Honest status chip text, e.g. "Draft — not sent". */
+  badge: string | null;
+  preparedByAi: boolean;
+};
+
+const CHANNEL_LABELS: Record<string, string> = {
+  email: "Email",
+  sms: "Text",
+  video: "Video message",
+  call: "Call",
+  note: "Note",
+  app: "App message",
+};
+
+const EVENT_TITLES: Record<string, string> = {
+  "lead.captured": "Lead captured",
+  "campaign.enrolled": "Added to drip campaign",
+};
+
+function messageTitle(channel: string, direction: string, status: string): string {
+  const label = CHANNEL_LABELS[channel] ?? channel;
+  if (direction === "inbound") return `${label} received`;
+  if (status === "sent") return `${label} sent`;
+  return `${label} draft`;
+}
+
+function messageBadge(status: string): string | null {
+  if (status === "draft") return "Draft — not sent";
+  if (status === "awaiting_approval") return "Awaiting approval";
+  if (status === "approved") return "Approved — not sent";
+  if (status === "failed") return "Failed";
+  return null;
+}
+
+/**
+ * Everything that has happened with a person, newest first: notes, messages,
+ * domain events, tasks, and opportunity stage changes, merged into one list.
+ *
+ * Reads run sequentially on purpose — everything inside queryAs() shares one
+ * pooled client and one transaction, so concurrent queries would interleave
+ * statements on a single connection (see marketing.ts, audienceSizes).
+ */
+export async function personTimeline(
+  db: Db,
+  user: CurrentUser,
+  personId: string,
+  limit = 60,
+): Promise<TimelineItem[]> {
+  const items: TimelineItem[] = [];
+
+  const notes = await db
+    .select({
+      id: note.id,
+      body: note.body,
+      createdAt: note.createdAt,
+      preparedByAi: note.preparedByAi,
+      authorName: userTable.fullName,
+    })
+    .from(note)
+    .leftJoin(userTable, eq(userTable.id, note.authorUserId))
+    .where(and(eq(note.personId, personId), isNull(note.deletedAt)))
+    .orderBy(desc(note.createdAt))
+    .limit(limit);
+
+  for (const n of notes) {
+    items.push({
+      id: `note-${n.id}`,
+      kind: "note",
+      at: n.createdAt,
+      title: "Note",
+      body: n.body,
+      actorName: n.authorName,
+      href: null,
+      badge: null,
+      preparedByAi: n.preparedByAi,
+    });
+  }
+
+  const messages = await db
+    .select({
+      id: message.id,
+      conversationId: message.conversationId,
+      channel: message.channel,
+      direction: message.direction,
+      status: message.status,
+      subject: message.subject,
+      body: message.body,
+      occurredAt: message.occurredAt,
+      preparedByAi: message.preparedByAi,
+      authorName: userTable.fullName,
+    })
+    .from(message)
+    .innerJoin(conversation, eq(conversation.id, message.conversationId))
+    .leftJoin(userTable, eq(userTable.id, message.authorUserId))
+    .where(eq(conversation.personId, personId))
+    .orderBy(desc(message.occurredAt))
+    .limit(limit);
+
+  for (const m of messages) {
+    items.push({
+      id: `message-${m.id}`,
+      kind: "message",
+      at: m.occurredAt,
+      title: m.subject
+        ? `${messageTitle(m.channel, m.direction, m.status)} · ${m.subject}`
+        : messageTitle(m.channel, m.direction, m.status),
+      body: m.body,
+      actorName: m.authorName,
+      href: `/conversations/${m.conversationId}`,
+      badge: messageBadge(m.status),
+      preparedByAi: m.preparedByAi,
+    });
+  }
+
+  const events = await db
+    .select({
+      id: event.id,
+      kind: event.kind,
+      payload: event.payload,
+      createdAt: event.createdAt,
+      actorName: userTable.fullName,
+    })
+    .from(event)
+    .leftJoin(userTable, eq(userTable.id, event.actorUserId))
+    // touch.logged writes its own human-readable note in the same transaction;
+    // showing both would say the same thing twice.
+    .where(and(eq(event.personId, personId), ne(event.kind, "touch.logged")))
+    .orderBy(desc(event.createdAt))
+    .limit(limit);
+
+  for (const e of events) {
+    const payload = (e.payload ?? {}) as Record<string, unknown>;
+    const campaignName = typeof payload.campaignName === "string" ? payload.campaignName : null;
+    const base = EVENT_TITLES[e.kind] ?? e.kind.replace(/[._]/g, " ");
+    items.push({
+      id: `event-${e.id}`,
+      kind: "event",
+      at: e.createdAt,
+      title: e.kind === "campaign.enrolled" && campaignName ? `${base}: ${campaignName}` : base,
+      body: null,
+      actorName: e.actorName,
+      href: null,
+      badge:
+        e.kind === "campaign.enrolled"
+          ? "Enrolled — messages queue for sending when a provider is connected"
+          : null,
+      preparedByAi: false,
+    });
+  }
+
+  const tasks = await db
+    .select({
+      id: task.id,
+      title: task.title,
+      status: task.status,
+      dueAt: task.dueAt,
+      createdAt: task.createdAt,
+      ownerName: userTable.fullName,
+    })
+    .from(task)
+    .leftJoin(userTable, eq(userTable.id, task.ownerUserId))
+    .where(and(eq(task.personId, personId), isNull(task.deletedAt)))
+    .orderBy(desc(task.createdAt))
+    .limit(limit);
+
+  for (const t of tasks) {
+    items.push({
+      id: `task-${t.id}`,
+      kind: "task",
+      at: t.createdAt,
+      title: `Task: ${t.title}`,
+      body: null,
+      actorName: t.ownerName,
+      href: null,
+      badge: t.status === "done" ? "Done" : t.status === "cancelled" ? "Cancelled" : null,
+      preparedByAi: false,
+    });
+  }
+
+  const stages = await db
+    .select({
+      id: loanStageHistory.id,
+      fromStage: loanStageHistory.fromStage,
+      toStage: loanStageHistory.toStage,
+      createdAt: loanStageHistory.createdAt,
+      changedByName: userTable.fullName,
+    })
+    .from(loanStageHistory)
+    .innerJoin(loan, eq(loan.id, loanStageHistory.loanId))
+    .leftJoin(userTable, eq(userTable.id, loanStageHistory.changedByUserId))
+    .where(eq(loan.personId, personId))
+    .orderBy(desc(loanStageHistory.createdAt))
+    .limit(limit);
+
+  for (const s of stages) {
+    items.push({
+      id: `stage-${s.id}`,
+      kind: "stage",
+      at: s.createdAt,
+      title: s.fromStage
+        ? `Stage: ${stageLabel(s.fromStage as Stage)} → ${stageLabel(s.toStage as Stage)}`
+        : `Opportunity opened at ${stageLabel(s.toStage as Stage)}`,
+      body: null,
+      actorName: s.changedByName,
+      href: null,
+      badge: null,
+      preparedByAi: false,
+    });
+  }
+
+  return items.sort((a, b) => b.at.getTime() - a.at.getTime()).slice(0, limit);
 }

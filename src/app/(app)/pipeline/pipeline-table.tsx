@@ -1,45 +1,53 @@
 import Link from "next/link";
-import type { PipelineCard } from "@/lib/queries/pipeline";
 import { personUrgency } from "@/lib/person-urgency";
 import { money, shortDate, relativeTime } from "@/lib/format";
-import { stageLabel, stageNumber, phaseOf, type Stage } from "@/lib/stages";
+import { stageLabel, stageNumber, type Stage } from "@/lib/stages";
 import { LanguageBadge } from "@/components/crm/language-badge";
 import { UrgencyDot, type Urgency } from "@/components/ui/badge";
 import { cn } from "@/lib/cn";
+import {
+  channelLabel,
+  recordHref,
+  recordLastActivity,
+  type PipelineRecord,
+} from "./views";
 
 /**
  * The power view for the moments the board can't serve: "every file with a
  * lock expiring", "oldest first". Same dataset as the board — never a second
  * source of truth (Screen 7).
  */
-export function PipelineTable({ cards }: { cards: PipelineCard[] }) {
+export function PipelineTable({ records }: { records: PipelineRecord[] }) {
   const now = new Date();
 
   // Most urgent first: the table's default sort is the LO's real question.
   // Typed against Urgency so a new tone can't be added without ranking it.
-  const ranked = [...cards].sort((a, b) => {
-    const rank: Record<Urgency, number> = {
-      critical: 0,
-      warning: 1,
-      info: 2,
-      ai: 3,
-      brand: 4,
-      healthy: 5,
-      neutral: 6,
-    };
-    const ua = personUrgency(a, now);
-    const ub = personUrgency(b, now);
-    const ra = rank[ua?.level ?? "neutral"];
-    const rb = rank[ub?.level ?? "neutral"];
+  const rank: Record<Urgency, number> = {
+    critical: 0,
+    warning: 1,
+    info: 2,
+    ai: 3,
+    brand: 4,
+    healthy: 5,
+    neutral: 6,
+  };
+  const urgencyOf = (r: PipelineRecord) =>
+    r.kind === "loan" ? personUrgency(r.card, now) : null;
+
+  const ranked = [...records].sort((a, b) => {
+    const ra = rank[urgencyOf(a)?.level ?? "neutral"];
+    const rb = rank[urgencyOf(b)?.level ?? "neutral"];
     if (ra !== rb) return ra - rb;
-    return Number(b.amount ?? 0) - Number(a.amount ?? 0);
+    const amountOf = (r: PipelineRecord) =>
+      r.kind === "loan" ? Number(r.card.amount ?? r.card.preapprovalAmount ?? 0) : 0;
+    return amountOf(b) - amountOf(a);
   });
 
   return (
     <div className="p-4 sm:p-6">
       <div className="overflow-x-auto rounded-card border border-subtle bg-surface">
-        <table className="w-full min-w-[860px] text-body">
-          <caption className="sr-only">Every opportunity, most urgent first</caption>
+        <table className="w-full min-w-[1080px] text-body">
+          <caption className="sr-only">Every record in this view, most urgent first</caption>
           <thead>
             <tr className="border-b border-subtle bg-sunken text-label uppercase tracking-wide text-muted">
               <th scope="col" className="px-4 py-2 text-left font-semibold">
@@ -50,6 +58,12 @@ export function PipelineTable({ cards }: { cards: PipelineCard[] }) {
               </th>
               <th scope="col" className="px-4 py-2 text-left font-semibold">
                 Needs attention
+              </th>
+              <th scope="col" className="px-4 py-2 text-left font-semibold">
+                Owner
+              </th>
+              <th scope="col" className="px-4 py-2 text-left font-semibold">
+                Source
               </th>
               <th scope="col" className="px-4 py-2 text-right font-semibold">
                 Amount
@@ -66,30 +80,41 @@ export function PipelineTable({ cards }: { cards: PipelineCard[] }) {
             </tr>
           </thead>
           <tbody>
-            {ranked.map((card) => {
-              const urgency = personUrgency(card, now);
+            {ranked.map((record) => {
+              const urgency = urgencyOf(record);
               const show =
                 urgency?.label && urgency.level !== "healthy" && urgency.level !== "neutral";
+              const key =
+                record.kind === "loan" ? record.card.loanId : record.card.personId;
+              const loan = record.kind === "loan" ? record.card : null;
+
               return (
-                <tr key={card.loanId} className="border-b border-subtle last:border-0 hover:bg-sunken">
+                <tr key={key} className="border-b border-subtle last:border-0 hover:bg-sunken">
                   <td className="px-4 py-2.5">
-                    <Link href={`/opportunities/${card.loanId}`} className="flex items-center gap-1.5">
+                    <Link href={recordHref(record)} className="flex items-center gap-1.5">
                       <span className="font-semibold text-primary">
-                        {card.firstName} {card.lastName}
+                        {record.card.firstName} {record.card.lastName}
                       </span>
-                      <LanguageBadge language={card.preferredLanguage} />
+                      <LanguageBadge language={record.card.preferredLanguage} />
                     </Link>
                     <span className="block text-small text-muted">
-                      {card.program ?? "—"}
-                      {card.loanNumber ? ` · ${card.loanNumber}` : ""}
+                      {loan
+                        ? `${loan.program ?? "—"}${loan.loanNumber ? ` · ${loan.loanNumber}` : ""}`
+                        : "No file yet"}
                     </span>
                   </td>
 
                   <td className="px-4 py-2.5">
-                    <span className="text-secondary">{stageLabel(card.stage as Stage)}</span>
-                    <span className="block text-small text-muted tnum">
-                      {stageNumber(card.stage as Stage)}/20 · {phaseOf(card.stage as Stage)}
-                    </span>
+                    {loan ? (
+                      <>
+                        <span className="text-secondary">{stageLabel(loan.stage as Stage)}</span>
+                        <span className="block text-small text-muted tnum">
+                          {stageNumber(loan.stage as Stage)}/20
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-small text-muted">No file yet</span>
+                    )}
                   </td>
 
                   <td className="px-4 py-2.5">
@@ -112,17 +137,25 @@ export function PipelineTable({ cards }: { cards: PipelineCard[] }) {
                     )}
                   </td>
 
+                  <td className="px-4 py-2.5 text-small text-secondary">
+                    {record.card.ownerName ?? "—"}
+                  </td>
+
+                  <td className="px-4 py-2.5 text-small text-secondary">
+                    {record.card.leadChannel ? channelLabel(record.card.leadChannel) : "—"}
+                  </td>
+
                   <td className="px-4 py-2.5 text-right text-secondary tnum">
-                    {money(card.amount ?? card.preapprovalAmount)}
+                    {loan ? money(loan.amount ?? loan.preapprovalAmount) : "—"}
                   </td>
                   <td className="px-4 py-2.5 text-right text-secondary tnum">
-                    {shortDate(card.rateLockExpiresAt)}
+                    {loan ? shortDate(loan.rateLockExpiresAt) : "—"}
                   </td>
                   <td className="px-4 py-2.5 text-right text-secondary tnum">
-                    {shortDate(card.closingDate)}
+                    {loan ? shortDate(loan.closingDate) : "—"}
                   </td>
                   <td className="px-4 py-2.5 text-right text-small text-muted tnum">
-                    {relativeTime(card.lastActivityAt, now)}
+                    {relativeTime(recordLastActivity(record), now)}
                   </td>
                 </tr>
               );

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { MessagesSquare, Clock } from "lucide-react";
+import { MessagesSquare, Clock, PenSquare } from "lucide-react";
 import { requireUser, queryAs } from "@/lib/auth";
 import {
   listThreads,
@@ -24,7 +24,10 @@ const TABS: { key: ThreadFilter; label: string }[] = [
   { key: "waiting", label: "Waiting on you" },
   { key: "email", label: "Email" },
   { key: "sms", label: "Text" },
+  { key: "video", label: "Video email" },
+  { key: "app", label: "App message" },
   { key: "call", label: "Calls" },
+  { key: "note", label: "Notes" },
 ];
 
 /** What the newest message says, on one line, honest about what it is. */
@@ -40,6 +43,8 @@ function previewOf(thread: ThreadListRow): { prefix: string | null; text: string
     if (thread.previewStatus === "awaiting_approval") {
       return { prefix: "Waiting for approval:", text };
     }
+    // Approved is still not sent — the preview must not read as an answer.
+    if (thread.previewStatus === "approved") return { prefix: "Approved, not sent:", text };
     if (thread.previewStatus === "sent") return { prefix: "You:", text };
     return { prefix: null, text };
   }
@@ -58,9 +63,21 @@ const EMPTY_COPY: Record<ThreadFilter, { title: string; body: string }> = {
   },
   email: { title: "No email threads", body: "Email conversations will collect here." },
   sms: { title: "No text threads", body: "Text conversations will collect here." },
+  video: {
+    title: "No video emails",
+    body: "Video emails you draft — here or in Marketing — collect on this list. Only the video's details are stored; recordings stay on your device.",
+  },
+  app: {
+    title: "No app messages",
+    body: "Messages drafted for the borrower app collect here. Nothing sends until an app provider is connected.",
+  },
   call: {
     title: "No calls logged",
     body: "Calls you record against a contact show up here with the outcome and how long you talked.",
+  },
+  note: {
+    title: "No notes",
+    body: "Internal notes on a conversation show up here. They never go to anyone outside the team.",
   },
 };
 
@@ -87,26 +104,35 @@ export default async function ConversationsPage({
     <>
       <PageHeader
         title="Conversations"
-        subtitle="Every email, text, and call in one place — yours and your team's."
+        subtitle="Every email, text, video, app message, call, and note in one place — yours and your team's."
         action={
-          counts.waiting === 0 ? (
-            <span className="text-small text-healthy">You&rsquo;re caught up.</span>
-          ) : filter === "waiting" ? (
-            // Already looking at them — a button back to this page would do nothing.
-            <span className="inline-flex items-center gap-1.5 text-small font-semibold text-warning">
-              <Clock className="size-3.5" aria-hidden />
-              {counts.waiting} {counts.waiting === 1 ? "person is" : "people are"} waiting on a
-              reply
-            </span>
-          ) : (
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            {counts.waiting === 0 ? (
+              <span className="text-small text-healthy">You&rsquo;re caught up.</span>
+            ) : filter === "waiting" ? (
+              // Already looking at them — a link back to this page would do nothing.
+              <span className="inline-flex items-center gap-1.5 text-small font-semibold text-warning">
+                <Clock className="size-3.5" aria-hidden />
+                {counts.waiting} {counts.waiting === 1 ? "person is" : "people are"} waiting on
+                a reply
+              </span>
+            ) : (
+              <Link
+                href="/conversations?filter=waiting"
+                className="inline-flex items-center gap-1.5 text-small font-semibold text-warning hover:underline"
+              >
+                <Clock className="size-3.5" aria-hidden />
+                Answer {counts.waiting} waiting
+              </Link>
+            )}
             <Link
-              href="/conversations?filter=waiting"
+              href="/conversations/new"
               className="inline-flex h-9 items-center gap-2 rounded-control bg-action px-3.5 text-body font-semibold text-action-fg shadow-e1 hover:bg-action-hover"
             >
-              <Clock className="size-3.5" aria-hidden />
-              Answer {counts.waiting} waiting
+              <PenSquare className="size-3.5" aria-hidden />
+              New message
             </Link>
-          )
+          </div>
         }
       />
 

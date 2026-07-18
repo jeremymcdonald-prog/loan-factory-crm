@@ -9,9 +9,17 @@ import {
   updateAutomation,
   type AutomationActionState,
 } from "./actions";
-import { TIER_LABEL, type AutomationState, type Tier } from "./labels";
+import {
+  AUTOMATION_STATE_LABEL,
+  SOURCES,
+  SOURCE_LABEL,
+  TIER_LABEL,
+  TIER_LADDER,
+  type AutomationState,
+  type Tier,
+} from "./labels";
 import { Button } from "@/components/ui/button";
-import { Field, Input, Textarea } from "@/components/ui/field";
+import { Field, Input, Select, Textarea } from "@/components/ui/field";
 
 export type EditableAutomation = {
   id: string;
@@ -20,9 +28,15 @@ export type EditableAutomation = {
   triggerText: string;
   audienceText: string;
   actionText: string;
+  source: string | null;
+  campaignId: string | null;
+  timingText: string | null;
   tier: Tier;
   status: AutomationState;
 };
+
+/** The campaigns the edit dialog offers to link. Fetched by the page, passed down. */
+export type CampaignChoice = { id: string; name: string; status: string };
 
 /**
  * The three things you can do to an automation: switch it, try it, reword it.
@@ -34,9 +48,13 @@ export type EditableAutomation = {
  */
 export function AutomationControls({
   automation,
+  campaignChoices,
+  canSetTier,
   onRecord = false,
 }: {
   automation: EditableAutomation;
+  campaignChoices: CampaignChoice[];
+  canSetTier: boolean;
   onRecord?: boolean;
 }) {
   const [statusState, statusAction, statusPending] = useActionState<
@@ -114,7 +132,12 @@ export function AutomationControls({
       ) : null}
 
       {editing ? (
-        <EditDialog automation={automation} onClose={() => setEditing(false)} />
+        <EditDialog
+          automation={automation}
+          campaignChoices={campaignChoices}
+          canSetTier={canSetTier}
+          onClose={() => setEditing(false)}
+        />
       ) : null}
     </div>
   );
@@ -122,9 +145,13 @@ export function AutomationControls({
 
 function EditDialog({
   automation,
+  campaignChoices,
+  canSetTier,
   onClose,
 }: {
   automation: EditableAutomation;
+  campaignChoices: CampaignChoice[];
+  canSetTier: boolean;
   onClose: () => void;
 }) {
   const [pending, startTransition] = useTransition();
@@ -208,6 +235,21 @@ function EditDialog({
             />
           </Field>
 
+          <Field
+            label="Where does the lead come from?"
+            htmlFor={`${uid}-source`}
+            hint="The source that feeds this rule. Leave it blank for rules not tied to a lead source."
+          >
+            <Select id={`${uid}-source`} name="source" defaultValue={automation.source ?? ""}>
+              <option value="">No particular source</option>
+              {SOURCES.map((source) => (
+                <option key={source} value={source}>
+                  {SOURCE_LABEL[source]}
+                </option>
+              ))}
+            </Select>
+          </Field>
+
           <Field label="Who does it touch?" htmlFor={`${uid}-audience`} required>
             <Input
               id={`${uid}-audience`}
@@ -228,13 +270,79 @@ function EditDialog({
             />
           </Field>
 
-          <p className="rounded-md border border-subtle bg-sunken px-3 py-2 text-small text-secondary">
-            You&rsquo;re editing the words, not the permission. This one stays at{" "}
-            <span className="font-semibold text-primary">
-              &ldquo;{TIER_LABEL[automation.tier]}&rdquo;
-            </span>
-            .
-          </p>
+          <Field
+            label="Which campaign does it start?"
+            htmlFor={`${uid}-campaign`}
+            hint="The campaign people get enrolled into when this fires."
+          >
+            <Select
+              id={`${uid}-campaign`}
+              name="campaignId"
+              defaultValue={automation.campaignId ?? ""}
+            >
+              <option value="">No campaign linked</option>
+              {campaignChoices.map((choice) => (
+                <option key={choice.id} value={choice.id}>
+                  {choice.name}
+                  {choice.status === "running" ? "" : ` (${choice.status})`}
+                </option>
+              ))}
+            </Select>
+          </Field>
+
+          <Field
+            label="When does it go out?"
+            htmlFor={`${uid}-timing`}
+            hint="Plain language — “Within 5 minutes”, “Next morning at 9am”."
+          >
+            <Input
+              id={`${uid}-timing`}
+              name="timingText"
+              defaultValue={automation.timingText ?? ""}
+              autoComplete="off"
+            />
+          </Field>
+
+          <Field
+            label="Status"
+            htmlFor={`${uid}-status`}
+            hint="A draft or paused automation never fires."
+          >
+            <Select id={`${uid}-status`} name="status" defaultValue={automation.status}>
+              {(["active", "paused", "draft"] as const).map((state) => (
+                <option key={state} value={state}>
+                  {AUTOMATION_STATE_LABEL[state]}
+                </option>
+              ))}
+            </Select>
+          </Field>
+
+          {canSetTier ? (
+            <Field
+              label="Approval rule"
+              htmlFor={`${uid}-tier`}
+              hint="The ceiling on what this automation may do without a human."
+            >
+              <Select id={`${uid}-tier`} name="tier" defaultValue={automation.tier}>
+                {TIER_LADDER.map((tier) => (
+                  <option key={tier} value={tier}>
+                    {TIER_LABEL[tier]}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          ) : (
+            <>
+              <input type="hidden" name="tier" value={automation.tier} />
+              <p className="rounded-md border border-subtle bg-sunken px-3 py-2 text-small text-secondary">
+                You&rsquo;re editing the words, not the permission. This one stays at{" "}
+                <span className="font-semibold text-primary">
+                  &ldquo;{TIER_LABEL[automation.tier]}&rdquo;
+                </span>{" "}
+                — only a team leader, branch leader, or admin can change that.
+              </p>
+            </>
+          )}
 
           {error ? (
             <p

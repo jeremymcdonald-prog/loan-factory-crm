@@ -11,7 +11,7 @@
  * the team's) is applied on top.
  */
 import "server-only";
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
 import type { Db } from "@/db";
 import {
   conversation,
@@ -25,7 +25,7 @@ import {
 import { seesWholeBook } from "@/lib/roles";
 import type { CurrentUser } from "@/lib/auth";
 
-export type Channel = "email" | "sms" | "call" | "note";
+export type Channel = "email" | "sms" | "video" | "app" | "call" | "note";
 export type Direction = "inbound" | "outbound";
 export type MessageStatus =
   | "received"
@@ -35,7 +35,20 @@ export type MessageStatus =
   | "sent"
   | "failed";
 
-export const THREAD_FILTERS = ["all", "waiting", "email", "sms", "call"] as const;
+/** The channels a human can write on from this screen. Calls and notes are records. */
+export const COMPOSE_CHANNELS = ["email", "sms", "video", "app"] as const;
+export type ComposeChannel = (typeof COMPOSE_CHANNELS)[number];
+
+export const THREAD_FILTERS = [
+  "all",
+  "waiting",
+  "email",
+  "sms",
+  "video",
+  "app",
+  "call",
+  "note",
+] as const;
 export type ThreadFilter = (typeof THREAD_FILTERS)[number];
 
 export function isThreadFilter(value: string): value is ThreadFilter {
@@ -210,7 +223,10 @@ export type ThreadCounts = {
   waiting: number;
   email: number;
   sms: number;
+  video: number;
+  app: number;
   call: number;
+  note: number;
 };
 
 /** The numbers on the filter tabs. Counted in SQL, not in the page. */
@@ -221,12 +237,17 @@ export async function countThreads(db: Db, user: CurrentUser): Promise<ThreadCou
       waiting: sql<number>`count(*) FILTER (WHERE ${conversation.awaitingReply})::int`,
       email: sql<number>`count(*) FILTER (WHERE ${conversation.channel} = 'email')::int`,
       sms: sql<number>`count(*) FILTER (WHERE ${conversation.channel} = 'sms')::int`,
+      video: sql<number>`count(*) FILTER (WHERE ${conversation.channel} = 'video')::int`,
+      app: sql<number>`count(*) FILTER (WHERE ${conversation.channel} = 'app')::int`,
       call: sql<number>`count(*) FILTER (WHERE ${conversation.channel} = 'call')::int`,
+      note: sql<number>`count(*) FILTER (WHERE ${conversation.channel} = 'note')::int`,
     })
     .from(conversation)
     .where(bookScope(user));
 
-  return row ?? { all: 0, waiting: 0, email: 0, sms: 0, call: 0 };
+  return (
+    row ?? { all: 0, waiting: 0, email: 0, sms: 0, video: 0, app: 0, call: 0, note: 0 }
+  );
 }
 
 export type ThreadMessage = {
@@ -255,7 +276,11 @@ export type Thread = {
   messages: ThreadMessage[];
 };
 
-/** One thread and everything said in it, oldest first. */
+/**
+ * One thread and everything said in it, newest first — the same order as the
+ * inbox list, per Jeremy's directive. The page says so out loud next to the
+ * list; a silent reversal would read as a bug.
+ */
 export async function getThread(
   db: Db,
   user: CurrentUser,
@@ -296,7 +321,7 @@ export async function getThread(
     .from(message)
     .leftJoin(userTable, eq(userTable.id, message.authorUserId))
     .where(eq(message.conversationId, threadId))
-    .orderBy(asc(message.occurredAt))
+    .orderBy(desc(message.occurredAt))
     .limit(200);
 
   return {
@@ -309,4 +334,50 @@ export async function getThread(
     with: counterpartyOf(row),
     messages,
   };
+}
+
+export type ComposeRecipient = {
+  id: string;
+  name: string;
+  language: string;
+  /** Where each channel would land — shown so a missing address is no surprise. */
+  email: string | null;
+  phone: string | null;
+  /** Flagged people stay in the list, visibly blocked — hiding them would hide the flag. */
+  doNotContact: boolean;
+};
+
+/**
+ * Everyone the user could start a message to, for the composer's search select.
+ * Same book scoping as People: your own contacts unless your role sees wider.
+ */
+export async function listComposeRecipients(
+  db: Db,
+  user: CurrentUser,
+): Promise<ComposeRecipient[]> {
+  const scope = seesWholeBook(user.role) ? undefined : eq(person.ownerUserId, user.userId);
+
+  const rows = await db
+    .select({
+      id: person.id,
+      firstName: person.firstName,
+      lastName: person.lastName,
+      language: person.preferredLanguage,
+      emails: person.emails,
+      phones: person.phones,
+      doNotContact: person.doNotContact,
+    })
+    .from(person)
+    .where(and(isNull(person.deletedAt), isNull(person.mergedIntoPersonId), scope))
+    .orderBy(asc(person.lastName), asc(person.firstName))
+    .limit(500);
+
+  return rows.map((row) => ({
+    id: row.id,
+    name: `${row.firstName} ${row.lastName}`,
+    language: row.language ?? "en",
+    email: row.emails?.[0]?.address ?? null,
+    phone: row.phones?.[0]?.number ?? null,
+    doNotContact: row.doNotContact,
+  }));
 }

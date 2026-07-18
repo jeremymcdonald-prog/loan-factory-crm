@@ -18,11 +18,38 @@
  * of reporting them as idle.
  */
 import "server-only";
-import { and, asc, desc, eq, inArray, isNotNull, isNull, or, sql, type SQLWrapper } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  ilike,
+  inArray,
+  isNotNull,
+  isNull,
+  notInArray,
+  or,
+  sql,
+  type SQL,
+  type SQLWrapper,
+} from "drizzle-orm";
 import type { Db } from "@/db";
-import { user, team, task, loan, lead, event, person, aiInsight } from "@/db/schema";
+import {
+  user,
+  team,
+  task,
+  loan,
+  lead,
+  event,
+  person,
+  aiInsight,
+  loanStageHistory,
+  partnerRelationship,
+  campaign,
+  message,
+} from "@/db/schema";
 import type { CurrentUser } from "@/lib/auth";
-import type { Stage } from "@/lib/stages";
+import { STAGES, type Stage } from "@/lib/stages";
 
 /**
  * The event kinds this module can say out loud, and the words it uses.
@@ -437,4 +464,298 @@ export async function memberActivity(db: Db, memberId: string): Promise<MemberAc
     .limit(10);
 
   return rows as MemberActivity[];
+}
+
+// ---------------------------------------------------------------------------
+// Leaderboard — production over a period, ranked
+// ---------------------------------------------------------------------------
+
+/**
+ * The four windows the leaderboard can be read over. Keys are the URL
+ * vocabulary (`?period=`), labels are what the tabs say.
+ */
+export const LEADERBOARD_PERIODS = [
+  { key: "week", label: "Week" },
+  { key: "month", label: "Month" },
+  { key: "quarter", label: "90 days" },
+  { key: "ytd", label: "Year to date" },
+] as const;
+
+export type LeaderboardPeriod = (typeof LEADERBOARD_PERIODS)[number]["key"];
+
+export function isLeaderboardPeriod(value: string): value is LeaderboardPeriod {
+  return LEADERBOARD_PERIODS.some((p) => p.key === value);
+}
+
+/**
+ * Where the window opens, as a SQL fragment evaluated by the database — the
+ * same clock every count is measured against. The period vocabulary is closed
+ * (see the type), so each branch is a static template, never user input.
+ */
+function periodStart(period: LeaderboardPeriod): SQL {
+  switch (period) {
+    case "week":
+      return sql`now() - interval '7 days'`;
+    case "month":
+      return sql`now() - interval '30 days'`;
+    case "quarter":
+      return sql`now() - interval '90 days'`;
+    case "ytd":
+      return sql`date_trunc('year', now())`;
+  }
+}
+
+/**
+ * The stages that mean "this file is an application in flight" — `application`
+ * (stage 9) through `funded`, per src/lib/stages.ts. An "application taken" is
+ * a stage-history entry that CROSSES INTO this set from outside it, so a file
+ * marching from disclosures to processing is not counted as a second
+ * application.
+ */
+export const APPLICATION_STAGES: Stage[] = STAGES.slice(
+  STAGES.indexOf("application"),
+  STAGES.indexOf("funded") + 1,
+);
+
+/**
+ * Leaderboard aggregates, correlated to the `user` row of the enclosing query.
+ *
+ * Same load-bearing pattern as `workloadColumns()` above (the canonical
+ * `pendingApprovals` example): every predicate is built with drizzle operators
+ * against the table objects and then interpolated as a nested fragment, so the
+ * generated SQL carries fully qualified names. A bare column here would bind to
+ * the subquery's own table and silently zero the board.
+ */
+function leaderboardColumns(start: SQL) {
+  const applicationStages = [...APPLICATION_STAGES];
+
+  /** Crossed into the application stages during the window. */
+  const enteredApplication = and(
+    inArray(loanStageHistory.toStage, applicationStages),
+    or(
+      isNull(loanStageHistory.fromStage),
+      notInArray(loanStageHistory.fromStage, applicationStages),
+    ),
+    sql`${loanStageHistory.createdAt} >= ${start}`,
+  );
+
+  /** Reached preapproval during the window. */
+  const enteredPreapproval = and(
+    eq(loanStageHistory.toStage, "preapproval"),
+    sql`${loanStageHistory.createdAt} >= ${start}`,
+  );
+
+  /** Their active book as originator — the LO seat only, not processor seats. */
+  const activeBook = and(
+    eq(loan.loUserId, user.id),
+    eq(loan.status, "active"),
+    isNull(loan.deletedAt),
+  );
+
+  /** Funded during the window, on their book. */
+  const fundedInPeriod = and(
+    eq(loan.loUserId, user.id),
+    isNull(loan.deletedAt),
+    isNotNull(loan.fundedAt),
+    sql`${loan.fundedAt} >= ${start}`,
+  );
+
+  /** Leads assigned to them that arrived during the window. */
+  const leadInPeriod = and(
+    eq(lead.assignedUserId, user.id),
+    sql`${lead.capturedAt} >= ${start}`,
+  );
+
+  /** Campaigns they own, created during the window. */
+  const campaignInPeriod = and(
+    eq(campaign.ownerUserId, user.id),
+    isNull(campaign.deletedAt),
+    sql`${campaign.createdAt} >= ${start}`,
+  );
+
+  /** Video/message drafts they authored during the window, not yet sent. */
+  const draftInPeriod = and(
+    eq(message.authorUserId, user.id),
+    inArray(message.status, ["draft", "awaiting_approval"]),
+    sql`${message.createdAt} >= ${start}`,
+  );
+
+  return {
+    /** Distinct files that crossed into the application stages. */
+    applications: sql<number>`(
+      SELECT count(DISTINCT ${loanStageHistory.loanId})::int
+        FROM ${loanStageHistory}
+        JOIN ${loan} ON ${eq(loan.id, loanStageHistory.loanId)}
+       WHERE ${and(eq(loan.loUserId, user.id), enteredApplication)}
+    )`,
+    /** Distinct files that reached preapproval. */
+    preapprovals: sql<number>`(
+      SELECT count(DISTINCT ${loanStageHistory.loanId})::int
+        FROM ${loanStageHistory}
+        JOIN ${loan} ON ${eq(loan.id, loanStageHistory.loanId)}
+       WHERE ${and(eq(loan.loUserId, user.id), enteredPreapproval)}
+    )`,
+    activeLoans: sql<number>`(
+      SELECT count(*)::int FROM ${loan} WHERE ${activeBook}
+    )`,
+    closings: sql<number>`(
+      SELECT count(*)::int FROM ${loan} WHERE ${fundedInPeriod}
+    )`,
+    fundedVolume: sql<number>`(
+      SELECT COALESCE(sum(${loan.amount}), 0)::float FROM ${loan} WHERE ${fundedInPeriod}
+    )`,
+    /** The conversion denominator — the page divides closings by this. */
+    leadsCaptured: sql<number>`(
+      SELECT count(*)::int FROM ${lead} WHERE ${leadInPeriod}
+    )`,
+    /**
+     * Partner referrals received: relationship rows created in the window,
+     * attributed through the referred file's LO — or, for a referral that
+     * arrived as a person with no file attached, the person's owner.
+     */
+    referrals: sql<number>`(
+      SELECT count(*)::int
+        FROM ${partnerRelationship}
+        LEFT JOIN ${loan} ON ${eq(loan.id, partnerRelationship.loanId)}
+        LEFT JOIN ${person} ON ${eq(person.id, partnerRelationship.personId)}
+       WHERE ${and(
+         sql`${partnerRelationship.createdAt} >= ${start}`,
+         or(
+           eq(loan.loUserId, user.id),
+           and(isNull(partnerRelationship.loanId), eq(person.ownerUserId, user.id)),
+         ),
+       )}
+    )`,
+    campaignsOwned: sql<number>`(
+      SELECT count(*)::int FROM ${campaign} WHERE ${campaignInPeriod}
+    )`,
+    draftsCreated: sql<number>`(
+      SELECT count(*)::int FROM ${message} WHERE ${draftInPeriod}
+    )`,
+  };
+}
+
+export type LeaderboardRow = {
+  id: string;
+  fullName: string;
+  email: string;
+  nmlsId: string | null;
+  applications: number;
+  preapprovals: number;
+  activeLoans: number;
+  closings: number;
+  fundedVolume: number;
+  leadsCaptured: number;
+  referrals: number;
+  campaignsOwned: number;
+  draftsCreated: number;
+};
+
+/**
+ * Every active loan officer in the tenant with their production over the
+ * period. Ranking and sort order are presentation — the page decides them —
+ * so rows come back in a stable name order.
+ */
+export async function leaderboard(
+  db: Db,
+  period: LeaderboardPeriod,
+): Promise<LeaderboardRow[]> {
+  const start = periodStart(period);
+
+  const rows = await db
+    .select({
+      id: user.id,
+      fullName: user.fullName,
+      email: user.email,
+      nmlsId: user.nmlsId,
+      ...leaderboardColumns(start),
+    })
+    .from(user)
+    .where(and(isNull(user.deletedAt), eq(user.status, "active"), eq(user.role, "lo")))
+    .orderBy(asc(user.fullName));
+
+  return rows as LeaderboardRow[];
+}
+
+// ---------------------------------------------------------------------------
+// Team membership — the reads behind add / remove / join
+// ---------------------------------------------------------------------------
+
+export type LoanOfficerMatch = {
+  id: string;
+  fullName: string;
+  email: string;
+  nmlsId: string | null;
+  teamId: string | null;
+  teamName: string | null;
+};
+
+/**
+ * Tenant-wide loan-officer search for a leader building their team. RLS keeps
+ * it inside the tenant; deliberately NOT team-scoped, because the point is
+ * finding people who aren't on your team yet.
+ */
+export async function searchLoanOfficers(db: Db, query: string): Promise<LoanOfficerMatch[]> {
+  const needle = `%${query}%`;
+
+  const rows = await db
+    .select({
+      id: user.id,
+      fullName: user.fullName,
+      email: user.email,
+      nmlsId: user.nmlsId,
+      teamId: user.teamId,
+      teamName: team.name,
+    })
+    .from(user)
+    .leftJoin(team, eq(team.id, user.teamId))
+    .where(
+      and(
+        isNull(user.deletedAt),
+        eq(user.status, "active"),
+        eq(user.role, "lo"),
+        or(ilike(user.fullName, needle), ilike(user.email, needle)),
+      ),
+    )
+    .orderBy(asc(user.fullName))
+    .limit(20);
+
+  return rows as LoanOfficerMatch[];
+}
+
+export type TeamOption = {
+  id: string;
+  name: string;
+  branch: string | null;
+  leaderName: string | null;
+  memberCount: number;
+};
+
+/**
+ * Every team in the tenant, for the "Join a team" picker. Member counts are
+ * correlated the same way the workload columns are — the inner `user` binds the
+ * subquery, the outer `team` the correlation.
+ */
+export async function listTeams(db: Db): Promise<TeamOption[]> {
+  const onThisTeam = and(
+    eq(user.teamId, team.id),
+    isNull(user.deletedAt),
+    eq(user.status, "active"),
+  );
+
+  const rows = await db
+    .select({
+      id: team.id,
+      name: team.name,
+      branch: team.branch,
+      leaderName: user.fullName,
+      memberCount: sql<number>`(
+        SELECT count(*)::int FROM ${user} WHERE ${onThisTeam}
+      )`,
+    })
+    .from(team)
+    .leftJoin(user, eq(user.id, team.leaderUserId))
+    .orderBy(asc(team.name));
+
+  return rows as TeamOption[];
 }

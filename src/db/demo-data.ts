@@ -19,7 +19,7 @@ import { STAGES } from "@/lib/stages";
 // Deterministic RNG — mulberry32. Same seed, same branch, every time.
 // ---------------------------------------------------------------------------
 
-function mulberry32(seed: number) {
+export function mulberry32(seed: number) {
   let a = seed >>> 0;
   return function () {
     a |= 0;
@@ -125,10 +125,41 @@ const PROGRAMS = [
   "Jumbo", "Bank statement", "USDA", "ITIN", "DSCR",
 ] as const;
 
-const LEAD_CHANNELS = [
-  "facebook_ads", "lf_website", "qm_pricer", "partner_referral", "manual",
-  "partner_referral", "lf_website",
-] as const;
+/**
+ * Lead source, skewed on purpose so source-comparison insights have something
+ * true to say: facebook_ads is high volume but closes at a lower rate, while
+ * partner_referral is lower volume but overrepresented among funded files.
+ */
+function drawLeadChannel(outcome: "active" | "funded" | "lost"): string {
+  const r = rand();
+  if (outcome === "funded") {
+    if (r < 0.42) return "partner_referral";
+    if (r < 0.62) return "facebook_ads";
+    if (r < 0.78) return "lf_website";
+    if (r < 0.9) return "qm_pricer";
+    return "manual";
+  }
+  // Active and lost files skew toward paid volume.
+  if (r < 0.44) return "facebook_ads";
+  if (r < 0.62) return "lf_website";
+  if (r < 0.74) return "qm_pricer";
+  if (r < 0.86) return "partner_referral";
+  return "manual";
+}
+
+/**
+ * Funded-date bands: several closings per LO in each leaderboard window
+ * (<7d, 7-30d, 30-90d, 90d-this-year), plus a slice at ~11 and ~23 months so
+ * closing anniversaries land inside the next 45 days.
+ */
+function drawFundedDaysAgo(): number {
+  const r = rand();
+  if (r < 0.14) return int(2, 6);
+  if (r < 0.34) return int(8, 29);
+  if (r < 0.58) return int(31, 88);
+  if (r < 0.86) return int(95, 300);
+  return chance(0.5) ? int(325, 360) : int(690, 720);
+}
 
 const COMM_PREFS = ["text first", "email first", "call first"] as const;
 
@@ -304,7 +335,7 @@ function generateBook(lo: DemoLO): GenPerson[] {
     if (roll < 0.12) {
       loan = null;
     } else if (roll < 0.42) {
-      const fundedDaysAgo = int(30, 720);
+      const fundedDaysAgo = drawFundedDaysAgo();
       loan = {
         stage: fundedDaysAgo > 360 ? "annual_review" : fundedDaysAgo > 60 ? "post_close" : "funded",
         status: "funded",
@@ -313,6 +344,13 @@ function generateBook(lo: DemoLO): GenPerson[] {
         amount: Math.round(between(280, 950)) * 1000,
         daysSinceActivity: int(5, 120),
         fundedDaysAgo,
+        // Every opportunity began as a captured lead. capturedHoursAgo 0 is a
+        // placeholder — the seeder anchors capture to the file's stage trail.
+        lead: {
+          channel: drawLeadChannel("funded"),
+          capturedHoursAgo: 0,
+          firstResponseMinutes: Math.max(2, Math.round(lo.responseMinutes * between(0.5, 1.8))),
+        },
       };
     } else if (roll < 0.48) {
       loan = {
@@ -322,6 +360,11 @@ function generateBook(lo: DemoLO): GenPerson[] {
         program: pick(PROGRAMS),
         amount: null,
         daysSinceActivity: int(20, 90),
+        lead: {
+          channel: drawLeadChannel("lost"),
+          capturedHoursAgo: 0,
+          firstResponseMinutes: Math.max(2, Math.round(lo.responseMinutes * between(0.5, 1.8))),
+        },
       };
     } else {
       const stage = drawActiveStage();
@@ -339,13 +382,23 @@ function generateBook(lo: DemoLO): GenPerson[] {
       };
 
       if (isLead) {
+        // True speed-to-lead queue: recent captures, some still untouched.
         const untouched = chance(lo.untouchedLeadRate);
         loan.lead = {
-          channel: pick(LEAD_CHANNELS),
+          channel: drawLeadChannel("active"),
           capturedHoursAgo: untouched ? int(1, 70) : int(6, 200),
           firstResponseMinutes: untouched
             ? null
             : Math.max(2, Math.round(lo.responseMinutes * between(0.5, 1.8))),
+        };
+      } else {
+        // Deeper-stage files were captured further back; the seeder anchors
+        // capture to the stage trail. Always answered — the Today screen's
+        // "waiting on first reply" count belongs to genuinely new leads only.
+        loan.lead = {
+          channel: drawLeadChannel("active"),
+          capturedHoursAgo: 0,
+          firstResponseMinutes: Math.max(2, Math.round(lo.responseMinutes * between(0.5, 1.8))),
         };
       }
       if (inTransact) {

@@ -56,8 +56,10 @@ export function Wordmark({
         alt="Loan Factory"
         priority
         className={cn(
-          "w-auto shrink-0 object-contain",
-          size === "lg" ? "h-[22px]" : "h-[18px]",
+          // max-w-full lets the mark scale down inside a tight rail instead of
+          // clipping against the navigation boundary.
+          "h-auto w-auto max-w-full shrink-0 object-contain object-left",
+          size === "lg" ? "max-h-[22px]" : "max-h-[18px]",
         )}
       />
       {showProduct ? (

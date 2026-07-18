@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { Workflow } from "lucide-react";
 import { requireUser, queryAs } from "@/lib/auth";
-import { listAutomations } from "@/lib/queries/automations";
+import { listAutomations, listCampaignChoices } from "@/lib/queries/automations";
+import { seesWholeBook } from "@/lib/roles";
 import { PageHeader } from "@/components/shell/page-header";
 import { NewAutomationButton } from "./new-automation-button";
 import { AutomationCard } from "./automation-card";
@@ -12,7 +13,10 @@ export const dynamic = "force-dynamic";
 
 export default async function AutomationsPage() {
   const user = await requireUser();
-  const rows = await queryAs(user, (db) => listAutomations(db));
+  const [rows, campaignChoices] = await queryAs(user, (db) =>
+    Promise.all([listAutomations(db), listCampaignChoices(db)]),
+  );
+  const canSetTier = seesWholeBook(user.role);
 
   // Every number up here is counted from the same rows the cards render, so the
   // header can never disagree with the list underneath it.
@@ -70,7 +74,12 @@ export default async function AutomationsPage() {
         <>
           <div className="space-y-3 p-4 sm:p-6">
             {rows.map((row) => (
-              <AutomationCard key={row.id} automation={row} />
+              <AutomationCard
+                key={row.id}
+                automation={row}
+                campaignChoices={campaignChoices}
+                canSetTier={canSetTier}
+              />
             ))}
           </div>
 

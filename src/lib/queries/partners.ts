@@ -44,6 +44,15 @@ export const QUIET_AFTER_DAYS = 60;
 export const CHECKIN_APPROVED = "ai.partner_checkin.approved";
 export const CHECKIN_SKIPPED = "ai.partner_checkin.skipped";
 
+/**
+ * Campaign enrollment for a partner is recorded as an event: `campaign` has an
+ * audience rule, not a member table, and inventing one is out of scope. The
+ * event is the durable, honest record — "this partner was put on this
+ * campaign, by this person, on this date" — and nothing about it implies a
+ * send happened.
+ */
+export const PARTNER_ENROLLED = "partner.campaign_enrolled";
+
 export type PartnerHealth = {
   level: Urgency;
   label: string;
@@ -57,6 +66,7 @@ export function daysSinceTouch(lastTouchAt: Date | null, now = new Date()): numb
 }
 
 const TIER_HEALTH: Record<string, { level: Urgency; label: string }> = {
+  target: { level: "brand", label: "Target" },
   core: { level: "healthy", label: "Core" },
   growing: { level: "info", label: "Growing" },
   new: { level: "neutral", label: "New" },
@@ -102,6 +112,11 @@ export type PartnerListRow = {
   phones: { number: string }[];
   lastTouchAt: Date | null;
   referralCount: number;
+  /** Funded loans that came through this partner's referrals. */
+  closingCount: number;
+  /** When they last sent someone — null for a target who hasn't yet. */
+  lastReferralAt: Date | null;
+  ownerName: string | null;
 };
 
 export type PartnersFilter = { tier?: string };
@@ -119,15 +134,21 @@ export async function listPartners(
   const conditions = [isNull(partner.deletedAt), bookScope(currentUser)].filter(Boolean);
 
   if (filter.tier && filter.tier !== "all") {
-    conditions.push(eq(partner.tier, filter.tier as "core" | "growing" | "quiet" | "new"));
+    conditions.push(
+      eq(partner.tier, filter.tier as "target" | "core" | "growing" | "quiet" | "new"),
+    );
   }
 
-  // Built as its own fragment, not written inline below. Drizzle only emits
+  // Built as their own fragments, not written inline below. Drizzle only emits
   // qualified column names ("partner"."id") for a nested sql fragment; inline
   // in a select field it emits a bare "id", which inside
   // `SELECT ... FROM partner_relationship` binds to that table's own id and
   // silently counts zero referrals for everyone.
   const sentByThisPartner = sql`${partnerRelationship.partnerId} = ${partner.id}`;
+  const fundedThroughThisPartner = sql`${partnerRelationship.partnerId} = ${partner.id}
+    AND ${loan.id} = ${partnerRelationship.loanId}
+    AND ${loan.status} = 'funded'
+    AND ${loan.deletedAt} IS NULL`;
 
   const rows = await db
     .select({
@@ -143,8 +164,16 @@ export async function listPartners(
       referralCount: sql<number>`(
         SELECT count(*)::int FROM ${partnerRelationship} WHERE ${sentByThisPartner}
       )`,
+      closingCount: sql<number>`(
+        SELECT count(*)::int FROM ${partnerRelationship}, ${loan} WHERE ${fundedThroughThisPartner}
+      )`,
+      lastReferralAt: sql<Date | null>`(
+        SELECT max(${partnerRelationship.createdAt}) FROM ${partnerRelationship} WHERE ${sentByThisPartner}
+      )`,
+      ownerName: userTable.fullName,
     })
     .from(partner)
+    .leftJoin(userTable, eq(userTable.id, partner.ownerUserId))
     .where(and(...conditions))
     // Never touched sits above longest-silent: both are people waiting on you.
     // The name breaks ties so the list doesn't reshuffle between loads.
@@ -190,11 +219,20 @@ export type PartnerMessage = {
   id: string;
   channel: string;
   direction: string;
+  /** "draft" renders with an explicit "not sent" label — nothing sends here. */
+  status: string;
   subject: string | null;
   body: string;
   preparedByAi: boolean;
   occurredAt: Date;
   authorName: string | null;
+};
+
+export type PartnerEnrollment = {
+  campaignId: string;
+  campaignName: string;
+  enrolledAt: Date;
+  enrolledByName: string | null;
 };
 
 export type PartnerRecord = NonNullable<Awaited<ReturnType<typeof getPartner>>>;
@@ -238,6 +276,7 @@ export async function getPartner(db: Db, currentUser: CurrentUser, partnerId: st
       id: message.id,
       channel: message.channel,
       direction: message.direction,
+      status: message.status,
       subject: message.subject,
       body: message.body,
       preparedByAi: message.preparedByAi,
@@ -263,10 +302,35 @@ export async function getPartner(db: Db, currentUser: CurrentUser, partnerId: st
     .orderBy(desc(event.createdAt))
     .limit(1);
 
+  // The campaigns this partner has been put on. Read from events (see
+  // PARTNER_ENROLLED) with the campaign's current name looked up so a rename
+  // doesn't strand the history.
+  const enrollmentRows = await db
+    .select({
+      payload: event.payload,
+      createdAt: event.createdAt,
+      enrolledByName: userTable.fullName,
+    })
+    .from(event)
+    .leftJoin(userTable, eq(userTable.id, event.actorUserId))
+    .where(
+      and(eq(event.kind, PARTNER_ENROLLED), sql`${event.payload}->>'partnerId' = ${partnerId}`),
+    )
+    .orderBy(desc(event.createdAt))
+    .limit(20);
+
+  const enrollments: PartnerEnrollment[] = enrollmentRows.map((e) => ({
+    campaignId: String((e.payload as Record<string, unknown>)?.campaignId ?? ""),
+    campaignName: String((e.payload as Record<string, unknown>)?.campaignName ?? "Campaign"),
+    enrolledAt: e.createdAt,
+    enrolledByName: e.enrolledByName,
+  }));
+
   return {
     partner: row,
     referrals: referrals as PartnerReferral[],
     messages: messages as PartnerMessage[],
     verdict: verdict ?? null,
+    enrollments,
   };
 }

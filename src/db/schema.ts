@@ -551,7 +551,7 @@ export const partnerKind = pgEnum("partner_kind", [
 ]);
 
 /** Relationship health — the plain-language tiers used across Partners. */
-export const partnerTier = pgEnum("partner_tier", ["core", "growing", "quiet", "new"]);
+export const partnerTier = pgEnum("partner_tier", ["target", "new", "growing", "core", "quiet"]);
 
 export const partner = pgTable(
   "partner",
@@ -603,7 +603,7 @@ export const partnerRelationship = pgTable(
 // Conversations — every thread and message, all channels
 // ---------------------------------------------------------------------------
 
-export const channel = pgEnum("channel", ["email", "sms", "call", "note"]);
+export const channel = pgEnum("channel", ["email", "sms", "video", "app", "call", "note"]);
 export const direction = pgEnum("direction", ["inbound", "outbound"]);
 export const messageStatus = pgEnum("message_status", [
   "received",
@@ -723,6 +723,15 @@ export const campaign = pgTable(
     name: text("name").notNull(),
     status: campaignStatus("status").notNull().default("draft"),
     templateId: uuid("template_id").references(() => template.id),
+    /** Campaign copy language. English is the default; others are opt-in. */
+    language: language("language").notNull().default("en"),
+    /** Channel content authored on the campaign itself. */
+    emailBody: text("email_body"),
+    smsBody: text("sms_body"),
+    /** Demo video attachment details ({ title, caption, durationSeconds, demo: true }). */
+    videoMeta: jsonb("video_meta").$type<Record<string, unknown>>(),
+    /** Drip steps in send order: { day, channel, subject }. */
+    drip: jsonb("drip").$type<{ day: number; channel: string; subject: string }[]>().default([]),
     /** Plain-language audience rule, e.g. { type: 'past_clients' }. */
     audience: jsonb("audience").$type<Record<string, unknown>>().default({}),
     audienceSize: integer("audience_size").notNull().default(0),
@@ -763,6 +772,12 @@ export const automation = pgTable(
     tier: autonomyTier("tier").notNull().default("t2"),
     status: automationStatus("status").notNull().default("draft"),
     templateId: uuid("template_id").references(() => template.id),
+    /** Where the triggering lead/event comes from (facebook, website, agent referral…). */
+    source: text("source"),
+    /** The campaign this automation enrolls people into. */
+    campaignId: uuid("campaign_id").references(() => campaign.id),
+    /** Plain-language timing, e.g. "within 5 minutes" or "next morning at 9am". */
+    timingText: text("timing_text"),
     runCount: integer("run_count").notNull().default(0),
     lastRunAt: timestamp("last_run_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

@@ -82,10 +82,11 @@
   --text-muted: #646e7c; /* 4.78:1 / 5.17:1 */
   --text-disabled: #a3abb7; /* disabled only — never readable content */
 
-  /* --- AI: violet, distinct from every status hue --- */
-  --ai-fg: #6d4c8f; /* 6.82:1 on surface */
-  --ai-bg: #f2ecf7;
-  --ai-border: #ddd0ea;
+  /* --- AI: navy slate — calm and professional, distinct from the orange
+     actions and from every status hue. Approved palette only: no violet. --- */
+  --ai-fg: #42546f; /* 7.69:1 on surface, 6.78:1 on ai-bg */
+  --ai-bg: #edf1f6; /* cool navy-tinted wash */
+  --ai-border: #ccd6e2;
 
   /* --- Status: green, amber, red only. Tied to urgency, never decoration. --- */
   --critical-fg: #b4291d; /* 6.41:1 */
@@ -136,9 +137,9 @@
     --action-tint: #2a1a10;
     --action-tint-border: #4a2c18;
 
-    --ai-fg: #c3a8dc;
-    --ai-bg: #241b31;
-    --ai-border: #3d3050;
+    --ai-fg: #a3b4cb; /* 8.28:1 on surface, 7.45:1 on ai-bg */
+    --ai-bg: #16233a; /* a cool navy lift off the surface */
+    --ai-border: #33415a;
 
     --critical-fg: #f08175;
     --critical-bg: #2c1512;

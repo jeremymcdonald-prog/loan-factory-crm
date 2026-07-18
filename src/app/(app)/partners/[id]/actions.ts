@@ -1,12 +1,17 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
-import { partner, conversation, message, event, task } from "@/db/schema";
+import { partner, conversation, message, event, task, campaign } from "@/db/schema";
+import type { Db } from "@/db";
 import { requireUser, queryAs } from "@/lib/auth";
 import { recordAudit } from "@/lib/audit";
-import { CHECKIN_APPROVED, CHECKIN_SKIPPED } from "@/lib/queries/partners";
+import {
+  CHECKIN_APPROVED,
+  CHECKIN_SKIPPED,
+  PARTNER_ENROLLED,
+} from "@/lib/queries/partners";
 
 export type TouchState = { error?: string };
 
@@ -281,5 +286,318 @@ export async function decidePartnerCheckin(
 
   revalidatePath(`/partners/${partnerId}`);
   revalidatePath("/today");
+  return {};
+}
+
+// ---------------------------------------------------------------------------
+// Record tooling — task, note, message drafts, campaign enrollment.
+// The same working set People has, adapted to what the schema actually holds
+// for a partner. Nothing here sends anything, and nothing here pretends to.
+// ---------------------------------------------------------------------------
+
+/** Fetch the partner or fail loudly — every tool below starts here. */
+async function visiblePartner(db: Db, partnerId: string) {
+  const [target] = await db
+    .select({
+      id: partner.id,
+      firstName: partner.firstName,
+      lastName: partner.lastName,
+      company: partner.company,
+    })
+    .from(partner)
+    .where(and(eq(partner.id, partnerId), isNull(partner.deletedAt)))
+    .limit(1);
+  if (!target) throw new Error("not-visible");
+  return target;
+}
+
+const TaskSchema = z.object({
+  partnerId: z.string().uuid(),
+  title: z.string().trim().min(1, "Say what needs doing."),
+  dueIn: z.enum(["today", "tomorrow", "next_week"]),
+});
+
+/**
+ * Put a follow-up about this partner on the user's task list.
+ *
+ * `task` has no partner column (the schema is fixed), so the partner is named
+ * in the title — the task reads correctly on Today without a join, and the
+ * audit row is what ties it back to the partner record.
+ */
+export async function addPartnerTask(_prev: TouchState, formData: FormData): Promise<TouchState> {
+  const user = await requireUser();
+
+  const parsed = TaskSchema.safeParse({
+    partnerId: formData.get("partnerId"),
+    title: formData.get("title"),
+    dueIn: formData.get("dueIn") ?? "today",
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "We couldn't add that task." };
+  }
+
+  const { partnerId, title, dueIn } = parsed.data;
+  const due = new Date();
+  if (dueIn === "tomorrow") due.setDate(due.getDate() + 1);
+  if (dueIn === "next_week") due.setDate(due.getDate() + 7);
+
+  try {
+    await queryAs(user, async (db) => {
+      const target = await visiblePartner(db, partnerId);
+      const who = `${target.firstName} ${target.lastName}`;
+
+      await db.insert(task).values({
+        tenantId: user.tenantId,
+        title: `${title} — ${who}`,
+        detail: target.company
+          ? `Referral partner at ${target.company}.`
+          : "Referral partner.",
+        ownerUserId: user.userId,
+        dueAt: due,
+        priority: "normal",
+      });
+
+      await recordAudit(db, user, {
+        action: "partner.task_created",
+        entity: "partner",
+        entityId: partnerId,
+        changes: { title: { from: null, to: title } },
+      });
+    });
+  } catch {
+    return { error: "We couldn't add that task. Try again." };
+  }
+
+  revalidatePath(`/partners/${partnerId}`);
+  revalidatePath("/today");
+  return {};
+}
+
+const AddNoteSchema = z.object({
+  partnerId: z.string().uuid(),
+  body: z.string().trim().min(1, "Write something first.").max(4000),
+});
+
+/**
+ * A dated note in the partner's contact history.
+ *
+ * `note` has no partner column, so — like a logged touch — this is recorded as
+ * a channel-"note" entry in the partner's conversation history, which is where
+ * the record already reads its story from. It does not move `lastTouchAt`:
+ * writing about a relationship is not the same as touching it.
+ */
+export async function addPartnerNote(_prev: TouchState, formData: FormData): Promise<TouchState> {
+  const user = await requireUser();
+
+  const parsed = AddNoteSchema.safeParse({
+    partnerId: formData.get("partnerId"),
+    body: formData.get("body"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "We couldn't save that note." };
+  }
+
+  const { partnerId, body } = parsed.data;
+  const now = new Date();
+
+  try {
+    await queryAs(user, async (db) => {
+      await visiblePartner(db, partnerId);
+
+      const [thread] = await db
+        .insert(conversation)
+        .values({
+          tenantId: user.tenantId,
+          subject: "Note",
+          channel: "note",
+          partnerId,
+          ownerUserId: user.userId,
+          lastMessageAt: now,
+          awaitingReply: false,
+        })
+        .returning({ id: conversation.id });
+
+      await db.insert(message).values({
+        tenantId: user.tenantId,
+        conversationId: thread.id,
+        channel: "note",
+        direction: "outbound",
+        status: "sent",
+        body,
+        authorUserId: user.userId,
+        sentAt: now,
+        occurredAt: now,
+      });
+
+      await recordAudit(db, user, {
+        action: "partner.note_created",
+        entity: "partner",
+        entityId: partnerId,
+      });
+    });
+  } catch {
+    return { error: "We couldn't save that note. Nothing was lost — try again." };
+  }
+
+  revalidatePath(`/partners/${partnerId}`);
+  return {};
+}
+
+const DRAFT_CHANNELS = ["email", "sms", "video"] as const;
+
+const DraftSchema = z.object({
+  partnerId: z.string().uuid(),
+  channel: z.enum(DRAFT_CHANNELS),
+  subject: z.string().trim().max(200).optional(),
+  body: z.string().trim().min(1, "Write the message first.").max(8000),
+});
+
+/**
+ * Save a draft message for this partner — email, text, or video script.
+ *
+ * The draft lands in the partner's contact history with status "draft".
+ * Nothing is sent: this CRM has no mail, SMS, or video integration, and the
+ * UI says so wherever the draft appears. What the draft buys you is a written
+ * message, in one place, ready to copy into the tool that actually sends.
+ */
+export async function createPartnerDraft(
+  _prev: TouchState,
+  formData: FormData,
+): Promise<TouchState> {
+  const user = await requireUser();
+
+  const parsed = DraftSchema.safeParse({
+    partnerId: formData.get("partnerId"),
+    channel: formData.get("channel"),
+    subject: formData.get("subject") || undefined,
+    body: formData.get("body"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "We couldn't save that draft." };
+  }
+
+  const { partnerId, channel, subject, body } = parsed.data;
+  const now = new Date();
+
+  try {
+    await queryAs(user, async (db) => {
+      await visiblePartner(db, partnerId);
+
+      const [thread] = await db
+        .insert(conversation)
+        .values({
+          tenantId: user.tenantId,
+          subject: subject ?? (channel === "video" ? "Video message draft" : "Draft"),
+          channel,
+          partnerId,
+          ownerUserId: user.userId,
+          lastMessageAt: now,
+          awaitingReply: false,
+        })
+        .returning({ id: conversation.id });
+
+      await db.insert(message).values({
+        tenantId: user.tenantId,
+        conversationId: thread.id,
+        channel,
+        direction: "outbound",
+        status: "draft",
+        subject: subject ?? null,
+        body,
+        authorUserId: user.userId,
+        occurredAt: now,
+      });
+
+      await recordAudit(db, user, {
+        action: "partner.draft_created",
+        entity: "partner",
+        entityId: partnerId,
+        changes: { channel: { from: null, to: channel } },
+      });
+    });
+  } catch {
+    return { error: "We couldn't save that draft. Nothing was lost — try again." };
+  }
+
+  revalidatePath(`/partners/${partnerId}`);
+  return {};
+}
+
+const EnrollSchema = z.object({
+  partnerId: z.string().uuid(),
+  campaignId: z.string().uuid(),
+});
+
+/**
+ * Put this partner on a drip campaign — as a recorded decision, not a send.
+ *
+ * There is no campaign-membership table, so the enrollment is an event: who
+ * put whom on what, and when. The campaign itself runs (or doesn't) exactly as
+ * it did before; this CRM does not send campaign messages, and the record
+ * screen says so next to every enrollment.
+ */
+export async function enrollPartnerInCampaign(
+  _prev: TouchState,
+  formData: FormData,
+): Promise<TouchState> {
+  const user = await requireUser();
+
+  const parsed = EnrollSchema.safeParse({
+    partnerId: formData.get("partnerId"),
+    campaignId: formData.get("campaignId"),
+  });
+  if (!parsed.success) {
+    return { error: "Pick a campaign first." };
+  }
+
+  const { partnerId, campaignId } = parsed.data;
+
+  try {
+    await queryAs(user, async (db) => {
+      await visiblePartner(db, partnerId);
+
+      const [target] = await db
+        .select({ id: campaign.id, name: campaign.name })
+        .from(campaign)
+        .where(and(eq(campaign.id, campaignId), isNull(campaign.deletedAt)))
+        .limit(1);
+      if (!target) throw new Error("not-visible");
+
+      // Enrolling twice would just double the history — say so instead.
+      const [existing] = await db
+        .select({ id: event.id })
+        .from(event)
+        .where(
+          and(
+            eq(event.kind, PARTNER_ENROLLED),
+            sql`${event.payload}->>'partnerId' = ${partnerId}`,
+            sql`${event.payload}->>'campaignId' = ${campaignId}`,
+          ),
+        )
+        .limit(1);
+      if (existing) throw new Error("already-enrolled");
+
+      await db.insert(event).values({
+        tenantId: user.tenantId,
+        kind: PARTNER_ENROLLED,
+        actorUserId: user.userId,
+        payload: { partnerId, campaignId, campaignName: target.name },
+      });
+
+      await recordAudit(db, user, {
+        action: PARTNER_ENROLLED,
+        entity: "partner",
+        entityId: partnerId,
+        changes: { campaign: { from: null, to: target.name } },
+      });
+    });
+  } catch (err) {
+    if (err instanceof Error && err.message === "already-enrolled") {
+      return { error: "They're already on that campaign." };
+    }
+    return { error: "We couldn't record that. Try again." };
+  }
+
+  revalidatePath(`/partners/${partnerId}`);
   return {};
 }

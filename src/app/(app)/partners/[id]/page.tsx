@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Mail, Phone, Building2, ArrowRight, Handshake, MessagesSquare } from "lucide-react";
+import { and, desc, inArray, isNull } from "drizzle-orm";
 import { requireUser, queryAs } from "@/lib/auth";
 import {
   getPartner,
@@ -10,6 +11,7 @@ import {
   CHECKIN_APPROVED,
   type PartnerReferral,
 } from "@/lib/queries/partners";
+import { campaign as campaignTable } from "@/db/schema";
 import { money, moneyCompact, relativeTime, initialsOf, phoneNumber } from "@/lib/format";
 import { stageLabel, type Stage } from "@/lib/stages";
 import { StageChip } from "@/components/crm/stage-chip";
@@ -20,7 +22,14 @@ import { AICard, AIAttribution } from "@/components/ai/ai-card";
 import { LogTouchButton } from "./log-touch-button";
 import { PartnerNotesForm } from "./partner-notes-form";
 import { CheckinActions } from "./checkin-actions";
-import { PARTNER_KIND_LABELS, PARTNER_TIER_LABELS, CHANNEL_LABELS } from "../vocabulary";
+import { RecordTools } from "./record-tools";
+import {
+  PARTNER_KIND_LABELS,
+  PARTNER_TIER_LABELS,
+  PARTNER_TIER_HINTS,
+  PARTNER_NEXT_ACTIONS,
+  CHANNEL_LABELS,
+} from "../vocabulary";
 
 export const dynamic = "force-dynamic";
 
@@ -40,16 +49,41 @@ export default async function PartnerPage({ params }: { params: Promise<{ id: st
   const { id } = await params;
   const user = await requireUser();
 
-  const data = await queryAs(user, (db) => getPartner(db, user, id));
+  const data = await queryAs(user, async (db) => {
+    const record = await getPartner(db, user, id);
+    if (!record) return null;
+
+    // The campaigns a partner can be enrolled in — anything not finished.
+    const campaigns = await db
+      .select({
+        id: campaignTable.id,
+        name: campaignTable.name,
+        status: campaignTable.status,
+      })
+      .from(campaignTable)
+      .where(
+        and(
+          isNull(campaignTable.deletedAt),
+          inArray(campaignTable.status, ["draft", "scheduled", "running", "paused"]),
+        ),
+      )
+      .orderBy(desc(campaignTable.createdAt))
+      .limit(25);
+
+    return { ...record, campaigns };
+  });
   if (!data) notFound();
 
-  const { partner, referrals, messages, verdict } = data;
+  const { partner, referrals, messages, verdict, enrollments, campaigns } = data;
   const now = new Date();
   const fullName = `${partner.firstName} ${partner.lastName}`;
   const health = partnerHealth(partner.tier, partner.lastTouchAt, now);
+  const nextAction = PARTNER_NEXT_ACTIONS[partner.tier] ?? "Follow up";
 
   const referredVolume = referrals.reduce((sum, r) => sum + Number(r.amount ?? 0), 0);
   const withoutAmount = referrals.filter((r) => r.loanId && !r.amount).length;
+  const closings = referrals.filter((r) => r.loanStatus === "funded").length;
+  const lastReferralAt = referrals[0]?.referredAt ?? null;
 
   // AI's suggestion is settled once you've given it a verdict on this stretch
   // of silence. Logging a touch moves the clock, and the question starts over.
@@ -114,14 +148,33 @@ export default async function PartnerPage({ params }: { params: Promise<{ id: st
           {/* One primary action on the record: say what just happened. */}
           <LogTouchButton partnerId={partner.id} partnerName={partner.firstName} />
         </div>
+
+        {/* The tier's suggested move, then the working tools. */}
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-small text-secondary">
+            <span className="font-semibold uppercase tracking-wide text-muted">Next action</span>{" "}
+            <span className="font-semibold text-primary">{nextAction}</span>
+          </p>
+          <RecordTools
+            partnerId={partner.id}
+            partnerName={partner.firstName}
+            nextAction={nextAction}
+            campaigns={campaigns}
+          />
+        </div>
       </header>
 
-      {/* The three numbers that describe a referral relationship. */}
-      <div className="grid grid-cols-3 gap-px border-b border-subtle bg-subtle">
+      {/* The numbers that describe a referral relationship. */}
+      <div className="grid grid-cols-2 gap-px border-b border-subtle bg-subtle sm:grid-cols-5">
         {[
           {
             label: "Referrals",
             value: String(referrals.length),
+          },
+          {
+            label: "Closings",
+            value: String(closings),
+            meta: "Funded loans they sent",
           },
           {
             label: "Referred volume",
@@ -130,6 +183,10 @@ export default async function PartnerPage({ params }: { params: Promise<{ id: st
               withoutAmount > 0
                 ? `${withoutAmount} file${withoutAmount === 1 ? "" : "s"} without an amount yet`
                 : undefined,
+          },
+          {
+            label: "Last referral",
+            value: lastReferralAt ? relativeTime(lastReferralAt, now) : "None yet",
           },
           {
             label: "Last touch",
@@ -273,6 +330,9 @@ export default async function PartnerPage({ params }: { params: Promise<{ id: st
                         >
                           {relativeTime(m.occurredAt, now)}
                         </time>
+                        {m.status === "draft" ? (
+                          <Badge tone="neutral">Draft — not sent</Badge>
+                        ) : null}
                         {m.preparedByAi ? <Badge tone="ai">AI drafted</Badge> : null}
                       </p>
                     </li>
@@ -321,6 +381,32 @@ export default async function PartnerPage({ params }: { params: Promise<{ id: st
             </Card>
           ) : null}
 
+          {enrollments.length > 0 ? (
+            <Card>
+              <div className="border-b border-subtle px-4 py-3">
+                <h2 className="text-h3 font-semibold text-primary">Drip campaigns</h2>
+              </div>
+              <div className="p-4">
+                <ul className="space-y-2.5">
+                  {enrollments.map((e) => (
+                    <li key={`${e.campaignId}-${e.enrolledAt.toISOString()}`} className="min-w-0">
+                      <span className="block truncate text-body font-semibold text-primary">
+                        {e.campaignName}
+                      </span>
+                      <span className="block text-small text-muted tnum">
+                        Enrolled {relativeTime(e.enrolledAt, now)}
+                        {e.enrolledByName ? ` by ${e.enrolledByName}` : ""}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-3 border-t border-subtle pt-3 text-small text-muted">
+                  Enrollment is a recorded decision. This CRM does not send campaign messages.
+                </p>
+              </div>
+            </Card>
+          ) : null}
+
           <Card>
             <div className="border-b border-subtle px-4 py-3">
               <h2 className="text-h3 font-semibold text-primary">What to remember</h2>
@@ -345,6 +431,11 @@ export default async function PartnerPage({ params }: { params: Promise<{ id: st
                 </dt>
                 <dd className="mt-0.5 text-body text-primary">
                   {PARTNER_TIER_LABELS[partner.tier] ?? partner.tier}
+                  {PARTNER_TIER_HINTS[partner.tier] ? (
+                    <span className="block text-small text-secondary">
+                      {PARTNER_TIER_HINTS[partner.tier]}
+                    </span>
+                  ) : null}
                   {health.quietDays !== null ? (
                     <span className="block text-small text-warning">
                       No contact logged in {health.quietDays} days.

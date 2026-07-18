@@ -9,27 +9,20 @@
 import { UrgencyDot } from "@/components/ui/badge";
 import { cn } from "@/lib/cn";
 
-/** Minutes in the plainest true unit: 24 → "24 min", 240 → "4 hours". */
-export function durationLabel(minutes: number): string {
-  if (!Number.isFinite(minutes)) return "—";
-
-  if (minutes < 90) {
-    const m = Math.round(minutes);
-    return `${m} min`;
-  }
-
-  const hours = minutes / 60;
-  if (hours < 48) {
-    const h = hours >= 10 ? Math.round(hours) : Math.round(hours * 10) / 10;
-    return `${h} ${h === 1 ? "hour" : "hours"}`;
-  }
-
-  const d = Math.round(hours / 24);
-  return `${d} ${d === 1 ? "day" : "days"}`;
-}
-
 export function percentLabel(rate: number): string {
   return `${Math.round(rate * 100)}%`;
+}
+
+/**
+ * Every panel wears this so nobody mistakes seeded numbers for their own book.
+ * It is a statement about the rows, not the maths — the queries are real.
+ */
+export function DemoTag() {
+  return (
+    <span className="rounded-full border border-subtle bg-sunken px-2 py-0.5 text-label font-semibold uppercase tracking-wide text-muted">
+      Demo data
+    </span>
+  );
 }
 
 /**

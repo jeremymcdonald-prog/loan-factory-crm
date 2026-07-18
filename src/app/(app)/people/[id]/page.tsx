@@ -4,8 +4,13 @@ import { notFound } from "next/navigation";
 import { and, eq, desc, isNull, or } from "drizzle-orm";
 import { Mail, Phone, MapPin, ArrowRight } from "lucide-react";
 import { requireUser, queryAs } from "@/lib/auth";
-import { getPerson } from "@/lib/queries/people";
-import { note as noteTable, task as taskTable, user as userTable } from "@/db/schema";
+import {
+  getPerson,
+  personTimeline,
+  listCampaignChoices,
+  type TimelineItem,
+} from "@/lib/queries/people";
+import { task as taskTable } from "@/db/schema";
 import { personUrgency } from "@/lib/person-urgency";
 import {
   money,
@@ -22,6 +27,7 @@ import { Badge, UrgencyDot } from "@/components/ui/badge";
 import { Card, SectionLabel } from "@/components/ui/card";
 import { AddNoteForm } from "./add-note-form";
 import { LogTouchButton } from "./log-touch-button";
+import { RecordActions } from "./record-actions";
 import { cn } from "@/lib/cn";
 
 export const dynamic = "force-dynamic";
@@ -53,19 +59,10 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
     const record = await getPerson(db, user, id);
     if (!record) return null;
 
-    const notes = await db
-      .select({
-        id: noteTable.id,
-        body: noteTable.body,
-        createdAt: noteTable.createdAt,
-        preparedByAi: noteTable.preparedByAi,
-        authorName: userTable.fullName,
-      })
-      .from(noteTable)
-      .leftJoin(userTable, eq(userTable.id, noteTable.authorUserId))
-      .where(and(eq(noteTable.personId, id), isNull(noteTable.deletedAt)))
-      .orderBy(desc(noteTable.createdAt))
-      .limit(50);
+    // Sequential on purpose — one pooled client per transaction (see
+    // marketing.ts, audienceSizes).
+    const timeline = await personTimeline(db, user, id);
+    const campaigns = await listCampaignChoices(db, user);
 
     const tasks = await db
       .select({
@@ -85,12 +82,12 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
       .orderBy(desc(taskTable.dueAt))
       .limit(10);
 
-    return { ...record, notes, tasks };
+    return { ...record, timeline, campaigns, tasks };
   });
 
   if (!data) notFound();
 
-  const { person, loans, leads, notes, tasks } = data;
+  const { person, loans, leads, timeline, campaigns, tasks } = data;
   const primary = loans[0];
   const primaryLead = primary ? leads.find((l) => l.loanId === primary.id) : undefined;
   const now = new Date();
@@ -178,12 +175,22 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
             </div>
           </div>
 
-          {/* One primary action on the record: log what just happened. */}
-          <LogTouchButton
-            personId={person.id}
-            personName={person.firstName}
-            loanId={primary?.id ?? null}
-          />
+          {/* One primary action on the record: log what just happened.
+              Everything else — drafts, campaigns, tasks — sits beneath it. */}
+          <div className="flex flex-col items-start gap-2 sm:items-end">
+            <LogTouchButton
+              personId={person.id}
+              personName={person.firstName}
+              loanId={primary?.id ?? null}
+            />
+            <RecordActions
+              personId={person.id}
+              personName={person.firstName}
+              loanId={primary?.id ?? null}
+              doNotContact={person.doNotContact}
+              campaigns={campaigns}
+            />
+          </div>
         </div>
 
         {urgency?.label && urgency.level !== "healthy" ? (
@@ -309,7 +316,8 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
             </Card>
           )}
 
-          {/* Notes — the relationship's memory */}
+          {/* Activity — the relationship's memory: notes, messages, events,
+              tasks, and stage changes, one timeline, newest first. */}
           <Card>
             <div className="border-b border-subtle px-4 py-3">
               <h2 className="text-h3 font-semibold text-primary">Notes &amp; history</h2>
@@ -317,28 +325,15 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
             <div className="p-4">
               <AddNoteForm personId={person.id} loanId={primary?.id ?? null} />
 
-              {notes.length > 0 ? (
+              {timeline.length > 0 ? (
                 <ol className="mt-4 space-y-3">
-                  {notes.map((n) => (
-                    <li key={n.id} className="border-l-2 border-subtle pl-3">
-                      <p className="whitespace-pre-wrap text-body text-secondary">{n.body}</p>
-                      <p className="mt-1 flex items-center gap-1.5 text-small text-muted">
-                        <span>{n.authorName ?? "Someone"}</span>
-                        <span aria-hidden>·</span>
-                        <time
-                          dateTime={n.createdAt.toISOString()}
-                          title={n.createdAt.toLocaleString()}
-                        >
-                          {relativeTime(n.createdAt)}
-                        </time>
-                        {n.preparedByAi ? <Badge tone="ai">AI drafted</Badge> : null}
-                      </p>
-                    </li>
+                  {timeline.map((item) => (
+                    <TimelineEntry key={item.id} item={item} />
                   ))}
                 </ol>
               ) : (
                 <p className="mt-4 text-small text-muted">
-                  No notes yet. What you write here is what AI will remember.
+                  Nothing yet. What you write here is what AI will remember.
                 </p>
               )}
             </div>
@@ -433,6 +428,50 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
         </div>
       </div>
     </div>
+  );
+}
+
+/** Tone for a timeline badge — status words map to the chip vocabulary. */
+function badgeTone(badge: string): "info" | "healthy" | "critical" | "neutral" {
+  if (badge === "Done") return "healthy";
+  if (badge === "Failed") return "critical";
+  if (badge.startsWith("Draft") || badge.startsWith("Awaiting") || badge.startsWith("Approved")) {
+    return "info";
+  }
+  return "neutral";
+}
+
+function TimelineEntry({ item }: { item: TimelineItem }) {
+  return (
+    <li className="border-l-2 border-subtle pl-3">
+      <p className="flex flex-wrap items-center gap-1.5">
+        {item.kind !== "note" ? (
+          <span className="text-small font-semibold text-primary">{item.title}</span>
+        ) : null}
+        {item.badge ? <Badge tone={badgeTone(item.badge)}>{item.badge}</Badge> : null}
+        {item.preparedByAi ? <Badge tone="ai">AI drafted</Badge> : null}
+      </p>
+      {item.body ? (
+        <p className="mt-0.5 line-clamp-3 whitespace-pre-wrap text-body text-secondary">
+          {item.body}
+        </p>
+      ) : null}
+      <p className="mt-1 flex flex-wrap items-center gap-1.5 text-small text-muted">
+        <span>{item.actorName ?? "System"}</span>
+        <span aria-hidden>·</span>
+        <time dateTime={item.at.toISOString()} title={item.at.toLocaleString()}>
+          {relativeTime(item.at)}
+        </time>
+        {item.href ? (
+          <>
+            <span aria-hidden>·</span>
+            <Link href={item.href} className="font-medium text-action hover:underline">
+              Open conversation
+            </Link>
+          </>
+        ) : null}
+      </p>
+    </li>
   );
 }
 

@@ -14,7 +14,15 @@ import { Pool } from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { sql } from "drizzle-orm";
 import * as schema from "@/db/schema";
-import { listTeamMembers, teamTotals } from "./team";
+import {
+  listTeamMembers,
+  teamTotals,
+  leaderboard,
+  listTeams,
+  searchLoanOfficers,
+  APPLICATION_STAGES,
+  LEADERBOARD_PERIODS,
+} from "./team";
 import type { Db } from "@/db";
 
 const TEAM_ID = "2b000000-0000-4000-8000-000000000001";
@@ -122,6 +130,129 @@ describe("team workload", () => {
     const rows = await listTeamMembers(db, TEAM_ID);
     const withWork = rows.filter((r) => r.openTasks > 0 || r.activeFiles > 0);
     expect(withWork.length).toBeGreaterThan(0);
+  });
+});
+
+describe("leaderboard", () => {
+  it("ranks every active loan officer, and only loan officers", async () => {
+    const rows = await leaderboard(db, "quarter");
+    expect(rows.length).toBeGreaterThan(0);
+
+    const { rows: truth } = await pool.query(
+      `SELECT count(*)::int AS n FROM "user"
+        WHERE tenant_id = $1 AND role = 'lo' AND status = 'active' AND deleted_at IS NULL`,
+      [TENANT_ID],
+    );
+    expect(rows.length).toBe(truth[0].n);
+  });
+
+  it("counts closings and funded volume from funded dates in the period", async () => {
+    const rows = await leaderboard(db, "quarter");
+
+    for (const row of rows) {
+      const { rows: truth } = await pool.query(
+        `SELECT count(*)::int AS n, COALESCE(sum(amount), 0)::float AS v
+           FROM loan
+          WHERE lo_user_id = $1 AND deleted_at IS NULL
+            AND funded_at IS NOT NULL AND funded_at >= now() - interval '90 days'`,
+        [row.id],
+      );
+      expect(row.closings, `${row.fullName} closings`).toBe(truth[0].n);
+      expect(row.fundedVolume, `${row.fullName} volume`).toBeCloseTo(truth[0].v, 2);
+    }
+  });
+
+  it("counts applications as distinct files crossing into the application stages", async () => {
+    const rows = await leaderboard(db, "ytd");
+    const stages = APPLICATION_STAGES as string[];
+
+    for (const row of rows) {
+      const { rows: truth } = await pool.query(
+        `SELECT count(DISTINCT h.loan_id)::int AS n
+           FROM loan_stage_history h
+           JOIN loan l ON l.id = h.loan_id
+          WHERE l.lo_user_id = $1
+            AND h.to_stage = ANY($2::loan_stage[])
+            AND (h.from_stage IS NULL OR NOT h.from_stage = ANY($2::loan_stage[]))
+            AND h.created_at >= date_trunc('year', now())`,
+        [row.id, stages],
+      );
+      expect(row.applications, `${row.fullName} applications`).toBe(truth[0].n);
+    }
+  });
+
+  it("attributes each member's leads-captured denominator truthfully", async () => {
+    const rows = await leaderboard(db, "quarter");
+
+    for (const row of rows) {
+      const { rows: truth } = await pool.query(
+        `SELECT count(*)::int AS n FROM lead
+          WHERE assigned_user_id = $1 AND captured_at >= now() - interval '90 days'`,
+        [row.id],
+      );
+      expect(row.leadsCaptured, `${row.fullName} leads`).toBe(truth[0].n);
+    }
+  });
+
+  it("widening the window never shrinks a period-bound metric", async () => {
+    // week ⊆ month ⊆ quarter by construction (ytd depends on the calendar).
+    const [week, month, quarter] = await Promise.all([
+      leaderboard(db, "week"),
+      leaderboard(db, "month"),
+      leaderboard(db, "quarter"),
+    ]);
+
+    const total = (rows: Awaited<ReturnType<typeof leaderboard>>) =>
+      rows.reduce(
+        (s, r) => s + r.applications + r.preapprovals + r.closings + r.leadsCaptured + r.referrals,
+        0,
+      );
+
+    expect(total(week)).toBeLessThanOrEqual(total(month));
+    expect(total(month)).toBeLessThanOrEqual(total(quarter));
+  });
+
+  it("has some production in every period so the demo board isn't empty", async () => {
+    for (const period of LEADERBOARD_PERIODS) {
+      const rows = await leaderboard(db, period.key);
+      const activity = rows.reduce(
+        (s, r) => s + r.applications + r.closings + r.leadsCaptured + r.activeLoans,
+        0,
+      );
+      expect(activity, `${period.label} board activity`).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe("team membership reads", () => {
+  it("lists teams with live member counts", async () => {
+    const teams = await listTeams(db);
+    const seedTeam = teams.find((t) => t.id === TEAM_ID);
+    expect(seedTeam).toBeDefined();
+
+    const { rows: truth } = await pool.query(
+      `SELECT count(*)::int AS n FROM "user"
+        WHERE team_id = $1 AND status = 'active' AND deleted_at IS NULL`,
+      [TEAM_ID],
+    );
+    expect(seedTeam?.memberCount).toBe(truth[0].n);
+  });
+
+  it("finds loan officers tenant-wide by partial name or email", async () => {
+    const [anyLo] = await leaderboard(db, "week");
+    expect(anyLo).toBeDefined();
+
+    const byName = await searchLoanOfficers(db, anyLo.fullName.slice(0, 4).toLowerCase());
+    expect(byName.map((m) => m.id)).toContain(anyLo.id);
+
+    const byEmail = await searchLoanOfficers(db, anyLo.email.split("@")[0]);
+    expect(byEmail.map((m) => m.id)).toContain(anyLo.id);
+
+    // Only loan officers come back — a leader is choosing producers, not staff.
+    for (const match of byName) {
+      const { rows } = await pool.query(`SELECT role FROM "user" WHERE id = $1`, [match.id]);
+      expect(rows[0].role).toBe("lo");
+    }
   });
 });
 
