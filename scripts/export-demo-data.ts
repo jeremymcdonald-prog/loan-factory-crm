@@ -45,9 +45,20 @@ const PERIODS: Record<string, string> = {
   ytd: "date_trunc('year', now())",
 };
 
-/** application → funded inclusive, per src/lib/stages.ts order. */
+/**
+ * "Application in flight" — from `prequalification` (a lead becomes an
+ * applicant) through `clear_to_close`, stopping before `funded`. Mirrors
+ * src/lib/queries/team.ts APPLICATION_STAGES = STAGES.slice(prequalification, funded).
+ */
 const APPLICATION_STAGES =
-  "('application','disclosures','processing','submitted_to_underwriting','conditional_approval','clear_to_close','closing_scheduled','funded')";
+  "('prequalification','preapproval','contract_received','ready_to_refinance'," +
+  "'submitted_to_processing','submitted_to_underwriting','conditional_approval'," +
+  "'appraisal_ordered','appraisal_received','submitted_for_clear_to_close','clear_to_close')";
+
+/** The seven LOANS-group stages — a file here needs a touch every 3 days (stages.ts stallDays). */
+const LOAN_STAGES =
+  "('submitted_to_processing','submitted_to_underwriting','conditional_approval'," +
+  "'appraisal_ordered','appraisal_received','submitted_for_clear_to_close','clear_to_close')";
 
 async function main() {
   const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 1 });
@@ -80,7 +91,20 @@ async function main() {
   const pipeline = await q(`
     SELECT l.id AS loan_id, p.id AS person_id, p.first_name, p.last_name,
            p.preferred_language::text AS language,
-           l.stage::text, l.status AS loan_status, l.purpose, l.program,
+           l.stage::text,
+           CASE l.stage::text
+             WHEN 'new_lead' THEN 'LEADS' WHEN 'contact_attempt' THEN 'LEADS'
+             WHEN 'consultation_scheduled' THEN 'LEADS' WHEN 'consultation_completed' THEN 'LEADS'
+             WHEN 'working_on_credit' THEN 'LEADS' WHEN 'thirty_to_ninety_out' THEN 'LEADS'
+             WHEN 'ninety_plus_out' THEN 'LEADS'
+             WHEN 'prequalification' THEN 'APPLICATIONS' WHEN 'preapproval' THEN 'APPLICATIONS'
+             WHEN 'contract_received' THEN 'APPLICATIONS' WHEN 'ready_to_refinance' THEN 'APPLICATIONS'
+             WHEN 'funded' THEN 'PAST' WHEN 'first_year_followup' THEN 'PAST'
+             WHEN 'annual_review' THEN 'PAST' WHEN 'refinance_opportunity' THEN 'PAST'
+             WHEN 'referral_and_retention' THEN 'PAST'
+             ELSE 'LOANS'
+           END AS view,
+           l.status AS loan_status, l.purpose, l.program,
            l.amount::float, l.preapproval_amount::float,
            l.rate_lock_expires_at::text, l.closing_date::text, l.funded_at::text,
            l.docs_needed, l.docs_needed_summary,
@@ -113,6 +137,10 @@ async function main() {
            p.type::text, p.tags, p.do_not_contact,
            p.emails->0->>'address' AS email,
            p.phones->0->>'number' AS phone, p.mailing_address->>'city' AS city,
+           p.bio,
+           p.social_links AS "socialLinks",
+           p.bio_researched_at::text AS "bioResearchedAt",
+           p.bio_sources AS "bioSources",
            u.full_name AS owner,
            l.stage::text, l.status AS loan_status, l.amount::float, l.program,
            l.rate_lock_expires_at::text, l.closing_date::text,
@@ -131,6 +159,12 @@ async function main() {
   const partners = await q(`
     SELECT pt.id, pt.first_name, pt.last_name, pt.company, pt.kind::text, pt.tier::text,
            pt.preferred_language::text AS language, pt.do_not_contact,
+           pt.emails->0->>'address' AS email,
+           pt.phones->0->>'number' AS phone,
+           pt.bio,
+           pt.social_links AS "socialLinks",
+           pt.bio_researched_at::text AS "bioResearchedAt",
+           pt.bio_sources AS "bioSources",
            u.full_name AS owner,
            CASE WHEN pt.last_touch_at IS NULL THEN NULL
                 ELSE GREATEST(0, EXTRACT(EPOCH FROM (now()-pt.last_touch_at))/86400)::int END AS last_touch_days,
@@ -157,10 +191,12 @@ async function main() {
            COALESCE(p.preferred_language::text, pt.preferred_language::text, 'en') AS language,
            u.full_name AS owner,
            (SELECT json_agg(json_build_object(
-              'channel', m.channel, 'direction', m.direction, 'body', m.body,
+              'channel', m.channel, 'direction', m.direction, 'subject', m.subject, 'body', m.body,
               'status', m.status, 'preparedByAi', m.prepared_by_ai,
               'translationEn', m.meta->>'translationEn',
               'video', m.meta->'video', 'callOutcome', m.meta->>'outcome',
+              'durationSeconds', m.meta->>'durationSeconds',
+              'attachments', COALESCE(m.meta->'attachments', '[]'::jsonb),
               'author', (SELECT au.full_name FROM "user" au WHERE au.id=m.author_user_id),
               'hoursAgo', GREATEST(0, EXTRACT(EPOCH FROM (now()-m.occurred_at))/3600)::int
             ) ORDER BY m.occurred_at DESC)
@@ -280,7 +316,7 @@ async function main() {
       SELECT
         (SELECT count(*)::int FROM lead ld WHERE ld.captured_at >= ${R.from} AND ld.captured_at < ${R.to} AND ${S.lead}) AS leads,
         (SELECT count(DISTINCT h.loan_id)::int FROM loan_stage_history h JOIN loan l ON l.id=h.loan_id
-          WHERE l.deleted_at IS NULL AND h.to_stage='application'
+          WHERE l.deleted_at IS NULL AND h.to_stage='prequalification'
             AND h.created_at >= ${R.from} AND h.created_at < ${R.to} AND ${S.loan}) AS applications,
         (SELECT count(DISTINCT h.loan_id)::int FROM loan_stage_history h JOIN loan l ON l.id=h.loan_id
           WHERE l.deleted_at IS NULL AND h.to_stage='preapproval'
@@ -361,11 +397,9 @@ async function main() {
     const [health] = await q(`
       SELECT
         (SELECT count(*) FILTER (WHERE ld.first_response_at IS NULL)::int FROM lead ld WHERE ${S.lead}) AS uncontacted_leads,
-        (SELECT (count(*) FILTER (WHERE l.stage IN ('under_contract','application','disclosures','processing',
-            'submitted_to_underwriting','conditional_approval','clear_to_close','closing_scheduled','funded')
+        (SELECT (count(*) FILTER (WHERE l.stage::text IN ${LOAN_STAGES}
             AND l.last_activity_at < now() - interval '3 days')
-          + count(*) FILTER (WHERE l.stage NOT IN ('under_contract','application','disclosures','processing',
-            'submitted_to_underwriting','conditional_approval','clear_to_close','closing_scheduled','funded')
+          + count(*) FILTER (WHERE l.stage::text NOT IN ${LOAN_STAGES}
             AND l.last_activity_at < now() - interval '7 days'))::int
           FROM loan l WHERE l.deleted_at IS NULL AND l.status='active' AND ${S.loan}) AS stale_files,
         (SELECT count(*)::int FROM campaign c WHERE c.deleted_at IS NULL
