@@ -45,7 +45,20 @@ export function PipelineTable({ records }: { records: PipelineRecord[] }) {
 
   return (
     <div className="p-4 sm:p-6">
-      <div className="overflow-x-auto rounded-card border border-subtle bg-surface">
+      {/* Narrow widths can't fit every column, so this wraps in its own
+          horizontal scroller — the page itself never scrolls sideways.
+          The scrollbar is kept visible (not an OS overlay) so the extra
+          columns read as reachable, not just cut off. */}
+      <div
+        className={cn(
+          "overflow-x-auto rounded-card border border-subtle bg-surface",
+          "[scrollbar-width:auto] [scrollbar-color:var(--color-strong)_transparent]",
+          "[&::-webkit-scrollbar]:h-3",
+          "[&::-webkit-scrollbar-track]:bg-transparent",
+          "[&::-webkit-scrollbar-thumb]:rounded-full",
+          "[&::-webkit-scrollbar-thumb]:bg-[var(--color-strong)]",
+        )}
+      >
         <table className="w-full min-w-[1080px] text-body">
           <caption className="sr-only">Every record in this view, most urgent first</caption>
           <thead>

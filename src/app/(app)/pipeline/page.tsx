@@ -14,6 +14,7 @@ import { PageHeader } from "@/components/shell/page-header";
 import { LoanCard } from "@/components/crm/loan-card";
 import { ContactCard } from "./contact-card";
 import { PipelineTable } from "./pipeline-table";
+import { PipelineBoard } from "./pipeline-board";
 import { PipelineFilters, type FilterOption } from "./pipeline-filters";
 import {
   PIPELINE_VIEWS,
@@ -269,8 +270,13 @@ export default async function PipelinePage({
   };
 
   return (
-    <>
+    // A column so the board (and only the board) can claim exactly the
+    // height left over below the header/filters/tiles and scroll within
+    // it — see pipeline-board.tsx for why that's what makes the sticky
+    // column headers work.
+    <div className="flex h-full min-h-0 flex-col">
       <PageHeader
+        className="shrink-0"
         title="Pipeline"
         subtitle="Your book in four working views — leads, applications, active loans, and past clients."
         action={
@@ -303,7 +309,7 @@ export default async function PipelinePage({
 
       {/* View tabs + filters share one row, like People. Switching tabs
           resets filters — each view derives its own options. */}
-      <div className="flex flex-wrap items-center gap-2 border-b border-subtle px-4 py-3 sm:px-6">
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-subtle px-4 py-3 sm:px-6">
         <nav className="flex flex-wrap gap-1" aria-label="Pipeline view">
           {PIPELINE_VIEWS.map((v) => {
             const active = tab === v;
@@ -348,7 +354,7 @@ export default async function PipelinePage({
       </div>
 
       {/* The four numbers that matter for this view, from the same rows below. */}
-      <div className="grid grid-cols-2 gap-px border-b border-subtle bg-subtle sm:grid-cols-4">
+      <div className="grid shrink-0 grid-cols-2 gap-px border-b border-subtle bg-subtle sm:grid-cols-4">
         {tiles.map((stat) => (
           <div key={stat.label} className="bg-canvas px-4 py-3">
             <p className="text-label font-semibold uppercase tracking-wide text-muted">
@@ -361,7 +367,7 @@ export default async function PipelinePage({
       </div>
 
       {viewRecords.length === 0 ? (
-        <div className="p-6">
+        <div className="shrink-0 p-6">
           <div className="rounded-card border border-subtle bg-surface px-6 py-14 text-center">
             <Columns3 className="mx-auto size-6 text-disabled" aria-hidden />
             <p className="mt-3 text-h3 font-semibold text-primary">
@@ -381,7 +387,7 @@ export default async function PipelinePage({
           </div>
         </div>
       ) : filtered.length === 0 ? (
-        <div className="p-6">
+        <div className="shrink-0 p-6">
           <div className="rounded-card border border-subtle bg-surface px-6 py-14 text-center">
             <Filter className="mx-auto size-6 text-disabled" aria-hidden />
             <p className="mt-3 text-h3 font-semibold text-primary">
@@ -400,15 +406,19 @@ export default async function PipelinePage({
           </div>
         </div>
       ) : mode === "table" ? (
-        <PipelineTable records={filtered} />
+        <div className="shrink-0">
+          <PipelineTable records={filtered} />
+        </div>
       ) : (
         /* Board: one column per stage in this view — the real stages, not
            macro phases. Lead-type people with no file yet get a column of
-           their own at the front of Leads. */
-        <div className="flex gap-3 overflow-x-auto p-4 sm:p-6">
+           their own at the front of Leads. Columns stay a comfortable fixed
+           width (never crushed) and the board scrolls horizontally when
+           they don't all fit. */
+        <PipelineBoard className="min-h-0 flex-1">
           {tab === "leads" && contacts.length > 0 ? (
-            <section className="flex w-[280px] shrink-0 flex-col">
-              <header className="mb-2 flex items-baseline justify-between gap-2 px-0.5">
+            <section className="flex w-[280px] shrink-0 flex-col pt-4 sm:pt-6">
+              <header className="sticky top-0 z-10 flex items-baseline justify-between gap-2 bg-canvas px-0.5 pb-2">
                 <h2 className="text-label font-semibold uppercase tracking-wide text-primary">
                   No file yet
                   <span className="ml-1.5 font-normal text-muted tnum">
@@ -437,7 +447,7 @@ export default async function PipelinePage({
             );
             return (
               <section key={stage} className="flex w-[280px] shrink-0 flex-col">
-                <header className="mb-2 flex items-baseline justify-between gap-2 px-0.5">
+                <header className="sticky top-0 z-10 flex items-baseline justify-between gap-2 bg-canvas px-0.5 pb-2">
                   <h2 className="text-label font-semibold uppercase tracking-wide text-primary">
                     {stageLabel(stage)}
                     <span className="ml-1.5 font-normal text-muted tnum">
@@ -462,8 +472,8 @@ export default async function PipelinePage({
               </section>
             );
           })}
-        </div>
+        </PipelineBoard>
       )}
-    </>
+    </div>
   );
 }
