@@ -28,6 +28,7 @@ import { Card, SectionLabel } from "@/components/ui/card";
 import { AddNoteForm } from "./add-note-form";
 import { LogTouchButton } from "./log-touch-button";
 import { RecordActions } from "./record-actions";
+import { BioPanel } from "./bio-panel";
 import { cn } from "@/lib/cn";
 
 export const dynamic = "force-dynamic";
@@ -315,6 +316,14 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
               </div>
             </Card>
           )}
+
+          <BioPanel
+            personId={person.id}
+            bio={person.bio}
+            socialLinks={person.socialLinks}
+            bioResearchedAt={person.bioResearchedAt ? person.bioResearchedAt.toISOString() : null}
+            bioSources={person.bioSources}
+          />
 
           {/* Activity — the relationship's memory: notes, messages, events,
               tasks, and stage changes, one timeline, newest first. */}

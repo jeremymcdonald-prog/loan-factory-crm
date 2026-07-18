@@ -14,10 +14,14 @@ import {
   conversation,
   message,
   campaign,
+  type BioSource,
 } from "@/db/schema";
-import { requireUser, queryAs, requireRole, type CurrentUser } from "@/lib/auth";
+import { requireUser, queryAs, requireRole, seesWholeBook, type CurrentUser } from "@/lib/auth";
 import { ROLES } from "@/lib/roles";
 import { recordAudit } from "@/lib/audit";
+import type { Db } from "@/db";
+import { draftBio, type BioDraft } from "@/lib/bio/mock";
+import { validateSocialLinks } from "@/lib/bio/validate";
 
 /**
  * Every staff role may act on people they can see (RLS + book scope do the
@@ -26,6 +30,24 @@ import { recordAudit } from "@/lib/audit";
  */
 function requireStaff(user: CurrentUser) {
   requireRole(user, [...ROLES]);
+}
+
+/**
+ * Load a person and re-check book scope server-side (owner or a role that
+ * sees the whole book) — the client's word on who they can act on is never
+ * trusted, even though RLS already keeps the row inside the tenant.
+ */
+async function getScopedPerson(db: Db, user: CurrentUser, personId: string) {
+  const [target] = await db
+    .select()
+    .from(person)
+    .where(and(eq(person.id, personId), isNull(person.deletedAt)))
+    .limit(1);
+  if (!target) throw new Error("not-visible");
+  if (!seesWholeBook(user.role) && target.ownerUserId !== user.userId) {
+    throw new Error("not-visible");
+  }
+  return target;
 }
 
 export type NoteState = { error?: string };
@@ -523,5 +545,270 @@ export async function addTask(_prev: NoteState, formData: FormData): Promise<Not
 
   revalidatePath(`/people/${personId}`);
   revalidatePath("/today");
+  return {};
+}
+
+// --- Bio & Online Presence ----------------------------------------------------
+//
+// Honesty rule (Jeremy, 2026-07-16): no web-search provider is connected here.
+// "Draft bio with AI" runs a local, pure mock generator (src/lib/bio/mock.ts)
+// and returns a preview — it never touches the network and never writes to
+// the database on its own. Only a human clicking Accept persists anything,
+// and only what's in the (possibly hand-edited) preview at that moment.
+
+const SaveBioSchema = z.object({
+  personId: z.string().uuid(),
+  bio: z.string().optional(),
+});
+
+/** Manual bio edit — the always-available path, independent of any AI draft. */
+export async function saveBio(_prev: NoteState, formData: FormData): Promise<NoteState> {
+  const user = await requireUser();
+
+  const parsed = SaveBioSchema.safeParse({
+    personId: formData.get("personId"),
+    bio: formData.get("bio") ?? undefined,
+  });
+  if (!parsed.success) {
+    return { error: "Check the bio and try again." };
+  }
+
+  const { personId } = parsed.data;
+  // An empty save clears the bio — "No bio yet" is an honest state, not a
+  // placeholder to fight around.
+  const bio = parsed.data.bio?.trim() || null;
+
+  try {
+    await queryAs(user, async (db) => {
+      const target = await getScopedPerson(db, user, personId);
+
+      await db
+        .update(person)
+        .set({ bio, updatedAt: new Date() })
+        .where(eq(person.id, personId));
+
+      await recordAudit(db, user, {
+        action: "person.bio_updated",
+        entity: "person",
+        entityId: personId,
+        changes: { bio: { from: target.bio, to: bio } },
+      });
+    });
+  } catch {
+    return { error: "We couldn't save that bio. Try again." };
+  }
+
+  revalidatePath(`/people/${personId}`);
+  return {};
+}
+
+export type DraftBioState = {
+  draft?: BioDraft;
+  error?: string;
+  /** The seed used for the last draft — "Regenerate" bumps this by one. */
+  seed: number;
+};
+
+const DraftBioSchema = z.object({ personId: z.string().uuid() });
+
+/**
+ * Draft a bio with the mock generator. This is a preview only: it records an
+ * audit entry (so there's a trail that a demo draft was generated) but writes
+ * nothing to `person` — Accept is the only path that persists anything.
+ */
+export async function draftBioWithAi(
+  prev: DraftBioState,
+  formData: FormData,
+): Promise<DraftBioState> {
+  const user = await requireUser();
+
+  const parsed = DraftBioSchema.safeParse({ personId: formData.get("personId") });
+  if (!parsed.success) {
+    return { ...prev, error: "We couldn't draft a bio for this record." };
+  }
+
+  const { personId } = parsed.data;
+  const nextSeed = prev.seed + 1;
+
+  try {
+    const info = await queryAs(user, async (db) => {
+      const target = await getScopedPerson(db, user, personId);
+
+      await recordAudit(db, user, {
+        action: "person.bio_drafted",
+        entity: "person",
+        entityId: personId,
+        changes: { seed: { from: prev.seed, to: nextSeed } },
+      });
+
+      return target;
+    });
+
+    const draft = draftBio({
+      firstName: info.firstName,
+      lastName: info.lastName,
+      // `person` has no company/employer field today — partners (which do)
+      // reuse this same generator with their own company value.
+      company: null,
+      city: info.mailingAddress?.city ?? null,
+      role: info.type,
+      language: info.preferredLanguage,
+      seed: nextSeed,
+    });
+
+    return { draft, seed: nextSeed };
+  } catch {
+    return { ...prev, error: "We couldn't draft a bio right now. Try again." };
+  }
+}
+
+export type AcceptBioState = { error?: string; accepted?: boolean };
+
+const AcceptBioSchema = z.object({
+  personId: z.string().uuid(),
+  bio: z.string().trim().min(1, "There's no draft text to save."),
+  sourcesJson: z.string(),
+});
+
+/**
+ * Accept a draft — the only step that writes to `person`. Persists exactly
+ * the text on screen (edited or not), stamps `bioResearchedAt`, and saves the
+ * sources the draft cited, so the panel can keep showing where the last
+ * accepted draft said it looked. It does not touch `socialLinks` — suggested
+ * links are offered separately and only saved if the team explicitly adds
+ * them via the link editor.
+ */
+export async function acceptBioDraft(
+  _prev: AcceptBioState,
+  formData: FormData,
+): Promise<AcceptBioState> {
+  const user = await requireUser();
+
+  const parsed = AcceptBioSchema.safeParse({
+    personId: formData.get("personId"),
+    bio: formData.get("bio"),
+    sourcesJson: formData.get("sourcesJson"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "We couldn't save that draft." };
+  }
+
+  const { personId, bio } = parsed.data;
+
+  let sources: BioSource[] = [];
+  try {
+    const rawSources: unknown = JSON.parse(parsed.data.sourcesJson);
+    if (Array.isArray(rawSources)) {
+      sources = rawSources.filter(
+        (s): s is BioSource => Boolean(s) && typeof s === "object" && typeof (s as BioSource).label === "string",
+      );
+    }
+  } catch {
+    sources = [];
+  }
+
+  const now = new Date();
+
+  try {
+    await queryAs(user, async (db) => {
+      const target = await getScopedPerson(db, user, personId);
+
+      await db
+        .update(person)
+        .set({ bio, bioResearchedAt: now, bioSources: sources, updatedAt: now })
+        .where(eq(person.id, personId));
+
+      await recordAudit(db, user, {
+        action: "person.bio_updated",
+        entity: "person",
+        entityId: personId,
+        changes: {
+          bio: { from: target.bio, to: bio },
+          bioResearchedAt: { from: target.bioResearchedAt, to: now },
+        },
+      });
+    });
+  } catch {
+    return { error: "We couldn't save that bio. Try again." };
+  }
+
+  revalidatePath(`/people/${personId}`);
+  return { accepted: true };
+}
+
+const SaveSocialLinksSchema = z.object({
+  personId: z.string().uuid(),
+  facebook: z.string().optional(),
+  instagram: z.string().optional(),
+  tiktok: z.string().optional(),
+  linkedin: z.string().optional(),
+  youtube: z.string().optional(),
+  website: z.string().optional(),
+  otherJson: z.string().optional(),
+});
+
+/** Manual social-link editor — validated and normalized, never auto-saved. */
+export async function saveSocialLinks(_prev: NoteState, formData: FormData): Promise<NoteState> {
+  const user = await requireUser();
+
+  const parsed = SaveSocialLinksSchema.safeParse({
+    personId: formData.get("personId"),
+    facebook: formData.get("facebook") ?? undefined,
+    instagram: formData.get("instagram") ?? undefined,
+    tiktok: formData.get("tiktok") ?? undefined,
+    linkedin: formData.get("linkedin") ?? undefined,
+    youtube: formData.get("youtube") ?? undefined,
+    website: formData.get("website") ?? undefined,
+    otherJson: formData.get("otherJson") ?? undefined,
+  });
+  if (!parsed.success) {
+    return { error: "Check the links and try again." };
+  }
+
+  let other: unknown = [];
+  if (parsed.data.otherJson) {
+    try {
+      other = JSON.parse(parsed.data.otherJson);
+    } catch {
+      return { error: "Something went wrong reading the extra links. Try again." };
+    }
+  }
+
+  const { links, errors } = validateSocialLinks({
+    facebook: parsed.data.facebook,
+    instagram: parsed.data.instagram,
+    tiktok: parsed.data.tiktok,
+    linkedin: parsed.data.linkedin,
+    youtube: parsed.data.youtube,
+    website: parsed.data.website,
+    other,
+  });
+  if (errors.length) {
+    return { error: errors[0] };
+  }
+
+  const { personId } = parsed.data;
+
+  try {
+    await queryAs(user, async (db) => {
+      const target = await getScopedPerson(db, user, personId);
+
+      await db
+        .update(person)
+        .set({ socialLinks: links, updatedAt: new Date() })
+        .where(eq(person.id, personId));
+
+      await recordAudit(db, user, {
+        action: "person.links_updated",
+        entity: "person",
+        entityId: personId,
+        changes: { socialLinks: { from: target.socialLinks, to: links } },
+      });
+    });
+  } catch {
+    return { error: "We couldn't save those links. Try again." };
+  }
+
+  revalidatePath(`/people/${personId}`);
   return {};
 }
