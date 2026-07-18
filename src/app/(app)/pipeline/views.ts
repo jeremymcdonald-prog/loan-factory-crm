@@ -2,13 +2,11 @@
  * Pipeline views — the four tabs a loan officer actually works:
  * Leads, Applications, Loans, Past clients.
  *
- * Each of the 20 canonical stages (src/lib/stages.ts) maps to exactly one
- * view; the board inside a view groups by the real stage, never a macro
- * phase. The mapping mirrors the LO's mental model, not the enum order:
- * "under contract" is an active deal heading to closing, so it lives in
- * Loans even though the enum places it before Application.
+ * The grouping is the canonical one defined in src/lib/stages.ts (a person
+ * becomes an applicant at prequalification); this module just re-labels the
+ * four groups for the Pipeline URL and board.
  */
-import { STAGES, type Stage } from "@/lib/stages";
+import { STAGES, phaseOf, type Stage, type MacroPhase } from "@/lib/stages";
 import type { PipelineCard, LeadOnlyContact } from "@/lib/queries/pipeline";
 
 export const PIPELINE_VIEWS = ["leads", "applications", "loans", "past"] as const;
@@ -21,39 +19,23 @@ export const VIEW_LABELS: Record<PipelineView, string> = {
   past: "Past clients",
 };
 
-/** Stage → view. Every stage appears exactly once. */
-const VIEW_OF_STAGE: Record<Stage, PipelineView> = {
-  new_lead: "leads",
-  contact_attempt: "leads",
-  consultation_scheduled: "leads",
-  consultation_completed: "leads",
-  prequalification: "leads",
-  preapproval: "leads",
-  searching_for_home: "leads",
-  under_contract: "loans",
-  application: "applications",
-  disclosures: "applications",
-  processing: "applications",
-  submitted_to_underwriting: "applications",
-  conditional_approval: "loans",
-  clear_to_close: "loans",
-  closing_scheduled: "loans",
-  funded: "past",
-  post_close: "past",
-  annual_review: "past",
-  refinance_opportunity: "past",
-  referral_retention: "past",
+/** The pipeline group each stage belongs to, mapped to this module's view key. */
+const VIEW_OF_PHASE: Record<MacroPhase, PipelineView> = {
+  LEADS: "leads",
+  APPLICATIONS: "applications",
+  LOANS: "loans",
+  PAST: "past",
 };
 
 /** A funded file is a past client whatever its stage says. */
 export function viewOf(stage: Stage, loanStatus: string): PipelineView {
   if (loanStatus === "funded") return "past";
-  return VIEW_OF_STAGE[stage];
+  return VIEW_OF_PHASE[phaseOf(stage)];
 }
 
 /** The board columns for a view, in canonical stage order. */
 export function stagesInView(view: PipelineView): Stage[] {
-  return STAGES.filter((s) => VIEW_OF_STAGE[s] === view);
+  return STAGES.filter((s) => VIEW_OF_PHASE[phaseOf(s)] === view);
 }
 
 export function isPipelineView(value: string): value is PipelineView {

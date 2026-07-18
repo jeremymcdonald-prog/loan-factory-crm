@@ -20,7 +20,7 @@ import {
   initialsOf,
   phoneNumber,
 } from "@/lib/format";
-import { stageLabel, phaseOf, stageNumber, type Stage } from "@/lib/stages";
+import { stageLabel, phaseOf, stageNumber, STAGES, PHASE_LABELS, type Stage } from "@/lib/stages";
 import { languageName, LanguageBadge } from "@/components/crm/language-badge";
 import { StageChip } from "@/components/crm/stage-chip";
 import { Badge, UrgencyDot } from "@/components/ui/badge";
@@ -236,8 +236,8 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
                   </h2>
                   <p className="mt-0.5 text-small text-muted">
                     {primary.loanNumber ? `${primary.loanNumber} · ` : ""}
-                    Stage {stageNumber(primary.stage as Stage)} of 20 ·{" "}
-                    {phaseOf(primary.stage as Stage)}
+                    Stage {stageNumber(primary.stage as Stage)} of {STAGES.length} ·{" "}
+                    {PHASE_LABELS[phaseOf(primary.stage as Stage)]}
                   </p>
                 </div>
                 <Link

@@ -14,7 +14,7 @@ import {
 } from "@/db/schema";
 import { personUrgency } from "@/lib/person-urgency";
 import { money, shortDate, relativeTime, initialsOf } from "@/lib/format";
-import { stageLabel, stageNumber, phaseOf, type Stage } from "@/lib/stages";
+import { stageLabel, stageNumber, phaseOf, STAGES, PHASE_LABELS, type Stage } from "@/lib/stages";
 import { StageRail } from "@/components/crm/stage-rail";
 import { LanguageBadge } from "@/components/crm/language-badge";
 import { Badge, UrgencyDot } from "@/components/ui/badge";
@@ -193,12 +193,12 @@ export default async function OpportunityPage({
           ) : null}
         </div>
 
-        {/* Where this relationship stands, across the 20 stages */}
+        {/* Where this relationship stands, across the pipeline stages */}
         <div className="mt-5">
           <div className="mb-2 flex items-baseline justify-between gap-3">
             <p className="text-small font-semibold text-primary">
-              Stage {stageNumber(stage)} of 20 · {stageLabel(stage)}
-              <span className="ml-1.5 font-normal text-muted">{phaseOf(stage)}</span>
+              Stage {stageNumber(stage)} of {STAGES.length} · {stageLabel(stage)}
+              <span className="ml-1.5 font-normal text-muted">{PHASE_LABELS[phaseOf(stage)]}</span>
             </p>
             {urgency?.label && urgency.level !== "healthy" ? (
               <span className="inline-flex items-center gap-1.5">

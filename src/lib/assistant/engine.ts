@@ -19,7 +19,14 @@ import { seesWholeBook } from "@/lib/roles";
 import { buildQueue } from "@/lib/queries/today";
 import { pipelineTotals, listPipeline } from "@/lib/queries/pipeline";
 import { moneyCompact, shortDate, countdown } from "@/lib/format";
-import { phaseOf, stageLabel, stallDays, type Stage } from "@/lib/stages";
+import {
+  phaseOf,
+  stageLabel,
+  stallDays,
+  MACRO_PHASES,
+  PHASE_LABELS,
+  type Stage,
+} from "@/lib/stages";
 import { PREVIEW_NOTE, type AssistantIntent } from "./router";
 
 export type AssistantReply = {
@@ -312,9 +319,9 @@ async function summarizePipeline(db: Db, user: CurrentUser): Promise<string> {
     byPhase.set(phase, (byPhase.get(phase) ?? 0) + 1);
   }
 
-  const phaseLine = ["ENGAGE", "QUALIFY", "TRANSACT", "RETAIN", "GROW"]
-    .map((p) => `${p.charAt(0) + p.slice(1).toLowerCase()} ${byPhase.get(p) ?? 0}`)
-    .join(" · ");
+  const phaseLine = MACRO_PHASES.map(
+    (p) => `${PHASE_LABELS[p]} ${byPhase.get(p) ?? 0}`,
+  ).join(" · ");
 
   return [
     `Your pipeline right now:`,

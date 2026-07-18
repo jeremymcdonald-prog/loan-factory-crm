@@ -5,7 +5,7 @@ import { canManageUsers } from "@/lib/roles";
 import { tenant as tenantTable, team as teamTable, user as userTable } from "@/db/schema";
 import { PageHeader } from "@/components/shell/page-header";
 import { Card, SectionLabel } from "@/components/ui/card";
-import { STAGES, STAGE_LABELS, MACRO_PHASES, stagesIn, stageNumber } from "@/lib/stages";
+import { STAGES, STAGE_LABELS, MACRO_PHASES, PHASE_LABELS, stagesIn, stageNumber } from "@/lib/stages";
 import { OrganizationForm } from "./organization-form";
 
 export const metadata: Metadata = { title: "Organization" };
@@ -150,15 +150,15 @@ export default async function OrganizationPage() {
           <div className="border-b border-subtle px-4 py-3">
             <h2 className="text-h3 font-semibold text-primary">Your stages</h2>
             <p className="mt-0.5 text-small text-muted">
-              The 20 stages every opportunity moves through, grouped into the five phases you
-              see on the pipeline board. These are fixed in this version so that reporting
-              means the same thing for everyone.
+              The {STAGES.length} stages every opportunity moves through, grouped into the four
+              lists you see on the pipeline board. These are fixed in this version so that
+              reporting means the same thing for everyone.
             </p>
           </div>
-          <div className="grid gap-4 p-4 sm:grid-cols-5">
+          <div className="grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-4">
             {MACRO_PHASES.map((phase) => (
               <div key={phase}>
-                <SectionLabel>{phase}</SectionLabel>
+                <SectionLabel>{PHASE_LABELS[phase]}</SectionLabel>
                 <ol className="mt-1.5 space-y-1">
                   {stagesIn(phase).map((s) => (
                     <li key={s} className="flex gap-1.5 text-small text-secondary">

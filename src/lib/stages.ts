@@ -1,64 +1,81 @@
 /**
- * The 20-stage opportunity lifecycle — Decisions D-06, Mortgage_Workflow_Map.md.
+ * The opportunity lifecycle — Leads → Applications → Loans → Past clients.
  *
  * These stages are CRM opportunity/relationship visibility only. The team
- * enters stage and milestone facts in v1; a future integration may sync them
+ * enters stage and milestone facts; a future integration may sync them
  * read-only. The CRM never originates, underwrites, prices, discloses,
  * processes, or services anything (D-22).
  *
- * Enum values never localize. Display labels are the CANON English names; the
- * i18n layer supplies VI.
+ * A person becomes an *applicant* when they reach `prequalification` — that is
+ * the boundary between the Leads group and the Applications group.
+ *
+ * Enum values never localize. Display labels are the CANON English names.
  */
 
 export const STAGES = [
+  // LEADS
   "new_lead",
   "contact_attempt",
   "consultation_scheduled",
   "consultation_completed",
+  "working_on_credit",
+  "thirty_to_ninety_out",
+  "ninety_plus_out",
+  // APPLICATIONS
   "prequalification",
   "preapproval",
-  "searching_for_home",
-  "under_contract",
-  "application",
-  "disclosures",
-  "processing",
+  "contract_received",
+  "ready_to_refinance",
+  // LOANS
+  "submitted_to_processing",
   "submitted_to_underwriting",
   "conditional_approval",
+  "appraisal_ordered",
+  "appraisal_received",
+  "submitted_for_clear_to_close",
   "clear_to_close",
-  "closing_scheduled",
+  // PAST CLIENTS
   "funded",
-  "post_close",
+  "first_year_followup",
   "annual_review",
   "refinance_opportunity",
-  "referral_retention",
+  "referral_and_retention",
 ] as const;
 
 export type Stage = (typeof STAGES)[number];
 
-export type MacroPhase = "ENGAGE" | "QUALIFY" | "TRANSACT" | "RETAIN" | "GROW";
+/**
+ * The four groups a loan officer actually works. This is the canonical
+ * grouping — the Pipeline views, the stall thresholds, and the stage rail all
+ * derive from it. (`MacroPhase` is kept as the type name so existing callers
+ * compile; the values are the four groups.)
+ */
+export type MacroPhase = "LEADS" | "APPLICATIONS" | "LOANS" | "PAST";
 
-/** Macro-phase is derived — a lookup, not a column (Data_Model §3.6). */
 const PHASE_OF: Record<Stage, MacroPhase> = {
-  new_lead: "ENGAGE",
-  contact_attempt: "ENGAGE",
-  consultation_scheduled: "ENGAGE",
-  consultation_completed: "ENGAGE",
-  prequalification: "QUALIFY",
-  preapproval: "QUALIFY",
-  searching_for_home: "QUALIFY",
-  under_contract: "TRANSACT",
-  application: "TRANSACT",
-  disclosures: "TRANSACT",
-  processing: "TRANSACT",
-  submitted_to_underwriting: "TRANSACT",
-  conditional_approval: "TRANSACT",
-  clear_to_close: "TRANSACT",
-  closing_scheduled: "TRANSACT",
-  funded: "TRANSACT",
-  post_close: "RETAIN",
-  annual_review: "RETAIN",
-  refinance_opportunity: "GROW",
-  referral_retention: "GROW",
+  new_lead: "LEADS",
+  contact_attempt: "LEADS",
+  consultation_scheduled: "LEADS",
+  consultation_completed: "LEADS",
+  working_on_credit: "LEADS",
+  thirty_to_ninety_out: "LEADS",
+  ninety_plus_out: "LEADS",
+  prequalification: "APPLICATIONS",
+  preapproval: "APPLICATIONS",
+  contract_received: "APPLICATIONS",
+  ready_to_refinance: "APPLICATIONS",
+  submitted_to_processing: "LOANS",
+  submitted_to_underwriting: "LOANS",
+  conditional_approval: "LOANS",
+  appraisal_ordered: "LOANS",
+  appraisal_received: "LOANS",
+  submitted_for_clear_to_close: "LOANS",
+  clear_to_close: "LOANS",
+  funded: "PAST",
+  first_year_followup: "PAST",
+  annual_review: "PAST",
+  refinance_opportunity: "PAST",
+  referral_and_retention: "PAST",
 };
 
 export const STAGE_LABELS: Record<Stage, string> = {
@@ -66,39 +83,35 @@ export const STAGE_LABELS: Record<Stage, string> = {
   contact_attempt: "Contact attempt",
   consultation_scheduled: "Consultation scheduled",
   consultation_completed: "Consultation completed",
+  working_on_credit: "Working on credit",
+  thirty_to_ninety_out: "30–90 days out",
+  ninety_plus_out: "90+ days out",
   prequalification: "Prequalification",
   preapproval: "Preapproval",
-  searching_for_home: "Searching for home",
-  under_contract: "Under contract",
-  application: "Application",
-  disclosures: "Disclosures",
-  processing: "Processing",
+  contract_received: "Contract received",
+  ready_to_refinance: "Ready to refinance",
+  submitted_to_processing: "Submitted to processing",
   submitted_to_underwriting: "Submitted to underwriting",
   conditional_approval: "Conditional approval",
-  clear_to_close: "Clear to close",
-  closing_scheduled: "Closing scheduled",
+  appraisal_ordered: "Appraisal ordered",
+  appraisal_received: "Appraisal received",
+  submitted_for_clear_to_close: "Submitted for clear to close",
+  clear_to_close: "Clear to close / Closing scheduled",
   funded: "Funded",
-  post_close: "Post close",
+  first_year_followup: "First-year follow-up",
   annual_review: "Annual review",
   refinance_opportunity: "Refinance opportunity",
-  referral_retention: "Referral & retention",
+  referral_and_retention: "Referral and retention",
 };
 
-export const MACRO_PHASES: MacroPhase[] = [
-  "ENGAGE",
-  "QUALIFY",
-  "TRANSACT",
-  "RETAIN",
-  "GROW",
-];
+export const MACRO_PHASES: MacroPhase[] = ["LEADS", "APPLICATIONS", "LOANS", "PAST"];
 
-/** Phases carry no hue of their own — name and position identify them (§4.4). */
+/** Group labels — the four lists a loan officer works. */
 export const PHASE_LABELS: Record<MacroPhase, string> = {
-  ENGAGE: "Engage",
-  QUALIFY: "Qualify",
-  TRANSACT: "Transact",
-  RETAIN: "Retain",
-  GROW: "Grow",
+  LEADS: "Leads",
+  APPLICATIONS: "Applications",
+  LOANS: "Loans",
+  PAST: "Past clients",
 };
 
 export function phaseOf(stage: Stage): MacroPhase {
@@ -134,7 +147,10 @@ export function nextStage(stage: Stage): Stage | null {
   return STAGES[i + 1];
 }
 
-/** Stalled thresholds by phase — Screen 1 priority class 8. */
+/**
+ * Stalled thresholds — an active loan in the LOANS group needs a touch every
+ * 3 days; earlier relationships get a week before they read as quiet.
+ */
 export function stallDays(phase: MacroPhase): number {
-  return phase === "TRANSACT" ? 3 : 7;
+  return phase === "LOANS" ? 3 : 7;
 }

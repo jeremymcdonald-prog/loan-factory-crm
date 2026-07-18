@@ -506,15 +506,15 @@ function periodStart(period: LeaderboardPeriod): SQL {
 }
 
 /**
- * The stages that mean "this file is an application in flight" — `application`
- * (stage 9) through `funded`, per src/lib/stages.ts. An "application taken" is
- * a stage-history entry that CROSSES INTO this set from outside it, so a file
- * marching from disclosures to processing is not counted as a second
- * application.
+ * The stages that mean "this file is an application in flight" — from
+ * `prequalification` (where a lead becomes an applicant, per src/lib/stages.ts)
+ * through the last active loan stage, stopping before `funded`. An "application
+ * taken" is a stage-history entry that CROSSES INTO this set from outside it,
+ * so a file marching from processing to underwriting is not counted twice.
  */
 export const APPLICATION_STAGES: Stage[] = STAGES.slice(
-  STAGES.indexOf("application"),
-  STAGES.indexOf("funded") + 1,
+  STAGES.indexOf("prequalification"),
+  STAGES.indexOf("funded"),
 );
 
 /**

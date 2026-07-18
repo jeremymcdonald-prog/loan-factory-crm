@@ -91,7 +91,7 @@ export const PEOPLE: SeedPerson[] = [
     city: "Kent",
     state: "WA",
     loan: {
-      stage: "closing_scheduled",
+      stage: "clear_to_close",
       purpose: "purchase",
       program: "Conventional",
       amount: 689_000,
@@ -240,7 +240,7 @@ export const PEOPLE: SeedPerson[] = [
     city: "Burien",
     state: "WA",
     loan: {
-      stage: "searching_for_home",
+      stage: "preapproval",
       purpose: "purchase",
       program: "FHA",
       amount: null,
@@ -295,7 +295,7 @@ export const PEOPLE: SeedPerson[] = [
     city: "Bothell",
     state: "WA",
     loan: {
-      stage: "disclosures",
+      stage: "submitted_to_processing",
       purpose: "purchase",
       program: "Conventional",
       amount: 595_000,
@@ -316,7 +316,7 @@ export const PEOPLE: SeedPerson[] = [
     city: "Seattle",
     state: "WA",
     loan: {
-      stage: "processing",
+      stage: "submitted_to_processing",
       purpose: "refinance",
       program: "VA",
       amount: 448_000,
@@ -383,7 +383,7 @@ export const PEOPLE: SeedPerson[] = [
     city: "Auburn",
     state: "WA",
     loan: {
-      stage: "under_contract",
+      stage: "contract_received",
       purpose: "purchase",
       program: "FHA",
       amount: 465_000,
@@ -403,7 +403,7 @@ export const PEOPLE: SeedPerson[] = [
     city: "Issaquah",
     state: "WA",
     loan: {
-      stage: "application",
+      stage: "submitted_to_processing",
       purpose: "refinance",
       program: "Conventional",
       amount: 380_000,
@@ -446,7 +446,7 @@ export const PEOPLE: SeedPerson[] = [
     city: "Everett",
     state: "WA",
     loan: {
-      stage: "post_close",
+      stage: "first_year_followup",
       status: "funded",
       purpose: "purchase",
       program: "FHA",
@@ -509,7 +509,7 @@ export const PEOPLE: SeedPerson[] = [
     city: "Puyallup",
     state: "WA",
     loan: {
-      stage: "referral_retention",
+      stage: "referral_and_retention",
       status: "funded",
       purpose: "purchase",
       program: "Conventional",
@@ -592,7 +592,7 @@ export const PEOPLE: SeedPerson[] = [
     city: "Kent",
     state: "WA",
     loan: {
-      stage: "post_close",
+      stage: "first_year_followup",
       status: "funded",
       purpose: "purchase",
       program: "Conventional",
@@ -621,7 +621,7 @@ export const PEOPLE: SeedPerson[] = [
     city: "Bellevue",
     state: "WA",
     loan: {
-      stage: "post_close",
+      stage: "first_year_followup",
       status: "funded",
       purpose: "purchase",
       program: "Jumbo",
@@ -708,7 +708,7 @@ export const PEOPLE: SeedPerson[] = [
     city: "Tacoma",
     state: "WA",
     loan: {
-      stage: "post_close",
+      stage: "first_year_followup",
       status: "funded",
       purpose: "purchase",
       program: "Conventional",
@@ -738,7 +738,7 @@ export const PEOPLE: SeedPerson[] = [
     state: "WA",
     loan: {
       // Funded ~11 months ago: the one-year anniversary lands within 45 days.
-      stage: "post_close",
+      stage: "first_year_followup",
       status: "funded",
       purpose: "purchase",
       program: "Conventional",

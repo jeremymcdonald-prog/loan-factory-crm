@@ -251,7 +251,7 @@ async function main() {
     const lastActivity = daysFromNow(-(l.daysSinceActivity ?? 0));
     const phase = phaseOf(l.stage);
     const stalled =
-      (l.daysSinceActivity ?? 0) > (phase === "TRANSACT" ? 3 : 7) && l.status !== "funded";
+      (l.daysSinceActivity ?? 0) > (phase === "LOANS" ? 3 : 7) && l.status !== "funded";
 
     // Full stage trail: when the file entered each stage it has walked, so
     // period-bound metrics (applications taken, preapprovals issued) see real
@@ -284,7 +284,7 @@ async function main() {
         tenantId: TENANT_ID,
         personId: person.id,
         loUserId: U.minh,
-        processorUserId: phase === "TRANSACT" ? U.david : null,
+        processorUserId: phase === "LOANS" ? U.david : null,
         stage: l.stage,
         status: l.status ?? "active",
         purpose: l.purpose,
@@ -304,7 +304,7 @@ async function main() {
           l.preapprovalExpiresInDays !== undefined
             ? isoDate(daysFromNow(l.preapprovalExpiresInDays))
             : null,
-        disclosuresSentAt: l.stage === "disclosures" ? daysFromNow(-2) : null,
+        disclosuresSentAt: l.stage === "submitted_to_processing" ? daysFromNow(-2) : null,
         ctcIssuedAt: l.stage === "clear_to_close" ? daysFromNow(-1) : null,
         docsNeeded: Boolean(l.docsNeeded),
         docsNeededSummary: l.docsNeeded ?? null,
@@ -773,7 +773,7 @@ async function main() {
       const lastActivity = daysFromNow(-l.daysSinceActivity);
       const phase = phaseOf(l.stage);
       const stalled =
-        l.status === "active" && l.daysSinceActivity > (phase === "TRANSACT" ? 3 : 7);
+        l.status === "active" && l.daysSinceActivity > (phase === "LOANS" ? 3 : 7);
 
       // Full stage trail with a per-loan cadence, so entries into
       // `application` and `preapproval` scatter across every leaderboard
@@ -805,7 +805,7 @@ async function main() {
           tenantId: TENANT_ID,
           personId: personRow.id,
           loUserId,
-          processorUserId: phase === "TRANSACT" ? U.david : null,
+          processorUserId: phase === "LOANS" ? U.david : null,
           stage: l.stage,
           status: l.status,
           purpose: l.purpose,
@@ -1326,7 +1326,7 @@ async function main() {
   console.log(`  tenant:        Loan Factory (NMLS 320841)`);
   console.log(`  users:         5 across 5 roles`);
   console.log(`  people:        ${personIds.size}`);
-  console.log(`  opportunities: ${loanIds.size} across the 20 stages`);
+  console.log(`  opportunities: ${loanIds.size} across the pipeline stages`);
   console.log(
     `  tasks:         ${TASKS.length}   appointments: ${APPOINTMENTS.length}   notes: ${NOTES.length}`,
   );

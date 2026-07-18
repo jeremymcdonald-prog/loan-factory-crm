@@ -1,10 +1,18 @@
 /**
- * StageRail — where this relationship stands across the 20 stages.
+ * StageRail — where this relationship stands across the pipeline groups.
  *
  * Progress shows verified milestones, never optimism (Design_System §2.5).
- * Phases carry no hue: position and name identify them.
+ * Groups carry no hue: position and name identify them.
  */
-import { STAGES, MACRO_PHASES, stagesIn, stageLabel, phaseOf, type Stage } from "@/lib/stages";
+import {
+  STAGES,
+  MACRO_PHASES,
+  PHASE_LABELS,
+  stagesIn,
+  stageLabel,
+  phaseOf,
+  type Stage,
+} from "@/lib/stages";
 import { cn } from "@/lib/cn";
 
 export function StageRail({ current }: { current: Stage }) {
@@ -12,7 +20,11 @@ export function StageRail({ current }: { current: Stage }) {
   const currentPhase = phaseOf(current);
 
   return (
-    <div className="flex gap-1" role="img" aria-label={`Stage ${currentIndex + 1} of 20: ${stageLabel(current)}`}>
+    <div
+      className="flex gap-1"
+      role="img"
+      aria-label={`Stage ${currentIndex + 1} of ${STAGES.length}: ${stageLabel(current)}`}
+    >
       {MACRO_PHASES.map((phase) => {
         const stages = stagesIn(phase);
         const isCurrentPhase = phase === currentPhase;
@@ -44,7 +56,7 @@ export function StageRail({ current }: { current: Stage }) {
                 isCurrentPhase ? "text-primary" : "text-muted",
               )}
             >
-              {phase}
+              {PHASE_LABELS[phase]}
             </p>
           </div>
         );

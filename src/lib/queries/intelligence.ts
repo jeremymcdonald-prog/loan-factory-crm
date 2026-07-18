@@ -82,12 +82,12 @@ const dateInRange = (col: AnyColumn, r: DateRange): SQL =>
 // --- 1–5. Production counts --------------------------------------------------
 
 /**
- * The stage-history milestones this report counts. `application` is the file
- * formally in motion; `preapproval` is the letter in the borrower's hand.
- * `prequalification` is deliberately not counted as a preapproval — stages.ts
- * keeps them separate steps, and a prequal is a conversation, not a milestone.
+ * The stage-history milestones this report counts. Reaching `prequalification`
+ * is the moment a lead becomes an applicant (stages.ts); `preapproval` is the
+ * letter in the borrower's hand. The two are separate steps, so a file that
+ * reaches preapproval is counted under preapprovals, not a second application.
  */
-const APPLICATION_STAGES = ["application"] as const;
+const APPLICATION_STAGES = ["prequalification"] as const;
 const PREAPPROVAL_STAGES = ["preapproval"] as const;
 
 export type ProductionRead = {
@@ -557,7 +557,7 @@ async function health(db: Db, u: CurrentUser, s: ReportScope): Promise<HealthRea
 
   // Gone quiet past the stall limit for its stage: 3 days in Transact, 7
   // elsewhere — the same thresholds stages.ts gives the pipeline board.
-  const transact = stagesIn("TRANSACT");
+  const transact = stagesIn("LOANS");
   const [stale] = await db
     .select({
       n: sql<number>`(

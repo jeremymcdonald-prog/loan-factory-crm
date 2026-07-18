@@ -63,31 +63,39 @@ export const leadIntent = pgEnum("lead_intent", [
 ]);
 
 /**
- * The locked 20-stage opportunity lifecycle (Data_Model.md §3.6, CANON).
+ * The pipeline opportunity lifecycle — Leads → Applications → Loans → Past
+ * clients (a person becomes an applicant at prequalification).
  * Enum values never localize; display names live in the i18n layer.
- * Macro-phase (ENGAGE/QUALIFY/TRANSACT/RETAIN/GROW) is derived, not a column.
+ * The four-group phase is derived in src/lib/stages.ts, not a column.
  */
 export const loanStage = pgEnum("loan_stage", [
-  "new_lead", // 1  ENGAGE
+  // LEADS
+  "new_lead", // 1
   "contact_attempt", // 2
   "consultation_scheduled", // 3
   "consultation_completed", // 4
-  "prequalification", // 5  QUALIFY
-  "preapproval", // 6
-  "searching_for_home", // 7
-  "under_contract", // 8  TRANSACT
-  "application", // 9
-  "disclosures", // 10
-  "processing", // 11
-  "submitted_to_underwriting", // 12
-  "conditional_approval", // 13
-  "clear_to_close", // 14
-  "closing_scheduled", // 15
-  "funded", // 16
-  "post_close", // 17 RETAIN
-  "annual_review", // 18
-  "refinance_opportunity", // 19 GROW
-  "referral_retention", // 20
+  "working_on_credit", // 5
+  "thirty_to_ninety_out", // 6
+  "ninety_plus_out", // 7
+  // APPLICATIONS — a person becomes an applicant at prequalification
+  "prequalification", // 8
+  "preapproval", // 9
+  "contract_received", // 10
+  "ready_to_refinance", // 11
+  // LOANS
+  "submitted_to_processing", // 12
+  "submitted_to_underwriting", // 13
+  "conditional_approval", // 14
+  "appraisal_ordered", // 15
+  "appraisal_received", // 16
+  "submitted_for_clear_to_close", // 17
+  "clear_to_close", // 18  label: "Clear to close / Closing scheduled"
+  // PAST CLIENTS
+  "funded", // 19
+  "first_year_followup", // 20
+  "annual_review", // 21
+  "refinance_opportunity", // 22
+  "referral_and_retention", // 23
 ]);
 
 export const loanStatus = pgEnum("loan_status", [
@@ -226,6 +234,23 @@ export type Address = {
   zip?: string;
 };
 
+/**
+ * Public online presence. Every value is a full URL the team entered or
+ * approved — never scraped and saved silently. An absent key means "not added".
+ */
+export type SocialLinks = {
+  facebook?: string;
+  instagram?: string;
+  tiktok?: string;
+  linkedin?: string;
+  youtube?: string;
+  website?: string;
+  other?: { label: string; url: string }[];
+};
+
+/** A public source the bio draft drew on — shown so the team can verify it. */
+export type BioSource = { label: string; url?: string; note?: string };
+
 export const person = pgTable(
   "person",
   {
@@ -244,6 +269,14 @@ export const person = pgTable(
     ownerUserId: uuid("owner_user_id").references(() => user.id),
     source: jsonb("source").$type<Record<string, unknown>>(),
     tags: text("tags").array(),
+    /** Team-authored (or AI-drafted then approved) relationship bio. */
+    bio: text("bio"),
+    /** Public profile links — see SocialLinks. Approved, never auto-saved. */
+    socialLinks: jsonb("social_links").$type<SocialLinks>().notNull().default({}),
+    /** When the online-presence draft was last generated for this person. */
+    bioResearchedAt: timestamp("bio_researched_at", { withTimezone: true }),
+    /** The public sources the last draft cited. */
+    bioSources: jsonb("bio_sources").$type<BioSource[]>().notNull().default([]),
     doNotContact: boolean("do_not_contact").notNull().default(false),
     complaintFlag: boolean("complaint_flag").notNull().default(false),
     complaintOpenedAt: timestamp("complaint_opened_at", { withTimezone: true }),
@@ -572,6 +605,14 @@ export const partner = pgTable(
     /** Team-recorded relationship facts. */
     lastTouchAt: timestamp("last_touch_at", { withTimezone: true }),
     notesSummary: text("notes_summary"),
+    /** Team-authored (or AI-drafted then approved) relationship bio. */
+    bio: text("bio"),
+    /** Public profile links — see SocialLinks. Approved, never auto-saved. */
+    socialLinks: jsonb("social_links").$type<SocialLinks>().notNull().default({}),
+    /** When the online-presence draft was last generated for this partner. */
+    bioResearchedAt: timestamp("bio_researched_at", { withTimezone: true }),
+    /** The public sources the last draft cited. */
+    bioSources: jsonb("bio_sources").$type<BioSource[]>().notNull().default([]),
     doNotContact: boolean("do_not_contact").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

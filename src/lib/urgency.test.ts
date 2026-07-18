@@ -9,7 +9,7 @@ function iso(daysFromNow: number): string {
 
 function loan(overrides: Partial<LoanUrgencyInput> = {}): LoanUrgencyInput {
   return {
-    stage: "processing",
+    stage: "submitted_to_processing",
     status: "active",
     rateLockExpiresAt: null,
     closingDate: null,
@@ -72,11 +72,11 @@ describe("loan urgency", () => {
 
   it("stalls a TRANSACT file after 3 days but a QUALIFY file only after 7", () => {
     const idle4 = new Date(NOW.getTime() - 4 * 86_400_000);
-    expect(loanUrgency(loan({ stage: "processing", lastActivityAt: idle4 }), NOW).level).toBe(
+    expect(loanUrgency(loan({ stage: "submitted_to_processing", lastActivityAt: idle4 }), NOW).level).toBe(
       "warning",
     );
     expect(
-      loanUrgency(loan({ stage: "searching_for_home", lastActivityAt: idle4 }), NOW).level,
+      loanUrgency(loan({ stage: "preapproval", lastActivityAt: idle4 }), NOW).level,
     ).toBe("healthy");
   });
 

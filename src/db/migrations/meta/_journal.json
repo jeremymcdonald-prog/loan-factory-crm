@@ -64,6 +64,13 @@
       "when": 1784320100000,
       "tag": "0008_message_channels",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1784330000000,
+      "tag": "0009_pipeline_taxonomy_and_bio",
+      "breakpoints": true
     }
   ]
 }

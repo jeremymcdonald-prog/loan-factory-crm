@@ -241,9 +241,9 @@ export type GenLoan = {
 const ACTIVE_STAGE_WEIGHTS: [Stage, number][] = [
   ["new_lead", 10], ["contact_attempt", 8], ["consultation_scheduled", 6],
   ["consultation_completed", 5], ["prequalification", 7], ["preapproval", 9],
-  ["searching_for_home", 8], ["under_contract", 6], ["application", 6],
-  ["disclosures", 5], ["processing", 8], ["submitted_to_underwriting", 5],
-  ["conditional_approval", 4], ["clear_to_close", 3], ["closing_scheduled", 3],
+  ["preapproval", 8], ["contract_received", 6], ["submitted_to_processing", 6],
+  ["submitted_to_processing", 5], ["submitted_to_processing", 8], ["submitted_to_underwriting", 5],
+  ["conditional_approval", 4], ["clear_to_close", 3], ["clear_to_close", 3],
 ];
 
 function drawActiveStage(): Stage {
@@ -337,7 +337,7 @@ function generateBook(lo: DemoLO): GenPerson[] {
     } else if (roll < 0.42) {
       const fundedDaysAgo = drawFundedDaysAgo();
       loan = {
-        stage: fundedDaysAgo > 360 ? "annual_review" : fundedDaysAgo > 60 ? "post_close" : "funded",
+        stage: fundedDaysAgo > 360 ? "annual_review" : fundedDaysAgo > 60 ? "first_year_followup" : "funded",
         status: "funded",
         purpose: chance(0.75) ? "purchase" : "refinance",
         program: pick(PROGRAMS),

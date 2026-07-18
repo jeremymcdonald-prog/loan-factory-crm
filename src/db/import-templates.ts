@@ -28,22 +28,22 @@ export type ParsedTemplate = {
 };
 
 /**
- * The framework's own stage vocabulary → our locked 20-stage enum.
+ * The framework's own stage vocabulary → our locked pipeline-stage enum.
  * Several framework stages are coarser than ours (its "Processing" spans four
  * of our stages), so this maps to the earliest stage where the template
  * legitimately applies. Unmapped values stay null rather than guessing.
  */
 const STAGE_MAP: Record<string, Stage> = {
   Lead: "new_lead",
-  Application: "application",
-  Disclosures: "disclosures",
-  Processing: "processing",
+  Application: "submitted_to_processing",
+  Disclosures: "submitted_to_processing",
+  Processing: "submitted_to_processing",
   Underwriting: "submitted_to_underwriting",
   Conditions: "conditional_approval",
-  Closing: "closing_scheduled",
+  Closing: "clear_to_close",
   Funding: "funded",
-  "Past Client": "post_close",
-  Referral: "referral_retention",
+  "Past Client": "first_year_followup",
+  Referral: "referral_and_retention",
 };
 
 const POLICY_MAP: Record<string, ParsedTemplate["policy"]> = {
