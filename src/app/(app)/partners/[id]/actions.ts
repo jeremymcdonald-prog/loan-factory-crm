@@ -13,7 +13,7 @@ import {
   PARTNER_ENROLLED,
 } from "@/lib/queries/partners";
 import { draftBio, type BioDraft } from "@/lib/bio/mock";
-import { validateSocialLinks } from "@/lib/bio/validate";
+import { validateSocialLinks, normalizeUrl } from "@/lib/bio/validate";
 
 export type TouchState = { error?: string };
 
@@ -777,10 +777,22 @@ export async function acceptPartnerBioDraft(
   try {
     const rawSources: unknown = JSON.parse(parsed.data.sourcesJson);
     if (Array.isArray(rawSources)) {
-      sources = rawSources.filter(
-        (s): s is BioSource =>
-          Boolean(s) && typeof s === "object" && typeof (s as BioSource).label === "string",
-      );
+      sources = rawSources
+        .filter(
+          (s): s is BioSource =>
+            Boolean(s) && typeof s === "object" && typeof (s as BioSource).label === "string",
+        )
+        // A source url is rendered as an href, so it goes through the same
+        // normalizer as the social links — this drops javascript:/data:/hostless
+        // values rather than trusting a hand-crafted POST. Label and note survive.
+        .map((s) => {
+          const url = typeof s.url === "string" ? normalizeUrl(s.url) : null;
+          return {
+            label: s.label,
+            ...(url ? { url } : {}),
+            ...(typeof s.note === "string" ? { note: s.note } : {}),
+          };
+        });
     }
   } catch {
     sources = [];

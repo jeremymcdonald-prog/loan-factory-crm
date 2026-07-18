@@ -672,7 +672,7 @@ export const INSIGHTS: SeedInsight[] = [
     rationale:
       "Preapproved at $430K five weeks ago and searching, but there's been no activity for 9 days and his preapproval expires in about a month.",
     factors: [
-      "No activity 9 days (QUALIFY threshold is 7)",
+      "No activity 9 days (past the 7-day quiet threshold)",
       "Preapproval expires in 34 days",
       "No offer submitted since preapproval",
     ],

@@ -216,19 +216,6 @@ export type PartnerReferral = {
   referredAt: Date;
 };
 
-export type PartnerMessage = {
-  id: string;
-  channel: string;
-  direction: string;
-  /** "draft" renders with an explicit "not sent" label — nothing sends here. */
-  status: string;
-  subject: string | null;
-  body: string;
-  preparedByAi: boolean;
-  occurredAt: Date;
-  authorName: string | null;
-};
-
 export type PartnerEnrollment = {
   campaignId: string;
   campaignName: string;
@@ -283,27 +270,6 @@ export async function getPartner(db: Db, currentUser: CurrentUser, partnerId: st
     // settles the tie and "their last referral" means the same thing twice.
     .orderBy(desc(partnerRelationship.createdAt), asc(person.lastName), asc(person.firstName));
 
-  // Contact history is message-level: the threads are how it's stored, but what
-  // a loan officer wants is "what have we actually said to each other".
-  const messages = await db
-    .select({
-      id: message.id,
-      channel: message.channel,
-      direction: message.direction,
-      status: message.status,
-      subject: message.subject,
-      body: message.body,
-      preparedByAi: message.preparedByAi,
-      occurredAt: message.occurredAt,
-      authorName: userTable.fullName,
-    })
-    .from(message)
-    .innerJoin(conversation, eq(conversation.id, message.conversationId))
-    .leftJoin(userTable, eq(userTable.id, message.authorUserId))
-    .where(eq(conversation.partnerId, partnerId))
-    .orderBy(desc(message.occurredAt))
-    .limit(50);
-
   const [verdict] = await db
     .select({ kind: event.kind, createdAt: event.createdAt })
     .from(event)
@@ -344,7 +310,6 @@ export async function getPartner(db: Db, currentUser: CurrentUser, partnerId: st
     partner: row,
     ownerName,
     referrals: referrals as PartnerReferral[],
-    messages: messages as PartnerMessage[],
     verdict: verdict ?? null,
     enrollments,
   };
