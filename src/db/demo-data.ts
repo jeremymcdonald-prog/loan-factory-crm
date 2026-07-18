@@ -190,13 +190,15 @@ export const DEMO_LOS: DemoLO[] = [
   { key: "minh",    fullName: "Minh Nguyen",      email: "minh@loanfactory.com",    nmlsId: "1856432", language: "en", speaks: ["en", "vi"], bookSize: 34, responseMinutes: 22,  overdueRate: 0.25, untouchedLeadRate: 0.3 },
   { key: "carlos",  fullName: "Carlos Mendoza",   email: "carlos@loanfactory.com",  nmlsId: "1764201", language: "es", speaks: ["en", "es"], bookSize: 32, responseMinutes: 9,   overdueRate: 0.08, untouchedLeadRate: 0.1 },
   { key: "priya",   fullName: "Priya Sharma",     email: "priya@loanfactory.com",   nmlsId: "1899310", language: "en", speaks: ["en"],       bookSize: 30, responseMinutes: 14,  overdueRate: 0.12, untouchedLeadRate: 0.15 },
-  { key: "tom",     fullName: "Tom Ericsson",     email: "tom@loanfactory.com",     nmlsId: "1655002", language: "en", speaks: ["en"],       bookSize: 30, responseMinutes: 95,  overdueRate: 0.45, untouchedLeadRate: 0.5 },
-  { key: "elena",   fullName: "Elena Petrova",    email: "elena@loanfactory.com",   nmlsId: "1922845", language: "ru", speaks: ["en", "ru"], bookSize: 24, responseMinutes: 18,  overdueRate: 0.15, untouchedLeadRate: 0.2 },
-  { key: "marcus",  fullName: "Marcus Boyd",      email: "marcus@loanfactory.com",  nmlsId: "1877453", language: "en", speaks: ["en"],       bookSize: 23, responseMinutes: 31,  overdueRate: 0.2,  untouchedLeadRate: 0.25 },
+  // Book sizes below trimmed slightly (was 30/24/23/23/17/14) so the demo
+  // total stays ≈263 after the curated 7-new-stage coverage records were added.
+  { key: "tom",     fullName: "Tom Ericsson",     email: "tom@loanfactory.com",     nmlsId: "1655002", language: "en", speaks: ["en"],       bookSize: 27, responseMinutes: 95,  overdueRate: 0.45, untouchedLeadRate: 0.5 },
+  { key: "elena",   fullName: "Elena Petrova",    email: "elena@loanfactory.com",   nmlsId: "1922845", language: "ru", speaks: ["en", "ru"], bookSize: 21, responseMinutes: 18,  overdueRate: 0.15, untouchedLeadRate: 0.2 },
+  { key: "marcus",  fullName: "Marcus Boyd",      email: "marcus@loanfactory.com",  nmlsId: "1877453", language: "en", speaks: ["en"],       bookSize: 20, responseMinutes: 31,  overdueRate: 0.2,  untouchedLeadRate: 0.25 },
   { key: "thuy",    fullName: "Thúy Phạm",        email: "thuy@loanfactory.com",    nmlsId: "1901288", language: "vi", speaks: ["en", "vi"], bookSize: 22, responseMinutes: 12,  overdueRate: 0.1,  untouchedLeadRate: 0.12 },
-  { key: "rebecca", fullName: "Rebecca Stone",    email: "rebecca@loanfactory.com", nmlsId: "1833947", language: "en", speaks: ["en"],       bookSize: 23, responseMinutes: 26,  overdueRate: 0.18, untouchedLeadRate: 0.2 },
-  { key: "diego",   fullName: "Diego Fuentes",    email: "diego@loanfactory.com",   nmlsId: "1948112", language: "es", speaks: ["en", "es"], bookSize: 17, responseMinutes: 45,  overdueRate: 0.3,  untouchedLeadRate: 0.35 },
-  { key: "grace",   fullName: "Grace Kimball",    email: "grace.k@loanfactory.com", nmlsId: "1958770", language: "en", speaks: ["en"],       bookSize: 14, responseMinutes: 8,   overdueRate: 0.05, untouchedLeadRate: 0.08 },
+  { key: "rebecca", fullName: "Rebecca Stone",    email: "rebecca@loanfactory.com", nmlsId: "1833947", language: "en", speaks: ["en"],       bookSize: 20, responseMinutes: 26,  overdueRate: 0.18, untouchedLeadRate: 0.2 },
+  { key: "diego",   fullName: "Diego Fuentes",    email: "diego@loanfactory.com",   nmlsId: "1948112", language: "es", speaks: ["en", "es"], bookSize: 14, responseMinutes: 45,  overdueRate: 0.3,  untouchedLeadRate: 0.35 },
+  { key: "grace",   fullName: "Grace Kimball",    email: "grace.k@loanfactory.com", nmlsId: "1958770", language: "en", speaks: ["en"],       bookSize: 11, responseMinutes: 8,   overdueRate: 0.05, untouchedLeadRate: 0.08 },
 ];
 
 // ---------------------------------------------------------------------------
@@ -238,12 +240,26 @@ export type GenLoan = {
   };
 };
 
+/**
+ * Weighted draw across every non-funded stage (the 18 LEADS/APPLICATIONS/LOANS
+ * stages — PAST-group stages are handled separately via the funded branch
+ * below). Covers all 7 stages added in the 2026-07 taxonomy expansion
+ * (working_on_credit, thirty_to_ninety_out, ninety_plus_out, ready_to_refinance,
+ * appraisal_ordered, appraisal_received, submitted_for_clear_to_close) — the
+ * previous version predated them and had duplicate/remapped entries instead.
+ */
 const ACTIVE_STAGE_WEIGHTS: [Stage, number][] = [
-  ["new_lead", 10], ["contact_attempt", 8], ["consultation_scheduled", 6],
-  ["consultation_completed", 5], ["prequalification", 7], ["preapproval", 9],
-  ["preapproval", 8], ["contract_received", 6], ["submitted_to_processing", 6],
-  ["submitted_to_processing", 5], ["submitted_to_processing", 8], ["submitted_to_underwriting", 5],
-  ["conditional_approval", 4], ["clear_to_close", 3], ["clear_to_close", 3],
+  // LEADS
+  ["new_lead", 9], ["contact_attempt", 7], ["consultation_scheduled", 6],
+  ["consultation_completed", 5], ["working_on_credit", 6], ["thirty_to_ninety_out", 5],
+  ["ninety_plus_out", 4],
+  // APPLICATIONS
+  ["prequalification", 7], ["preapproval", 9], ["contract_received", 6],
+  ["ready_to_refinance", 5],
+  // LOANS
+  ["submitted_to_processing", 8], ["submitted_to_underwriting", 6], ["conditional_approval", 5],
+  ["appraisal_ordered", 5], ["appraisal_received", 4], ["submitted_for_clear_to_close", 4],
+  ["clear_to_close", 4],
 ];
 
 function drawActiveStage(): Stage {
@@ -369,8 +385,13 @@ function generateBook(lo: DemoLO): GenPerson[] {
     } else {
       const stage = drawActiveStage();
       const idx = STAGES.indexOf(stage);
-      const isLead = idx <= 1;
-      const inTransact = idx >= 7 && idx <= 14;
+      // Bounds computed from the stage list itself (not hardcoded indices) so
+      // they stay correct as stages are added — the previous hardcoded
+      // idx >= 7 && idx <= 14 window predated the 2026-07 taxonomy expansion
+      // and silently stopped covering submitted_for_clear_to_close/clear_to_close.
+      const isLead = idx <= STAGES.indexOf("contact_attempt");
+      const inTransact =
+        idx >= STAGES.indexOf("contract_received") && idx <= STAGES.indexOf("clear_to_close");
 
       loan = {
         stage,

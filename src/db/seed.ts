@@ -11,7 +11,9 @@ import { Pool } from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { sql } from "drizzle-orm";
 import * as schema from "./schema";
+import type { SocialLinks, BioSource } from "./schema";
 import { hashPassword } from "../lib/password";
+import { draftBio } from "../lib/bio/mock";
 import { PEOPLE, TASKS, APPOINTMENTS, NOTES } from "./seed-data";
 import {
   PARTNERS,
@@ -71,6 +73,41 @@ function atHourToday(hour: number, minutes = 0): Date {
   const d = new Date();
   d.setHours(hour, minutes, 0, 0);
   return d;
+}
+
+/**
+ * Bio & online-presence demo fields for a person or partner. Draws on the
+ * same mock generator the People/Partner detail screens use (src/lib/bio/mock.ts)
+ * — a plausible, clearly-a-demo paragraph plus made-up-but-plausible social
+ * handles, never presented as actually researched. A seeded coin flip per
+ * network keeps a random subset of the suggested links (so some people
+ * honestly show "Not added" for a channel, the way a real roster would).
+ */
+function bioFields(input: {
+  firstName: string;
+  lastName: string;
+  company?: string | null;
+  city?: string | null;
+  role: string;
+  language?: string;
+}): { bio: string; socialLinks: SocialLinks; bioSources: BioSource[]; bioResearchedAt: Date } {
+  const draft = draftBio(input);
+  const keys = (Object.keys(draft.suggestedLinks) as (keyof SocialLinks)[]).filter(
+    (k) => k !== "other",
+  );
+  const kept: SocialLinks = {};
+  for (const k of keys) {
+    if (seedRand() < 0.65) kept[k] = draft.suggestedLinks[k];
+  }
+  if (Object.keys(kept).length === 0 && keys.length > 0) {
+    kept[keys[0]] = draft.suggestedLinks[keys[0]];
+  }
+  return {
+    bio: draft.bio,
+    socialLinks: kept,
+    bioSources: draft.sources,
+    bioResearchedAt: daysFromNow(-sInt(1, 24)),
+  };
 }
 
 async function main() {
@@ -227,6 +264,19 @@ async function main() {
           ? "lead"
           : "borrower";
 
+    // Bio & online presence: every curated person who has a loan gets a
+    // demo research draft (People with no opportunity, like the sphere
+    // contacts, stay at "Not added" — an honest empty state too).
+    const bio = hasLoan
+      ? bioFields({
+          firstName: p.firstName,
+          lastName: p.lastName,
+          city: p.city,
+          role: type,
+          language: p.language,
+        })
+      : null;
+
     const [person] = await db
       .insert(schema.person)
       .values({
@@ -241,6 +291,7 @@ async function main() {
         ownerUserId: U.minh,
         tags: p.tags ?? null,
         source: p.loan?.lead ? { channel: p.loan.lead.channel } : undefined,
+        ...(bio ?? {}),
       })
       .returning({ id: schema.person.id });
 
@@ -427,6 +478,14 @@ async function main() {
   const partnerIds = new Map<string, string>();
 
   for (const p of PARTNERS) {
+    // Every partner gets a bio draft (Requirement: "ALL partners").
+    const partnerBio = bioFields({
+      firstName: p.firstName,
+      lastName: p.lastName,
+      company: p.company,
+      role: p.kind,
+    });
+
     const [row] = await db
       .insert(schema.partner)
       .values({
@@ -442,6 +501,7 @@ async function main() {
         // Targets have never been touched — that's what puts them on the list.
         lastTouchAt: p.lastTouchDaysAgo === null ? null : daysFromNow(-p.lastTouchDaysAgo),
         notesSummary: p.notesSummary,
+        ...partnerBio,
       })
       .returning({ id: schema.partner.id });
 
@@ -749,6 +809,18 @@ async function main() {
           ? "lead"
           : "borrower";
 
+    // Bio & online presence for ~30% of the generated book — a representative
+    // subset, not everyone (the rest honestly show "Not added").
+    const genBio = seedRand() < 0.3
+      ? bioFields({
+          firstName: gp.firstName,
+          lastName: gp.lastName,
+          city: gp.city,
+          role: type,
+          language: gp.language,
+        })
+      : null;
+
     const [personRow] = await db
       .insert(schema.person)
       .values({
@@ -763,6 +835,7 @@ async function main() {
         ownerUserId: loUserId,
         tags: gp.tags,
         source: gp.loan?.lead ? { channel: gp.loan.lead.channel } : { channel: "manual" },
+        ...(genBio ?? {}),
       })
       .returning({ id: schema.person.id });
 
@@ -999,6 +1072,15 @@ async function main() {
   // --- Generated partners, linked to each LO's real people ------------------
   const genPartners = generateDemoPartners();
   for (const gp of genPartners) {
+    // Every partner gets a bio draft (Requirement: "ALL partners").
+    const genPartnerBio = bioFields({
+      firstName: gp.firstName,
+      lastName: gp.lastName,
+      company: gp.company,
+      role: gp.kind,
+      language: gp.language,
+    });
+
     const [partnerRow] = await db
       .insert(schema.partner)
       .values({
@@ -1014,6 +1096,7 @@ async function main() {
         ownerUserId: loIds.get(gp.loKey)!,
         lastTouchAt: daysFromNow(-gp.lastTouchDaysAgo),
         notesSummary: gp.notesSummary,
+        ...genPartnerBio,
       })
       .returning({ id: schema.partner.id });
 

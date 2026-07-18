@@ -359,6 +359,236 @@ export const THREADS: SeedThread[] = [
       },
     ],
   },
+
+  // --- Additional coverage: every channel gets multiple threads, plus the
+  // remaining message states (approved-but-unsent, a second awaiting_approval)
+  // and attachments/translations on top of what's above. ------------------
+
+  // SMS — waiting on you (inbound, no reply), Spanish with an English translation.
+  {
+    personKey: "delgado",
+    subject: "Cuándo empezar",
+    channel: "sms",
+    messages: [
+      {
+        direction: "inbound",
+        status: "received",
+        hoursAgo: 30,
+        body: "Hola, todavía estamos esperando que termine el contrato de arrendamiento en agosto. ¿Deberíamos hacer algo antes de eso?",
+        meta: {
+          translationEn:
+            "Hi, we're still waiting for our lease to end in August. Should we be doing anything before then?",
+        },
+      },
+    ],
+  },
+  // SMS — Vietnamese, waiting on you.
+  {
+    personKey: "ngo",
+    subject: "Khi nào nên bắt đầu",
+    channel: "sms",
+    messages: [
+      {
+        direction: "inbound",
+        status: "received",
+        hoursAgo: 15,
+        body: "Chào anh Minh, gia đình em vẫn đang đợi hợp đồng thuê nhà hết hạn. Khi nào nên bắt đầu chuẩn bị hồ sơ ạ?",
+        meta: {
+          translationEn:
+            "Hello Minh, my family is still waiting for our lease to end. When should we start preparing the paperwork?",
+        },
+      },
+    ],
+  },
+  // SMS — a normal back-and-forth exchange.
+  {
+    personKey: "watts",
+    subject: "Refi numbers",
+    channel: "sms",
+    messages: [
+      {
+        direction: "outbound",
+        status: "sent",
+        hoursAgo: 40,
+        body: "Hi Julia — quick note that with rates where they are, a refi could lower your payment. Want me to run the numbers? — Minh, Loan Factory",
+      },
+      {
+        direction: "inbound",
+        status: "received",
+        hoursAgo: 20,
+        body: "Yes please, that would be great.",
+      },
+    ],
+  },
+  // Call — a straightforward logged call.
+  {
+    personKey: "ellison",
+    subject: "Appraisal appointment window",
+    channel: "call",
+    messages: [
+      {
+        direction: "outbound",
+        status: "sent",
+        hoursAgo: 18,
+        body: "Called to confirm the appraisal appointment window. Reached Craig; confirmed for Thursday 1-3pm.",
+        meta: { outcome: "connected", durationSeconds: 210 },
+      },
+    ],
+  },
+  // Call — a logged call to a partner.
+  {
+    partnerKey: "sandoval_cpa",
+    subject: "Comparing notes on a shared client",
+    channel: "call",
+    messages: [
+      {
+        direction: "outbound",
+        status: "sent",
+        hoursAgo: 60,
+        body: "Called Marisol to compare notes on two shared self-employed clients — no answer, left a voicemail.",
+        meta: { outcome: "voicemail", durationSeconds: 25 },
+      },
+    ],
+  },
+  // App — waiting on you (inbound, no reply).
+  {
+    personKey: "foster",
+    subject: "Anything else on the credit side?",
+    channel: "app",
+    messages: [
+      {
+        direction: "inbound",
+        status: "received",
+        hoursAgo: 10,
+        body: "Just wanted to check in — is there anything else I should be doing on the credit side before we talk again?",
+      },
+    ],
+  },
+  // App — a partner exchange.
+  {
+    partnerKey: "castellanos",
+    subject: "New buyer for you",
+    channel: "app",
+    messages: [
+      {
+        direction: "inbound",
+        status: "received",
+        hoursAgo: 14,
+        body: "Rosa here — got a buyer for you, sending contact info in a sec.",
+      },
+      {
+        direction: "outbound",
+        status: "sent",
+        hoursAgo: 13,
+        body: "Perfect, thank you! I'll reach out today.",
+      },
+    ],
+  },
+  // Note — internal, English (team notes stay in English regardless of the
+  // client's preferred language).
+  {
+    personKey: "ngo",
+    subject: "Lease extended",
+    channel: "note",
+    messages: [
+      {
+        direction: "outbound",
+        status: "sent",
+        hoursAgo: 5,
+        body: "Khánh's landlord extended the lease by 4 months — pushed the likely start date out. Keep in the nurture list, check back in Q1.",
+      },
+    ],
+  },
+  // Note — internal.
+  {
+    personKey: "harrington",
+    subject: "Relocation timeline",
+    channel: "note",
+    messages: [
+      {
+        direction: "outbound",
+        status: "sent",
+        hoursAgo: 8,
+        body: "Grant is relocating for a new job that doesn't start until next spring. Not worth active outreach until then — light-touch nurture only.",
+      },
+    ],
+  },
+  // Video — approved but not sent (status "approved": approvedAt set, sentAt
+  // NULL — the seeder's honesty rule for every channel, not only email).
+  {
+    personKey: "nazarov",
+    subject: "Обновление по вашей заявке",
+    channel: "video",
+    messages: [
+      {
+        direction: "outbound",
+        status: "approved",
+        hoursAgo: 3,
+        body: "[Video: Обновление по вашей заявке]\n\nIf the video doesn't load, use this link instead.",
+        meta: {
+          translationEn: "A short video update on where the appraisal stands.",
+          video: {
+            title: "Обновление по вашей заявке",
+            caption: "90-second update",
+            durationSeconds: 88,
+            demo: true,
+          },
+        },
+      },
+    ],
+  },
+  // Email — with a PDF attachment (honest demo metadata; no real file).
+  {
+    personKey: "watts",
+    subject: "Your refi savings estimate",
+    channel: "email",
+    messages: [
+      {
+        direction: "outbound",
+        status: "sent",
+        hoursAgo: 15,
+        body: "Hi Julia,\n\nAttached is the refi savings estimate we discussed — comparing your current payment to a couple of rate scenarios.\n\nMinh Nguyen\nNMLS 1856432\nCompany NMLS 320841\n\nEqual Housing Opportunity.",
+        meta: { attachments: [{ name: "Refi-savings-estimate.pdf", kind: "pdf" }] },
+      },
+      {
+        direction: "inbound",
+        status: "received",
+        hoursAgo: 10,
+        body: "This is great, thank you! Let's move forward — what do you need from me?",
+      },
+    ],
+  },
+  // Email — with an image attachment.
+  {
+    personKey: "sullivan",
+    subject: "Your appraisal came back",
+    channel: "email",
+    messages: [
+      {
+        direction: "outbound",
+        status: "sent",
+        hoursAgo: 20,
+        body: "Hi Meghan,\n\nThe appraisal came back at $792,000 — comfortably above the contract price. Attaching a photo of the summary page for your records.\n\nMinh Nguyen\nNMLS 1856432\nCompany NMLS 320841\n\nEqual Housing Opportunity.",
+        meta: { attachments: [{ name: "Appraisal-summary-photo.jpg", kind: "image" }] },
+      },
+    ],
+  },
+  // Email — a second awaiting_approval example, this one a first-touch draft
+  // to a never-contacted hot-list partner.
+  {
+    partnerKey: "vance_target",
+    subject: "Introducing myself",
+    channel: "email",
+    messages: [
+      {
+        direction: "outbound",
+        status: "awaiting_approval",
+        preparedByAi: true,
+        hoursAgo: 6,
+        body: "Hi Melissa,\n\nJenna Alvarez speaks highly of you, and I'd love to find a few minutes to introduce myself — I work with a lot of Eastside buyers and would welcome the chance to be a resource for your listings.\n\nMinh Nguyen\nNMLS 1856432\nCompany NMLS 320841\n\nEqual Housing Opportunity.",
+      },
+    ],
+  },
 ];
 
 /**
