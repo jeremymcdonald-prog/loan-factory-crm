@@ -19,21 +19,52 @@ import {
 import type { Db } from "@/db";
 
 const TENANT_ID = "0a9c8f42-1d3e-4b7a-9c21-8f6d5e4b3a20";
-/** A-01 — "New lead — call reminder", one of the ten canonical automations. */
-const AUTOMATION_ID = "6b31a0bd-2c35-428b-9304-afb6341f955e";
-/** A seeded loan (LF-24118) whose borrower is Thanh Nguyễn. */
-const LOAN_ID = "b1b58868-8927-475f-9c0f-f2c602eac932";
-const LOAN_BORROWER_ID = "e0685244-b525-4550-8b20-9564c4b037e0";
+/** The seeded loan whose fallback we assert against, resolved by its stable
+ *  business key (loan number) — never a hard-coded UUID, which the seed
+ *  regenerates on every run. */
+const LOAN_NUMBER = "LF-24118";
 
 let pool: Pool;
 let db: Db;
 
-beforeAll(() => {
+// Resolved from stable keys in beforeAll so a reseed (new gen_random_uuid ids)
+// never breaks these — the ids are looked up, not pinned.
+let AUTOMATION_ID: string;
+let LOAN_ID: string;
+let LOAN_BORROWER_ID: string;
+let LOAN_FIRST_NAME: string;
+let LOAN_LAST_NAME: string;
+
+beforeAll(async () => {
   pool = new Pool({
     connectionString: process.env.MIGRATION_DATABASE_URL ?? process.env.DATABASE_URL,
     max: 1,
   });
   db = drizzle(pool, { schema }) as unknown as Db;
+
+  // A canonical automation the seed leaves the five M5 columns null on (the
+  // new-trigger automations set them; the ten canonical ones don't).
+  const { rows: autos } = await pool.query(
+    `SELECT id FROM automation
+      WHERE tenant_id = $1 AND deleted_at IS NULL
+        AND conditions IS NULL AND owner_assignment IS NULL AND start_delay_text IS NULL
+        AND stop_conditions IS NULL AND reentry_rule IS NULL
+      ORDER BY created_at LIMIT 1`,
+    [TENANT_ID],
+  );
+  AUTOMATION_ID = autos[0].id;
+
+  // The loan (and its borrower) behind the loan-only run fallback, by loan number.
+  const { rows: loans } = await pool.query(
+    `SELECT l.id, l.person_id, p.first_name, p.last_name
+       FROM loan l JOIN person p ON p.id = l.person_id
+      WHERE l.tenant_id = $1 AND l.loan_number = $2 LIMIT 1`,
+    [TENANT_ID, LOAN_NUMBER],
+  );
+  LOAN_ID = loans[0].id;
+  LOAN_BORROWER_ID = loans[0].person_id;
+  LOAN_FIRST_NAME = loans[0].first_name;
+  LOAN_LAST_NAME = loans[0].last_name;
 });
 
 afterAll(async () => {
@@ -136,9 +167,9 @@ describe("listAutomationRuns loan fallback", () => {
     expect(run).toBeDefined();
     expect(run?.personId).toBeNull();
     expect(run?.loanId).toBe(LOAN_ID);
-    expect(run?.loanNumber).toBe("LF-24118");
+    expect(run?.loanNumber).toBe(LOAN_NUMBER);
     expect(run?.loanPersonId).toBe(LOAN_BORROWER_ID);
-    expect(run?.loanFirstName).toBe("Thanh");
-    expect(run?.loanLastName).toBe("Nguyễn");
+    expect(run?.loanFirstName).toBe(LOAN_FIRST_NAME);
+    expect(run?.loanLastName).toBe(LOAN_LAST_NAME);
   });
 });
