@@ -14,6 +14,13 @@
  *  - automations with source / campaign / timing / run history
  *  - intelligence aggregates per range (week, mtd, prior, 90d, ytd) × scope
  *  - the loan-officer leaderboard per period (week, month, quarter, ytd)
+ *  - the viewer's own profile + signature, and their own AI persona (M2/M3;
+ *    owner-private, exported as Linh's own — never another teammate's)
+ *  - integration connections, lead-source mappings, and the import/failure
+ *    event log (M4/M7) — honest by construction: no OAuth token exists in
+ *    the schema, and config only ever holds non-secret metadata
+ *  - campaigns with their ordered campaign_step rows (M6/M7's real
+ *    multi-step drip model)
  */
 import { config } from "dotenv";
 import { writeFileSync } from "node:fs";
@@ -228,6 +235,10 @@ async function main() {
     ORDER BY t.due_at ASC LIMIT 20`);
 
   // --- Campaigns, whole — for cards AND the detail screen ---------------------
+  // `steps` nests every campaign_step row (M6/M7's real multi-step drip model)
+  // in send order, the same json_agg pattern already used for conversations'
+  // messages and automations' runs below. `drip` stays too — the legacy flat
+  // jsonb, still populated on the ten pre-M6 campaigns.
   const campaigns = await q(`
     SELECT c.id, c.name, c.status::text, c.language::text,
            c.email_body, c.sms_body, c.video_meta, c.drip,
@@ -236,22 +247,35 @@ async function main() {
            c.sent_count, c.open_count, c.reply_count,
            GREATEST(0, EXTRACT(EPOCH FROM (now()-c.created_at))/86400)::int AS created_days_ago,
            u.full_name AS owner,
-           t.ref AS template_ref, t.name AS template_name, t.policy::text AS template_policy
+           t.ref AS template_ref, t.name AS template_name, t.policy::text AS template_policy,
+           (SELECT json_agg(json_build_object(
+              'id', cs.id, 'position', cs.position, 'channel', cs.channel::text,
+              'delayDays', cs.delay_days, 'sendTime', cs.send_time,
+              'templateId', cs.template_id, 'templateRef', st.ref, 'templateName', st.name,
+              'subject', cs.subject, 'body', cs.body, 'approvalRequired', cs.approval_required,
+              'skipCondition', cs.skip_condition, 'stopCondition', cs.stop_condition,
+              'language', cs.language::text
+            ) ORDER BY cs.position ASC, cs.created_at ASC)
+            FROM campaign_step cs LEFT JOIN template st ON st.id=cs.template_id
+            WHERE cs.campaign_id=c.id) AS steps
     FROM campaign c
     LEFT JOIN "user" u ON u.id=c.owner_user_id
     LEFT JOIN template t ON t.id=c.template_id
     WHERE c.deleted_at IS NULL ORDER BY c.created_at`);
 
-  // --- Automations with source / campaign / timing / run history --------------
+  // --- Automations with source / conditions / owner / timing / stop / re-entry
+  // / run history (incl. a failed run) ------------------------------------------
   const automations = await q(`
     SELECT a.id, a.ref, a.name, a.description, a.trigger_text, a.audience_text,
-           a.action_text, a.source, a.timing_text,
-           a.tier::text, a.status::text, a.run_count,
+           a.action_text, a.source, a.timing_text, a.conditions,
+           a.owner_assignment, a.start_delay_text, a.stop_conditions, a.reentry_rule,
+           a.tier::text, a.status::text, a.run_count, a.last_run_at::text,
            a.campaign_id, c.name AS campaign_name,
            (SELECT count(*)::int FROM automation_run r
              WHERE r.automation_id=a.id AND r.status='queued_for_approval') AS waiting_count,
            (SELECT json_agg(json_build_object('status', r.status, 'outcome', r.outcome,
               'person', pp.first_name||' '||pp.last_name,
+              'stoppedReason', r.stopped_reason,
               'daysAgo', GREATEST(0, EXTRACT(EPOCH FROM (now()-r.created_at))/86400)::int
             ) ORDER BY r.created_at DESC)
             FROM (SELECT * FROM automation_run r2 WHERE r2.automation_id=a.id
@@ -262,6 +286,54 @@ async function main() {
     WHERE a.deleted_at IS NULL
     ORDER BY CASE a.status::text WHEN 'active' THEN 0 WHEN 'paused' THEN 1 ELSE 2 END,
              a.ref ASC NULLS LAST, a.name ASC`);
+
+  // --- My profile + signature — the signed-in viewer's own row (M2) -----------
+  const [profile] = await q(
+    `
+    SELECT u.full_name, u.title, u.phone, u.email, u.nmls_id, u.timezone, u.language::text,
+           u.photo_data, u.signature, u.default_sender_name, u.reply_to_email,
+           u.links, u.notification_prefs, t.name AS team_name, t.branch AS team_branch
+    FROM "user" u LEFT JOIN team t ON t.id=u.team_id
+    WHERE u.id=$1`,
+    [LINH],
+  );
+
+  // --- My AI persona — owner-private (RLS pins ai_persona to app.user_id, --
+  // already set to Linh above); exported as the viewer's own, honestly. -------
+  const [persona] = await q(
+    `
+    SELECT filename, mime, size_bytes, status::text, extracted_text, error, enabled,
+           instructions, tone, prefer_words, avoid_words, compliance_notes, sample_text,
+           updated_at::text
+    FROM ai_persona WHERE user_id=$1`,
+    [LINH],
+  );
+
+  // --- Integrations: connections (no tokens — config is non-secret metadata
+  // only), lead-source mappings, and the import/failure event log -------------
+  const integrationConnections = await q(`
+    SELECT id, provider::text, status::text, display_name, scopes, config,
+           last_synced_at::text
+    FROM integration_connection WHERE deleted_at IS NULL ORDER BY provider`);
+
+  const leadSourceMappings = await q(`
+    SELECT m.id, m.source_key, m.name, u.full_name AS owner, m.lead_source,
+           m.campaign_id, c.name AS campaign_name, m.automation_id, a.name AS automation_name,
+           m.tags, m.preferred_language::text AS language, m.field_map, m.notify_rule, m.active
+    FROM lead_source_mapping m
+    LEFT JOIN "user" u ON u.id=m.owner_user_id
+    LEFT JOIN campaign c ON c.id=m.campaign_id
+    LEFT JOIN automation a ON a.id=m.automation_id
+    ORDER BY m.source_key, m.name`);
+
+  const integrationEvents = await q(`
+    SELECT e.id, e.connection_id, ic.provider::text AS provider, e.mapping_id,
+           m.name AS mapping_name, e.kind, e.status, e.summary, e.detail,
+           GREATEST(0, EXTRACT(EPOCH FROM (now()-e.created_at))/3600)::int AS hours_ago
+    FROM integration_event e
+    LEFT JOIN integration_connection ic ON ic.id=e.connection_id
+    LEFT JOIN lead_source_mapping m ON m.id=e.mapping_id
+    ORDER BY e.created_at DESC LIMIT 100`);
 
   const templates = await q(`
     SELECT ref, name, category, channel::text, policy::text, stage::text,
@@ -483,6 +555,11 @@ async function main() {
     videos,
     intelligence,
     leaderboard,
+    profile,
+    persona: persona ?? null,
+    integrationConnections,
+    leadSourceMappings,
+    integrationEvents,
   };
 
   writeFileSync("scripts/demo-export.json", JSON.stringify(payload));
@@ -492,6 +569,11 @@ async function main() {
     `pipeline=${pipeline.length} leadContacts=${leadContacts.length} people=${people.length} ` +
       `partners=${partners.length} conversations=${conversations.length} campaigns=${campaigns.length} ` +
       `automations=${automations.length} approvals=${approvals.length} team=${team.length}`,
+  );
+  console.log(
+    `integrationConnections=${integrationConnections.length} leadSourceMappings=${leadSourceMappings.length} ` +
+      `integrationEvents=${integrationEvents.length} persona=${persona ? "yes" : "no"} ` +
+      `campaignSteps=${campaigns.reduce((n, c: any) => n + (c.steps ? c.steps.length : 0), 0)}`,
   );
 }
 
