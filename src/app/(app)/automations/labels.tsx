@@ -26,30 +26,56 @@ export const TIER_LADDER: Tier[] = ["t0", "t1", "t2", "t3"];
 
 /**
  * Where the triggering lead or event comes from. Stored as plain text on
- * `automation.source`; these are the values the picker offers. "crm event"
- * covers everything that starts inside the CRM itself — a stage change, an
- * anniversary date arriving — rather than a lead walking in from outside.
+ * `automation.source`; these are the values the picker offers.
+ *
+ * The keys below are stable storage values — never renamed, only added to —
+ * because the ten canonical automations (Automation_Catalog.md) already have
+ * rows on `facebook`, `instagram`, `website`, `open house`, `agent referral`,
+ * `past client referral`, and `crm event`. Everything else is a more specific
+ * trigger a multi-step campaign can enroll people from: form submissions,
+ * a partner CRM's referral hook, and the CRM lifecycle moments that used to
+ * hide inside the catch-all `crm event`. "crm event" itself stays as the
+ * generic bucket for a CRM-originated trigger that isn't one of those named
+ * moments.
  */
 export const SOURCES = [
   "facebook",
   "instagram",
+  "jotform",
+  "google form",
+  "follow up boss referral",
   "website",
   "open house",
   "agent referral",
   "past client referral",
+  "new application",
+  "preapproval",
+  "contract received",
+  "loan funded",
+  "anniversary",
+  "no activity",
   "crm event",
 ] as const;
 
 export type Source = (typeof SOURCES)[number];
 
 export const SOURCE_LABEL: Record<Source, string> = {
-  facebook: "Facebook",
-  instagram: "Instagram",
-  website: "Website",
-  "open house": "Open house",
+  facebook: "Facebook lead",
+  instagram: "Instagram lead",
+  jotform: "Jotform submission",
+  "google form": "Google Form submission",
+  "follow up boss referral": "Follow Up Boss referral",
+  website: "Website lead",
+  "open house": "Open-house lead",
   "agent referral": "Agent referral",
-  "past client referral": "Past client referral",
-  "crm event": "CRM event",
+  "past client referral": "Past-client referral",
+  "new application": "New application",
+  preapproval: "Preapproval",
+  "contract received": "Contract received",
+  "loan funded": "Loan funded",
+  anniversary: "Anniversary",
+  "no activity": "No activity for a defined period",
+  "crm event": "CRM event (other)",
 };
 
 /** The column stores free text, so tolerate a value the picker never offered. */
@@ -121,6 +147,20 @@ export const TEST_RUN_OUTCOME: Record<Tier, string> = {
   t1: "Test run — nothing was drafted and nothing was sent. When this fires for real it only creates work in your own workspace.",
   t2: "Test run — a draft was prepared for your approval. Nothing was sent.",
   t3: "Test run — nothing was sent. This was a test only.",
+};
+
+/**
+ * What a retry truthfully leaves behind.
+ *
+ * A retry never re-sends whatever the failed attempt tried to send — it queues
+ * a fresh run in its place, and that new run is exactly as honest about
+ * "nothing was sent" as a first attempt at the same tier would be.
+ */
+export const RETRY_RUN_OUTCOME: Record<Tier, string> = {
+  t0: "Retry queued after a previous failure — nothing was sent. This one never drafts; when it runs it creates the task and tells you.",
+  t1: "Retry queued after a previous failure — nothing was sent. When it runs it only creates work in your own workspace.",
+  t2: "Retry queued after a previous failure — a new draft will be prepared for your approval. Nothing has been sent.",
+  t3: "Retry queued after a previous failure. Nothing has been sent yet.",
 };
 
 export function TierBadge({ tier }: { tier: Tier }) {

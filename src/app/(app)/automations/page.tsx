@@ -1,7 +1,11 @@
 import type { Metadata } from "next";
 import { Workflow } from "lucide-react";
 import { requireUser, queryAs } from "@/lib/auth";
-import { listAutomations, listCampaignChoices } from "@/lib/queries/automations";
+import {
+  listAutomations,
+  listCampaignChoices,
+  listTeammateChoices,
+} from "@/lib/queries/automations";
 import { seesWholeBook } from "@/lib/roles";
 import { PageHeader } from "@/components/shell/page-header";
 import { NewAutomationButton } from "./new-automation-button";
@@ -13,8 +17,8 @@ export const dynamic = "force-dynamic";
 
 export default async function AutomationsPage() {
   const user = await requireUser();
-  const [rows, campaignChoices] = await queryAs(user, (db) =>
-    Promise.all([listAutomations(db), listCampaignChoices(db)]),
+  const [rows, campaignChoices, teammateChoices] = await queryAs(user, (db) =>
+    Promise.all([listAutomations(db), listCampaignChoices(db), listTeammateChoices(db)]),
   );
   const canSetTier = seesWholeBook(user.role);
 
@@ -78,6 +82,7 @@ export default async function AutomationsPage() {
                 key={row.id}
                 automation={row}
                 campaignChoices={campaignChoices}
+                teammateChoices={teammateChoices}
                 canSetTier={canSetTier}
               />
             ))}

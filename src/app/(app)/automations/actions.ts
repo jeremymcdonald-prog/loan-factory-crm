@@ -8,9 +8,9 @@ import { automation, automationRun, campaign } from "@/db/schema";
 import { requireUser, queryAs } from "@/lib/auth";
 import { recordAudit, diff } from "@/lib/audit";
 import { seesWholeBook } from "@/lib/roles";
-import { SOURCES, TEST_RUN_OUTCOME } from "./labels";
+import { SOURCES, TEST_RUN_OUTCOME, RETRY_RUN_OUTCOME } from "./labels";
 
-export type AutomationActionState = { error?: string; tested?: boolean };
+export type AutomationActionState = { error?: string; tested?: boolean; retried?: boolean };
 export type AutomationFormState = { error?: string };
 
 /**
@@ -104,6 +104,15 @@ const EditSchema = WordsSchema.extend({
   /** "" means "no campaign linked". */
   campaignId: z.string().uuid().or(z.literal("")).optional(),
   timingText: z.string().trim().optional(),
+  /** Extra plain-language conditions that must hold for a lead to enroll. */
+  conditions: z.string().trim().optional(),
+  /** "Round-robin", a teammate's name, or "" for no rule. Free text — the
+   * picker offers the current roster, but nothing here is enforced against
+   * it, so a teammate who has since left still reads honestly. */
+  ownerAssignment: z.string().trim().optional(),
+  startDelayText: z.string().trim().optional(),
+  stopConditions: z.string().trim().optional(),
+  reentryRule: z.string().trim().optional(),
   tier: z.enum(["t0", "t1", "t2", "t3"]),
   status: z.enum(["active", "paused", "draft"]),
 });
@@ -125,6 +134,11 @@ export async function updateAutomation(formData: FormData): Promise<AutomationFo
     source: formData.get("source") ?? undefined,
     campaignId: formData.get("campaignId") ?? undefined,
     timingText: formData.get("timingText") ?? undefined,
+    conditions: formData.get("conditions") ?? undefined,
+    ownerAssignment: formData.get("ownerAssignment") ?? undefined,
+    startDelayText: formData.get("startDelayText") ?? undefined,
+    stopConditions: formData.get("stopConditions") ?? undefined,
+    reentryRule: formData.get("reentryRule") ?? undefined,
     tier: formData.get("tier"),
     status: formData.get("status"),
   });
@@ -142,6 +156,11 @@ export async function updateAutomation(formData: FormData): Promise<AutomationFo
     source: words.source || null,
     campaignId: words.campaignId || null,
     timingText: words.timingText || null,
+    conditions: words.conditions || null,
+    ownerAssignment: words.ownerAssignment || null,
+    startDelayText: words.startDelayText || null,
+    stopConditions: words.stopConditions || null,
+    reentryRule: words.reentryRule || null,
     tier,
     status,
   };
@@ -158,6 +177,11 @@ export async function updateAutomation(formData: FormData): Promise<AutomationFo
           source: automation.source,
           campaignId: automation.campaignId,
           timingText: automation.timingText,
+          conditions: automation.conditions,
+          ownerAssignment: automation.ownerAssignment,
+          startDelayText: automation.startDelayText,
+          stopConditions: automation.stopConditions,
+          reentryRule: automation.reentryRule,
           tier: automation.tier,
           status: automation.status,
         })
@@ -334,4 +358,92 @@ export async function testAutomation(
   revalidatePath("/automations");
   revalidatePath(`/automations/${automationId}`);
   return { tested: true };
+}
+
+const RetrySchema = z.object({
+  automationId: z.string().uuid(),
+  runId: z.string().uuid(),
+});
+
+/**
+ * Retry a failed run — which means: queue a fresh one in its place.
+ *
+ * Nothing about the failed attempt is replayed. This writes a brand-new run
+ * carrying the same person/loan the failed one named, at
+ * `queued_for_approval`, with an outcome that is exactly as honest about
+ * "nothing was sent" as any other queued run at this automation's tier. The
+ * failed row itself is never touched — the append-only run history stays a
+ * record of what actually happened, retry included.
+ */
+export async function retryAutomationRun(
+  _prev: AutomationActionState,
+  formData: FormData,
+): Promise<AutomationActionState> {
+  const user = await requireUser();
+
+  const parsed = RetrySchema.safeParse({
+    automationId: formData.get("automationId"),
+    runId: formData.get("runId"),
+  });
+  if (!parsed.success) return { error: "We couldn't find that run." };
+
+  const { automationId, runId } = parsed.data;
+
+  try {
+    await queryAs(user, async (db) => {
+      const [automationRow] = await db
+        .select({ tier: automation.tier })
+        .from(automation)
+        .where(and(eq(automation.id, automationId), isNull(automation.deletedAt)))
+        .limit(1);
+      if (!automationRow) throw new Error("not-visible");
+
+      const [failedRun] = await db
+        .select({
+          id: automationRun.id,
+          status: automationRun.status,
+          personId: automationRun.personId,
+          loanId: automationRun.loanId,
+        })
+        .from(automationRun)
+        .where(and(eq(automationRun.id, runId), eq(automationRun.automationId, automationId)))
+        .limit(1);
+      if (!failedRun) throw new Error("not-visible");
+      if (failedRun.status !== "failed") throw new Error("not-failed");
+
+      await db.insert(automationRun).values({
+        tenantId: user.tenantId,
+        automationId,
+        personId: failedRun.personId,
+        loanId: failedRun.loanId,
+        status: "queued_for_approval",
+        outcome: RETRY_RUN_OUTCOME[automationRow.tier],
+      });
+
+      await db
+        .update(automation)
+        .set({
+          runCount: sql`${automation.runCount} + 1`,
+          lastRunAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(automation.id, automationId));
+
+      await recordAudit(db, user, {
+        action: "automation.run_retried",
+        entity: "automation",
+        entityId: automationId,
+        changes: { retriedRunId: { from: null, to: runId } },
+      });
+    });
+  } catch (err) {
+    if (err instanceof Error && err.message === "not-failed") {
+      return { error: "Only a failed run can be retried." };
+    }
+    return { error: "We couldn't queue that retry." };
+  }
+
+  revalidatePath("/automations");
+  revalidatePath(`/automations/${automationId}`);
+  return { retried: true };
 }

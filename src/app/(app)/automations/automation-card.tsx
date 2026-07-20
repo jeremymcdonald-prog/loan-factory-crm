@@ -3,7 +3,11 @@ import { relativeTime } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { AutomationLines } from "./automation-lines";
-import { AutomationControls, type CampaignChoice } from "./automation-controls";
+import {
+  AutomationControls,
+  type CampaignChoice,
+  type TeammateChoice,
+} from "./automation-controls";
 import { AutomationStateBadge, TierBadge } from "./labels";
 import type { AutomationRow } from "@/lib/queries/automations";
 
@@ -16,10 +20,12 @@ import type { AutomationRow } from "@/lib/queries/automations";
 export function AutomationCard({
   automation,
   campaignChoices,
+  teammateChoices,
   canSetTier,
 }: {
   automation: AutomationRow;
   campaignChoices: CampaignChoice[];
+  teammateChoices: TeammateChoice[];
   canSetTier: boolean;
 }) {
   const runSummary = [
@@ -61,12 +67,18 @@ export function AutomationCard({
             audienceText: automation.audienceText,
             actionText: automation.actionText,
             source: automation.source,
+            conditions: automation.conditions,
+            ownerAssignment: automation.ownerAssignment,
             campaignId: automation.campaignId,
+            startDelayText: automation.startDelayText,
             timingText: automation.timingText,
+            stopConditions: automation.stopConditions,
+            reentryRule: automation.reentryRule,
             tier: automation.tier,
             status: automation.status,
           }}
           campaignChoices={campaignChoices}
+          teammateChoices={teammateChoices}
           canSetTier={canSetTier}
         />
       </div>
@@ -77,9 +89,14 @@ export function AutomationCard({
           audienceText={automation.audienceText}
           actionText={automation.actionText}
           source={automation.source}
+          conditions={automation.conditions}
+          ownerAssignment={automation.ownerAssignment}
           campaignId={automation.campaignId}
           campaignName={automation.campaignName}
+          startDelayText={automation.startDelayText}
           timingText={automation.timingText}
+          stopConditions={automation.stopConditions}
+          reentryRule={automation.reentryRule}
         />
       </div>
 

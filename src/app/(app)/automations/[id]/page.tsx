@@ -7,6 +7,7 @@ import {
   getAutomation,
   listAutomationRuns,
   listCampaignChoices,
+  listTeammateChoices,
 } from "@/lib/queries/automations";
 import { seesWholeBook } from "@/lib/roles";
 import { relativeTime, absoluteTime, fullName } from "@/lib/format";
@@ -15,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, SectionLabel } from "@/components/ui/card";
 import { AutomationLines } from "../automation-lines";
 import { AutomationControls } from "../automation-controls";
+import { RetryRunButton } from "../retry-run-button";
 import {
   AutomationStateBadge,
   RunStateBadge,
@@ -45,16 +47,17 @@ export default async function AutomationPage({ params }: { params: Promise<{ id:
   const data = await queryAs(user, async (db) => {
     const record = await getAutomation(db, id);
     if (!record) return null;
-    const [runs, campaignChoices] = await Promise.all([
+    const [runs, campaignChoices, teammateChoices] = await Promise.all([
       listAutomationRuns(db, id),
       listCampaignChoices(db),
+      listTeammateChoices(db),
     ]);
-    return { record, runs, campaignChoices };
+    return { record, runs, campaignChoices, teammateChoices };
   });
 
   if (!data) notFound();
 
-  const { record, runs, campaignChoices } = data;
+  const { record, runs, campaignChoices, teammateChoices } = data;
   const canSetTier = seesWholeBook(user.role);
 
   return (
@@ -82,12 +85,18 @@ export default async function AutomationPage({ params }: { params: Promise<{ id:
               audienceText: record.audienceText,
               actionText: record.actionText,
               source: record.source,
+              conditions: record.conditions,
+              ownerAssignment: record.ownerAssignment,
               campaignId: record.campaignId,
+              startDelayText: record.startDelayText,
               timingText: record.timingText,
+              stopConditions: record.stopConditions,
+              reentryRule: record.reentryRule,
               tier: record.tier,
               status: record.status,
             }}
             campaignChoices={campaignChoices}
+            teammateChoices={teammateChoices}
             canSetTier={canSetTier}
             onRecord
           />
@@ -122,9 +131,14 @@ export default async function AutomationPage({ params }: { params: Promise<{ id:
                 audienceText={record.audienceText}
                 actionText={record.actionText}
                 source={record.source}
+                conditions={record.conditions}
+                ownerAssignment={record.ownerAssignment}
                 campaignId={record.campaignId}
                 campaignName={record.campaignName}
+                startDelayText={record.startDelayText}
                 timingText={record.timingText}
+                stopConditions={record.stopConditions}
+                reentryRule={record.reentryRule}
               />
             </div>
             <div className="border-t border-subtle px-4 py-3">
@@ -158,8 +172,10 @@ export default async function AutomationPage({ params }: { params: Promise<{ id:
                       <p className="text-body text-secondary">{run.outcome}</p>
                       <p className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-small text-muted">
                         {/* A test run names nobody, and a person who has since
-                            been removed can no longer be named. Either way the
-                            outcome above still says what happened. */}
+                            been removed can no longer be named. A run that only
+                            names a loan still links to that loan's borrower.
+                            Either way the outcome above still says what
+                            happened. */}
                         {run.personId && run.firstName ? (
                           <>
                             <Link
@@ -168,6 +184,19 @@ export default async function AutomationPage({ params }: { params: Promise<{ id:
                             >
                               {fullName(run.firstName, run.lastName ?? "")}
                             </Link>
+                            <span aria-hidden>·</span>
+                          </>
+                        ) : run.loanId && run.loanFirstName ? (
+                          <>
+                            <Link
+                              href={`/people/${run.loanPersonId}`}
+                              className="font-semibold text-action hover:underline"
+                            >
+                              {fullName(run.loanFirstName, run.loanLastName ?? "")}
+                            </Link>
+                            {run.loanNumber ? (
+                              <span className="tnum">Loan {run.loanNumber}</span>
+                            ) : null}
                             <span aria-hidden>·</span>
                           </>
                         ) : null}
@@ -187,6 +216,9 @@ export default async function AutomationPage({ params }: { params: Promise<{ id:
                           {relativeTime(run.createdAt)}
                         </time>
                       </p>
+                      {run.status === "failed" ? (
+                        <RetryRunButton automationId={record.id} runId={run.id} />
+                      ) : null}
                     </li>
                   ))}
                 </ol>

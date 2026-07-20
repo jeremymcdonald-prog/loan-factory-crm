@@ -29,14 +29,22 @@ export type EditableAutomation = {
   audienceText: string;
   actionText: string;
   source: string | null;
+  conditions: string | null;
+  ownerAssignment: string | null;
   campaignId: string | null;
+  startDelayText: string | null;
   timingText: string | null;
+  stopConditions: string | null;
+  reentryRule: string | null;
   tier: Tier;
   status: AutomationState;
 };
 
 /** The campaigns the edit dialog offers to link. Fetched by the page, passed down. */
 export type CampaignChoice = { id: string; name: string; status: string };
+
+/** The teammates the edit dialog offers for owner assignment. Fetched by the page, passed down. */
+export type TeammateChoice = { id: string; fullName: string };
 
 /**
  * The three things you can do to an automation: switch it, try it, reword it.
@@ -49,11 +57,13 @@ export type CampaignChoice = { id: string; name: string; status: string };
 export function AutomationControls({
   automation,
   campaignChoices,
+  teammateChoices,
   canSetTier,
   onRecord = false,
 }: {
   automation: EditableAutomation;
   campaignChoices: CampaignChoice[];
+  teammateChoices: TeammateChoice[];
   canSetTier: boolean;
   onRecord?: boolean;
 }) {
@@ -135,6 +145,7 @@ export function AutomationControls({
         <EditDialog
           automation={automation}
           campaignChoices={campaignChoices}
+          teammateChoices={teammateChoices}
           canSetTier={canSetTier}
           onClose={() => setEditing(false)}
         />
@@ -146,11 +157,13 @@ export function AutomationControls({
 function EditDialog({
   automation,
   campaignChoices,
+  teammateChoices,
   canSetTier,
   onClose,
 }: {
   automation: EditableAutomation;
   campaignChoices: CampaignChoice[];
+  teammateChoices: TeammateChoice[];
   canSetTier: boolean;
   onClose: () => void;
 }) {
@@ -250,6 +263,19 @@ function EditDialog({
             </Select>
           </Field>
 
+          <Field
+            label="Any extra conditions?"
+            htmlFor={`${uid}-conditions`}
+            hint="Optional. Something that must also be true before someone enrolls — beyond the trigger itself, e.g. “Only if they have an email on file.”"
+          >
+            <Textarea
+              id={`${uid}-conditions`}
+              name="conditions"
+              rows={2}
+              defaultValue={automation.conditions ?? ""}
+            />
+          </Field>
+
           <Field label="Who does it touch?" htmlFor={`${uid}-audience`} required>
             <Input
               id={`${uid}-audience`}
@@ -258,6 +284,35 @@ function EditDialog({
               required
               autoComplete="off"
             />
+          </Field>
+
+          <Field
+            label="Who gets assigned as the owner?"
+            htmlFor={`${uid}-owner`}
+            hint="How the incoming lead's owner is chosen. Leave blank if this automation doesn't assign one."
+          >
+            <Select
+              id={`${uid}-owner`}
+              name="ownerAssignment"
+              defaultValue={automation.ownerAssignment ?? ""}
+            >
+              <option value="">No owner-assignment rule</option>
+              <option value="Round-robin">Round-robin</option>
+              {teammateChoices.map((teammate) => (
+                <option key={teammate.id} value={teammate.fullName}>
+                  {teammate.fullName}
+                </option>
+              ))}
+              {/* A stored name that no longer matches the roster (someone left,
+                  or this was set before the picker existed) still has to show
+                  up as something, rather than silently jumping to the first
+                  option in the list. */}
+              {automation.ownerAssignment &&
+              automation.ownerAssignment !== "Round-robin" &&
+              !teammateChoices.some((teammate) => teammate.fullName === automation.ownerAssignment) ? (
+                <option value={automation.ownerAssignment}>{automation.ownerAssignment}</option>
+              ) : null}
+            </Select>
           </Field>
 
           <Field label="What should happen?" htmlFor={`${uid}-action`} required>
@@ -291,6 +346,19 @@ function EditDialog({
           </Field>
 
           <Field
+            label="How long before the first step fires?"
+            htmlFor={`${uid}-start-delay`}
+            hint="Plain language — “Right away”, “Wait 2 days”, “Next business morning”."
+          >
+            <Input
+              id={`${uid}-start-delay`}
+              name="startDelayText"
+              defaultValue={automation.startDelayText ?? ""}
+              autoComplete="off"
+            />
+          </Field>
+
+          <Field
             label="When does it go out?"
             htmlFor={`${uid}-timing`}
             hint="Plain language — “Within 5 minutes”, “Next morning at 9am”."
@@ -299,6 +367,32 @@ function EditDialog({
               id={`${uid}-timing`}
               name="timingText"
               defaultValue={automation.timingText ?? ""}
+              autoComplete="off"
+            />
+          </Field>
+
+          <Field
+            label="What stops it partway through?"
+            htmlFor={`${uid}-stop-conditions`}
+            hint="What ends someone's enrollment before the campaign finishes — “They reply”, “They book a call”, “They ask to stop”."
+          >
+            <Textarea
+              id={`${uid}-stop-conditions`}
+              name="stopConditions"
+              rows={2}
+              defaultValue={automation.stopConditions ?? ""}
+            />
+          </Field>
+
+          <Field
+            label="Can the same person re-enter later?"
+            htmlFor={`${uid}-reentry`}
+            hint="Plain language — “Once, ever”, “Yes, after 90 days”, “Only if a different automation triggers it”."
+          >
+            <Input
+              id={`${uid}-reentry`}
+              name="reentryRule"
+              defaultValue={automation.reentryRule ?? ""}
               autoComplete="off"
             />
           </Field>

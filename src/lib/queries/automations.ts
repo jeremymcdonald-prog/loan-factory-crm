@@ -7,8 +7,9 @@
  */
 import "server-only";
 import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import type { Db } from "@/db";
-import { automation, automationRun, campaign, person, template } from "@/db/schema";
+import { automation, automationRun, campaign, loan, person, template, user } from "@/db/schema";
 
 /**
  * How many runs this automation has parked for a human.
@@ -34,6 +35,16 @@ const AUTOMATION_FIELDS = {
   actionText: automation.actionText,
   source: automation.source,
   timingText: automation.timingText,
+  /** Extra plain-language conditions that must hold for a lead to enroll. */
+  conditions: automation.conditions,
+  /** How the incoming lead's owner is chosen — "Round-robin" or a name. */
+  ownerAssignment: automation.ownerAssignment,
+  /** Plain-language delay before the campaign's first step fires. */
+  startDelayText: automation.startDelayText,
+  /** What halts an in-flight enrollment before the campaign finishes. */
+  stopConditions: automation.stopConditions,
+  /** Whether, and when, the same person can enroll again. */
+  reentryRule: automation.reentryRule,
   tier: automation.tier,
   status: automation.status,
   runCount: automation.runCount,
@@ -82,11 +93,19 @@ export async function getAutomation(db: Db, automationId: string) {
 
 export type AutomationRecord = NonNullable<Awaited<ReturnType<typeof getAutomation>>>;
 
+/** A second alias of `person`, reached through `loan.personId` rather than
+ * `automationRun.personId` — a run that only names a loan (no person on the
+ * run row itself) still needs someone to link to. */
+const loanBorrower = alias(person, "automation_run_loan_borrower");
+
 /**
  * What one automation has actually done, newest first.
  *
  * Every run carries its own plain-language account of the outcome, so the
  * timeline reports what happened rather than reconstructing it from an enum.
+ * A run may name a person, a loan, both, or neither (a test run names
+ * nobody) — the loan's own borrower is resolved as a fallback so a
+ * loan-only run still links somewhere.
  */
 export async function listAutomationRuns(db: Db, automationId: string, limit = 50) {
   return db
@@ -99,9 +118,16 @@ export async function listAutomationRuns(db: Db, automationId: string, limit = 5
       personId: automationRun.personId,
       firstName: person.firstName,
       lastName: person.lastName,
+      loanId: automationRun.loanId,
+      loanNumber: loan.loanNumber,
+      loanPersonId: loan.personId,
+      loanFirstName: loanBorrower.firstName,
+      loanLastName: loanBorrower.lastName,
     })
     .from(automationRun)
     .leftJoin(person, eq(person.id, automationRun.personId))
+    .leftJoin(loan, eq(loan.id, automationRun.loanId))
+    .leftJoin(loanBorrower, eq(loanBorrower.id, loan.personId))
     .where(eq(automationRun.automationId, automationId))
     .orderBy(desc(automationRun.createdAt))
     .limit(limit);
@@ -123,3 +149,19 @@ export async function listCampaignChoices(db: Db) {
 }
 
 export type CampaignChoice = Awaited<ReturnType<typeof listCampaignChoices>>[number];
+
+/**
+ * Every active teammate, for the "who gets assigned as the owner" picker on
+ * the edit form. `ownerAssignment` stores plain text rather than a foreign
+ * key — "Round-robin" reads the same as a person's name — so this list only
+ * populates the picker's options; it isn't enforced at save time.
+ */
+export async function listTeammateChoices(db: Db) {
+  return db
+    .select({ id: user.id, fullName: user.fullName })
+    .from(user)
+    .where(and(isNull(user.deletedAt), eq(user.status, "active")))
+    .orderBy(asc(user.fullName));
+}
+
+export type TeammateChoice = Awaited<ReturnType<typeof listTeammateChoices>>[number];
