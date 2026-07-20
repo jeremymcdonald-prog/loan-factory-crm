@@ -55,7 +55,9 @@ beforeAll(async () => {
   await ownerPool.query(
     `INSERT INTO ai_persona (tenant_id, user_id, filename, mime, size_bytes, extracted_text)
      VALUES ($1, $2, 'minh-bio.md', 'text/markdown', 512, 'Direct, warm, plain-spoken.')
-     ON CONFLICT (user_id) DO UPDATE SET extracted_text = EXCLUDED.extracted_text`,
+     ON CONFLICT (user_id) DO UPDATE SET
+       filename = EXCLUDED.filename, mime = EXCLUDED.mime,
+       size_bytes = EXCLUDED.size_bytes, extracted_text = EXCLUDED.extracted_text`,
     [TENANT, MINH],
   );
 });
