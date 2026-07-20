@@ -819,6 +819,16 @@ export const automation = pgTable(
     campaignId: uuid("campaign_id").references(() => campaign.id),
     /** Plain-language timing, e.g. "within 5 minutes" or "next morning at 9am". */
     timingText: text("timing_text"),
+    /** Extra plain-language conditions that must hold for a lead to enroll. */
+    conditions: text("conditions"),
+    /** How the incoming lead's owner is chosen (e.g. "Round-robin", a name). */
+    ownerAssignment: text("owner_assignment"),
+    /** Plain-language delay before the first step fires. */
+    startDelayText: text("start_delay_text"),
+    /** What halts an in-flight enrollment (e.g. "They reply" / "They book a call"). */
+    stopConditions: text("stop_conditions"),
+    /** Whether a person can re-enter, and when (e.g. "Once only" / "After 90 days"). */
+    reentryRule: text("reentry_rule"),
     runCount: integer("run_count").notNull().default(0),
     lastRunAt: timestamp("last_run_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -886,18 +896,185 @@ export const aiPersona = pgTable(
       .notNull()
       .references(() => user.id)
       .unique(),
-    filename: text("filename").notNull(),
-    mime: text("mime").notNull(),
-    sizeBytes: integer("size_bytes").notNull(),
+    // File columns are nullable: a persona can be built from instructions and
+    // tone alone, with no uploaded document.
+    filename: text("filename"),
+    mime: text("mime"),
+    sizeBytes: integer("size_bytes"),
     status: personaStatus("status").notNull().default("ready"),
     extractedText: text("extracted_text"),
     /** Plain-language reason when extraction failed. */
     error: text("error"),
     enabled: boolean("enabled").notNull().default(true),
+    /** How this user wants the assistant to write for them (guidance, not commands). */
+    instructions: text("instructions"),
+    /** Writing tone, e.g. "warm and direct" — freeform, applied as guidance only. */
+    tone: text("tone"),
+    /** Words/phrases the assistant should prefer. */
+    preferWords: text("prefer_words").array(),
+    /** Words/phrases the assistant should avoid. */
+    avoidWords: text("avoid_words").array(),
+    /** Compliance boundaries the persona must respect (never overrides system rules). */
+    complianceNotes: text("compliance_notes"),
+    /** A sample of the user's own writing, for tone matching. */
+    sampleText: text("sample_text"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("ai_persona_tenant_user_idx").on(t.tenantId, t.userId)],
+);
+
+// ---------------------------------------------------------------------------
+// Integrations — Google connections and the future Zapier MCP lead pipe.
+//
+// HONESTY: a connection row's default status is 'not_connected'. 'preview'
+// means "architecture is here, no live credentials". Only a real credentialed
+// server should ever be 'connected'. NO OAUTH TOKEN is ever stored in these
+// tables — config holds non-secret metadata only (account email, tool names,
+// scope descriptions). Secrets live server-side outside the app's reach.
+// ---------------------------------------------------------------------------
+
+export const integrationProvider = pgEnum("integration_provider", [
+  "google_workspace",
+  "gmail",
+  "google_drive",
+  "google_calendar",
+  "zapier_mcp",
+]);
+
+export const connectionStatus = pgEnum("connection_status", [
+  "not_connected",
+  "preview",
+  "connected",
+  "error",
+  "paused",
+]);
+
+/** One OAuth scope the connection would request, with why it's needed. */
+export type OAuthScope = { scope: string; purpose: string };
+
+export const integrationConnection = pgTable(
+  "integration_connection",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenant.id),
+    provider: integrationProvider("provider").notNull(),
+    /** Per-user connections (Gmail, Calendar) set this; tenant-wide ones leave it null. */
+    userId: uuid("user_id").references(() => user.id),
+    status: connectionStatus("status").notNull().default("not_connected"),
+    displayName: text("display_name"),
+    /** Least-privilege scopes this connection would request. Descriptions only. */
+    scopes: jsonb("scopes").$type<OAuthScope[]>().notNull().default([]),
+    /** Non-secret metadata only — NEVER tokens. */
+    config: jsonb("config").$type<Record<string, unknown>>().notNull().default({}),
+    lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  (t) => [index("integration_connection_tenant_idx").on(t.tenantId, t.provider)],
+);
+
+/** How an incoming lead from a source is routed and enriched. */
+export const leadSourceMapping = pgTable(
+  "lead_source_mapping",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenant.id),
+    connectionId: uuid("connection_id").references(() => integrationConnection.id),
+    /** The upstream source key, e.g. "facebook_lead_ads", "jotform". */
+    sourceKey: text("source_key").notNull(),
+    name: text("name").notNull(),
+    /** Default owner for leads from this source. */
+    ownerUserId: uuid("owner_user_id").references(() => user.id),
+    /** CRM lead-source channel to stamp (e.g. "facebook_ads"). */
+    leadSource: text("lead_source"),
+    campaignId: uuid("campaign_id").references(() => campaign.id),
+    automationId: uuid("automation_id").references(() => automation.id),
+    tags: text("tags").array(),
+    preferredLanguage: language("preferred_language"),
+    /** Incoming field → CRM field map, e.g. { "full_name": "name" }. */
+    fieldMap: jsonb("field_map").$type<Record<string, string>>().notNull().default({}),
+    /** Plain-language notification rule when a lead lands. */
+    notifyRule: text("notify_rule"),
+    active: boolean("active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("lead_source_mapping_tenant_idx").on(t.tenantId, t.sourceKey)],
+);
+
+/** Import history and failure log for a connection — one row per event. */
+export const integrationEvent = pgTable(
+  "integration_event",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenant.id),
+    connectionId: uuid("connection_id").references(() => integrationConnection.id),
+    mappingId: uuid("mapping_id").references(() => leadSourceMapping.id),
+    /** e.g. "lead.imported", "test_event", "failure". */
+    kind: text("kind").notNull(),
+    /** received | imported | failed | retried | skipped. */
+    status: text("status").notNull(),
+    summary: text("summary").notNull(),
+    /** Sample of the incoming fields — non-secret; never tokens. */
+    detail: jsonb("detail").$type<Record<string, unknown>>().notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("integration_event_tenant_conn_idx").on(t.tenantId, t.connectionId)],
+);
+
+// ---------------------------------------------------------------------------
+// Campaign steps — the multi-step drip model (replaces the flat drip jsonb).
+// ---------------------------------------------------------------------------
+
+export const stepChannel = pgEnum("step_channel", [
+  "email",
+  "sms",
+  "task",
+  "call",
+  "video",
+  "app",
+  "notification",
+]);
+
+export const campaignStep = pgTable(
+  "campaign_step",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenant.id),
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => campaign.id),
+    /** 0-based order within the campaign. */
+    position: integer("position").notNull().default(0),
+    channel: stepChannel("channel").notNull().default("email"),
+    /** Days after enrollment (or after the previous step) this fires. */
+    delayDays: integer("delay_days").notNull().default(0),
+    /** Local send time, e.g. "09:00". */
+    sendTime: text("send_time"),
+    templateId: uuid("template_id").references(() => template.id),
+    subject: text("subject"),
+    body: text("body"),
+    /** Approval required before this step would send (honest: nothing sends yet). */
+    approvalRequired: boolean("approval_required").notNull().default(true),
+    /** Plain-language skip condition for this one step. */
+    skipCondition: text("skip_condition"),
+    /** Plain-language stop condition that ends the whole enrollment. */
+    stopCondition: text("stop_condition"),
+    language: language("language").notNull().default("en"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("campaign_step_campaign_idx").on(t.campaignId, t.position)],
 );
 
 // ---------------------------------------------------------------------------
