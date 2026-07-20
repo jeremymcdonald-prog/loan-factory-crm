@@ -20,7 +20,12 @@ import {
   THREADS,
   INSIGHTS,
   CAMPAIGNS,
+  MULTISTEP_CAMPAIGNS,
   AUTOMATIONS,
+  PERSONAS,
+  INTEGRATION_CONNECTIONS,
+  LEAD_SOURCE_MAPPINGS,
+  INTEGRATION_EVENTS,
 } from "./seed-modules";
 import { parseTemplates } from "./import-templates";
 import {
@@ -127,6 +132,10 @@ async function main() {
     "video",
     "ai_persona",
     "automation_run",
+    "integration_event",
+    "lead_source_mapping",
+    "integration_connection",
+    "campaign_step",
     "automation",
     "campaign",
     "message",
@@ -245,6 +254,36 @@ async function main() {
   ]);
 
   await db.update(schema.team).set({ leaderUserId: U.linh }).where(sql`id = ${TEAM_ID}`);
+
+  // --- The rest of the team (Minh already exists) --------------------------
+  // Built early (not down in the demo-scale section) so campaign owners,
+  // automations, AI personas, and lead-source mappings can all resolve a real
+  // loan officer id. Nothing here draws from seedRand(), so moving it earlier
+  // doesn't shift any of the deterministic draws below.
+  const loIds = new Map<string, string>([["minh", U.minh]]);
+  let loSeq = 10;
+  for (const lo of DEMO_LOS) {
+    if (lo.key === "minh") continue;
+    loSeq += 1;
+    const id = `3c000000-0000-4000-8000-0000000000${loSeq}`;
+    loIds.set(lo.key, id);
+    await db.insert(schema.user).values({
+      id,
+      tenantId: TENANT_ID,
+      authUserId: id,
+      email: lo.email,
+      passwordHash: demoHash,
+      fullName: lo.fullName,
+      phone: `(425) 555-0${loSeq}0`,
+      nmlsId: lo.nmlsId,
+      role: "lo",
+      teamId: TEAM_ID,
+      language: lo.language,
+      status: "active",
+      // Staggered recent sign-ins so the roster looks alive.
+      lastLoginAt: hoursFromNow(-(loSeq * 5 - 40)),
+    });
+  }
 
   // --- People, opportunities, leads ----------------------------------------
   // Locked rule (Data_Model §3.5): capturing a lead creates the person, the
@@ -633,7 +672,61 @@ async function main() {
     campaignIdByName.set(c.name, row.id);
   }
 
+  // --- The 21 named, multi-step campaigns (M7) ------------------------------
+  // Owners vary across the ten loan officers; each carries a real
+  // `campaign_step` sequence — the model the product now reads instead of the
+  // flat `drip` jsonb (campaign_step's own doc comment covers why `drip`
+  // stays untouched on the campaigns above).
+  for (const c of MULTISTEP_CAMPAIGNS) {
+    const ownerUserId = loIds.get(c.ownerKey ?? "minh") ?? U.minh;
+    const [row] = await db
+      .insert(schema.campaign)
+      .values({
+        tenantId: TENANT_ID,
+        name: c.name,
+        status: c.status,
+        templateId: c.templateRef ? (templateIds.get(c.templateRef) ?? null) : null,
+        language: c.language ?? "en",
+        emailBody: c.emailBody ?? null,
+        smsBody: c.smsBody ?? null,
+        videoMeta: c.videoMeta ?? null,
+        drip: c.drip ?? [],
+        audience: c.audience,
+        audienceSize: c.audienceSize,
+        scheduledFor: c.scheduledInDays !== undefined ? daysFromNow(c.scheduledInDays) : null,
+        ownerUserId,
+        sentCount: c.sentCount ?? 0,
+        openCount: c.openCount ?? 0,
+        replyCount: c.replyCount ?? 0,
+        createdAt: daysFromNow(-(c.createdDaysAgo ?? 0)),
+      })
+      .returning({ id: schema.campaign.id });
+    campaignIdByName.set(c.name, row.id);
+
+    let position = 0;
+    for (const s of c.steps ?? []) {
+      await db.insert(schema.campaignStep).values({
+        tenantId: TENANT_ID,
+        campaignId: row.id,
+        position: position++,
+        channel: s.channel,
+        delayDays: s.delayDays,
+        sendTime: s.sendTime ?? null,
+        templateId: s.templateRef ? (templateIds.get(s.templateRef) ?? null) : null,
+        subject: s.subject ?? null,
+        body: s.body ?? null,
+        approvalRequired: s.approvalRequired ?? true,
+        skipCondition: s.skipCondition ?? null,
+        stopCondition: s.stopCondition ?? null,
+        language: s.language ?? "en",
+      });
+    }
+  }
+
   // --- Automations ---------------------------------------------------------
+  // Ref → id, so lead-source mappings (Integrations, below) can point at the
+  // automation their source's leads run through.
+  const automationIdByRef = new Map<string, string>();
   for (const a of AUTOMATIONS) {
     const [row] = await db
       .insert(schema.automation)
@@ -651,10 +744,16 @@ async function main() {
         source: a.source ?? null,
         timingText: a.timingText ?? null,
         campaignId: a.campaignName ? (campaignIdByName.get(a.campaignName) ?? null) : null,
+        conditions: a.conditions ?? null,
+        ownerAssignment: a.ownerAssignment ?? null,
+        startDelayText: a.startDelayText ?? null,
+        stopConditions: a.stopConditions ?? null,
+        reentryRule: a.reentryRule ?? null,
         runCount: a.runCount,
         lastRunAt: a.lastRunDaysAgo !== undefined ? daysFromNow(-a.lastRunDaysAgo) : null,
       })
       .returning({ id: schema.automation.id });
+    if (a.ref) automationIdByRef.set(a.ref, row.id);
 
     for (const run of a.runs) {
       await db.insert(schema.automationRun).values({
@@ -709,6 +808,88 @@ async function main() {
     },
   ]);
 
+  // --- AI personas -----------------------------------------------------------
+  // Private per owner (ai_persona.user_id is unique; RLS additionally pins
+  // each row to its owner). The seeder connects as the table owner role, so
+  // it can insert here even though the table is RLS-forced for everyone else.
+  for (const p of PERSONAS) {
+    const userId = p.userKey === "linh" ? U.linh : (loIds.get(p.userKey) ?? U.minh);
+    await db.insert(schema.aiPersona).values({
+      tenantId: TENANT_ID,
+      userId,
+      filename: p.file?.filename ?? null,
+      mime: p.file?.mime ?? null,
+      sizeBytes: p.file?.sizeBytes ?? null,
+      status: "ready",
+      extractedText: p.file?.extractedText ?? null,
+      enabled: p.enabled,
+      instructions: p.instructions,
+      tone: p.tone,
+      preferWords: p.preferWords,
+      avoidWords: p.avoidWords,
+      complianceNotes: p.complianceNotes,
+      sampleText: p.sampleText,
+    });
+  }
+
+  // --- Integrations: connections, lead-source mapping, import/failure log ---
+  // HONEST BY CONSTRUCTION: every connection is 'preview' or 'paused' — never
+  // 'connected' — and config only ever holds non-secret metadata. No OAuth
+  // token exists anywhere in this build.
+  const connectionIdByProvider = new Map<string, string>();
+  for (const c of INTEGRATION_CONNECTIONS) {
+    const [row] = await db
+      .insert(schema.integrationConnection)
+      .values({
+        tenantId: TENANT_ID,
+        provider: c.provider,
+        userId: null,
+        status: c.status,
+        displayName: c.displayName,
+        config: c.config ?? {},
+        lastSyncedAt: null,
+      })
+      .returning({ id: schema.integrationConnection.id });
+    connectionIdByProvider.set(c.provider, row.id);
+  }
+  const zapierConnectionId = connectionIdByProvider.get("zapier_mcp")!;
+
+  const mappingIdBySourceKey = new Map<string, string>();
+  for (const m of LEAD_SOURCE_MAPPINGS) {
+    const [row] = await db
+      .insert(schema.leadSourceMapping)
+      .values({
+        tenantId: TENANT_ID,
+        connectionId: zapierConnectionId,
+        sourceKey: m.sourceKey,
+        name: m.name,
+        ownerUserId: loIds.get(m.ownerKey) ?? U.minh,
+        leadSource: m.leadSource,
+        campaignId: m.campaignName ? (campaignIdByName.get(m.campaignName) ?? null) : null,
+        automationId: m.automationRef ? (automationIdByRef.get(m.automationRef) ?? null) : null,
+        tags: m.tags,
+        preferredLanguage: m.preferredLanguage,
+        fieldMap: m.fieldMap,
+        notifyRule: m.notifyRule,
+        active: m.active,
+      })
+      .returning({ id: schema.leadSourceMapping.id });
+    mappingIdBySourceKey.set(m.sourceKey, row.id);
+  }
+
+  for (const e of INTEGRATION_EVENTS) {
+    await db.insert(schema.integrationEvent).values({
+      tenantId: TENANT_ID,
+      connectionId: zapierConnectionId,
+      mappingId: e.mappingSourceKey ? (mappingIdBySourceKey.get(e.mappingSourceKey) ?? null) : null,
+      kind: e.kind,
+      status: e.status,
+      summary: e.summary,
+      detail: e.detail,
+      createdAt: hoursFromNow(-e.hoursAgo),
+    });
+  }
+
   // --- How-to video library ------------------------------------------------
   // Seeded placeholders: none has a real recording yet, so url stays null and
   // the UI labels every one "Video coming soon" — never a fake player.
@@ -759,32 +940,6 @@ async function main() {
   // deterministic generated sample data; the branch should feel like it has
   // been operating for months across a 10-LO team.
   // ==========================================================================
-
-  // --- The rest of the team (Minh already exists) --------------------------
-  const loIds = new Map<string, string>([["minh", U.minh]]);
-  let loSeq = 10;
-  for (const lo of DEMO_LOS) {
-    if (lo.key === "minh") continue;
-    loSeq += 1;
-    const id = `3c000000-0000-4000-8000-0000000000${loSeq}`;
-    loIds.set(lo.key, id);
-    await db.insert(schema.user).values({
-      id,
-      tenantId: TENANT_ID,
-      authUserId: id,
-      email: lo.email,
-      passwordHash: demoHash,
-      fullName: lo.fullName,
-      phone: `(425) 555-0${loSeq}0`,
-      nmlsId: lo.nmlsId,
-      role: "lo",
-      teamId: TEAM_ID,
-      language: lo.language,
-      status: "active",
-      // Staggered recent sign-ins so the roster looks alive.
-      lastLoginAt: hoursFromNow(-(loSeq * 5 - 40)),
-    });
-  }
 
   let partnerEmailSeq = 0;
   function makePartnerEmail(first: string, last: string): string {
@@ -1416,7 +1571,14 @@ async function main() {
   console.log(`  partners:      ${partnerIds.size}`);
   console.log(`  conversations: ${THREADS.length}`);
   console.log(`  AI drafts:   ${INSIGHTS.length} pending approval`);
-  console.log(`  campaigns:     ${CAMPAIGNS.length}   automations: ${AUTOMATIONS.length}`);
+  console.log(
+    `  campaigns:     ${CAMPAIGNS.length + MULTISTEP_CAMPAIGNS.length} ` +
+      `(${MULTISTEP_CAMPAIGNS.length} multi-step)   automations: ${AUTOMATIONS.length}`,
+  );
+  console.log(
+    `  AI personas:   ${PERSONAS.length}   integration connections: ${INTEGRATION_CONNECTIONS.length}   ` +
+      `lead-source mappings: ${LEAD_SOURCE_MAPPINGS.length}`,
+  );
   console.log(
     `  templates:     ${parsed.length} imported from source_assets ` +
       `(${policyCounts.fully_automated ?? 0} fully automated, ` +
