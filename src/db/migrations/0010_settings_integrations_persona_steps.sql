@@ -113,5 +113,7 @@ BEGIN
 END $$;--> statement-breakpoint
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO lfcrm_app;--> statement-breakpoint
--- integration_event is an append-only log.
-REVOKE UPDATE, DELETE ON integration_event FROM lfcrm_app;
+-- The blanket GRANT above re-grants UPDATE/DELETE on the append-only logs, so
+-- re-assert the revoke on ALL of them (not just the new integration_event) —
+-- otherwise the earlier revoke from 0001/0006 is silently undone.
+REVOKE UPDATE, DELETE ON audit_log, ai_action_log, loan_stage_history, automation_run, integration_event FROM lfcrm_app;

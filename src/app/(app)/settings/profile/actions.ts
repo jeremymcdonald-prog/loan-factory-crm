@@ -489,7 +489,8 @@ export async function updateNotificationPrefs(
 // AI persona
 // ---------------------------------------------------------------------------
 
-export const EXTRACT_MAX_CHARS = 20_000;
+// Not exported: a "use server" file may only export async functions.
+const EXTRACT_MAX_CHARS = 20_000;
 
 /**
  * Extract plain text from a persona document. Exported so the richer persona
