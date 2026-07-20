@@ -2,9 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { z } from "zod";
-import { leadSourceMapping } from "@/db/schema";
+import {
+  leadSourceMapping,
+  campaign as campaignTable,
+  automation as automationTable,
+  user as userTable,
+} from "@/db/schema";
 import { requireUser, queryAs } from "@/lib/auth";
 import { canManageUsers } from "@/lib/roles";
 import { recordAudit, diff } from "@/lib/audit";
@@ -112,6 +117,35 @@ export async function saveMapping(
 
   try {
     await queryAs(actor, async (db) => {
+      // Re-check every referenced id resolves to a row visible to this actor
+      // (RLS scopes the read to the tenant) before binding it into the mapping —
+      // the same guard updateAutomation applies. A cross-tenant id can't leak
+      // (RLS returns nothing) but this keeps a stray/foreign id from being stored.
+      if (values.ownerUserId) {
+        const [u] = await db
+          .select({ id: userTable.id })
+          .from(userTable)
+          .where(and(eq(userTable.id, values.ownerUserId), isNull(userTable.deletedAt)))
+          .limit(1);
+        if (!u) throw new Error("bad-owner");
+      }
+      if (values.campaignId) {
+        const [c] = await db
+          .select({ id: campaignTable.id })
+          .from(campaignTable)
+          .where(and(eq(campaignTable.id, values.campaignId), isNull(campaignTable.deletedAt)))
+          .limit(1);
+        if (!c) throw new Error("bad-campaign");
+      }
+      if (values.automationId) {
+        const [a] = await db
+          .select({ id: automationTable.id })
+          .from(automationTable)
+          .where(and(eq(automationTable.id, values.automationId), isNull(automationTable.deletedAt)))
+          .limit(1);
+        if (!a) throw new Error("bad-automation");
+      }
+
       if (id) {
         const [before] = await db
           .select()
