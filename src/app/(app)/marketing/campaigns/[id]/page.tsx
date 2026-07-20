@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   CheckCircle2,
   Copy,
+  ListChecks,
   Pause,
   Pencil,
   Play,
@@ -12,12 +13,14 @@ import {
 } from "lucide-react";
 import { requireUser, queryAs } from "@/lib/auth";
 import { getCampaign, companyNmls } from "@/lib/queries/marketing";
+import { listCampaignSteps } from "@/lib/queries/campaign-steps";
 import { absoluteTime, relativeTime, shortDate } from "@/lib/format";
 import { PageHeader } from "@/components/shell/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { activateCampaign, duplicateCampaign, pauseCampaign } from "../../actions";
+import { activateCampaign, pauseCampaign } from "../../actions";
+import { duplicateCampaignWithSteps } from "./actions";
 import {
   ACTIVATE_HONESTY,
   audienceOption,
@@ -26,10 +29,10 @@ import {
   canActivate,
   canManageCampaigns,
   canPause,
-  dripChannelLabel,
   openRate,
   policyRead,
 } from "../../vocabulary";
+import { STEP_CHANNEL_INFO, delayLabel } from "../step-vocabulary";
 import { ComplianceStrip } from "../compliance-strip";
 import { CampaignPreview, type PreviewVideo } from "./preview";
 
@@ -71,16 +74,16 @@ export default async function CampaignPage({
   const data = await queryAs(user, async (db) => {
     const record = await getCampaign(db, user, id);
     if (!record) return null;
-    return { record, nmls: await companyNmls(db, user) };
+    const steps = await listCampaignSteps(db, id);
+    return { record, steps, nmls: await companyNmls(db, user) };
   });
 
   if (!data) notFound();
 
-  const { record: c, nmls } = data;
+  const { record: c, steps, nmls } = data;
   const manages = canManageCampaigns(user.role);
   const policy = c.templatePolicy ? policyRead(c.templatePolicy) : null;
   const video = readVideo(c.videoMeta);
-  const drip = c.drip ?? [];
   const rate = openRate(c.sentCount, c.openCount);
   const audienceType = c.audience?.type ? audienceOption(c.audience.type) : undefined;
 
@@ -90,7 +93,7 @@ export default async function CampaignPage({
   const emailFromTemplate = !c.emailBody && Boolean(c.templateBody);
   const emailSubject =
     c.templateSubject ??
-    drip.find((s) => s.channel === "email")?.subject ??
+    steps.find((s) => s.channel === "email" && s.subject)?.subject ??
     c.name;
 
   return (
@@ -123,7 +126,7 @@ export default async function CampaignPage({
                 <Pencil className="size-4" aria-hidden />
                 Edit
               </Link>
-              <form action={duplicateCampaign}>
+              <form action={duplicateCampaignWithSteps}>
                 <input type="hidden" name="id" value={c.id} />
                 <Button type="submit">
                   <Copy className="size-4" aria-hidden />
@@ -186,46 +189,103 @@ export default async function CampaignPage({
             />
 
             <Card>
-              <div className="border-b border-subtle px-4 py-3">
+              <div className="flex items-center justify-between gap-3 border-b border-subtle px-4 py-3">
                 <h2 className="text-h3 font-semibold text-primary">
-                  Drip sequence
-                  {drip.length > 0 ? (
+                  Steps
+                  {steps.length > 0 ? (
                     <span className="ml-1.5 text-small font-normal text-muted tnum">
-                      {drip.length} {drip.length === 1 ? "step" : "steps"}
+                      {steps.length} {steps.length === 1 ? "step" : "steps"}
                     </span>
                   ) : null}
                 </h2>
+                {manages ? (
+                  <Link
+                    href={`/marketing/campaigns/${c.id}/steps`}
+                    className="inline-flex items-center gap-1.5 text-small font-semibold text-action hover:underline"
+                  >
+                    <ListChecks className="size-3.5" aria-hidden />
+                    Manage steps
+                  </Link>
+                ) : null}
               </div>
               <div className="p-4">
-                {drip.length > 0 ? (
+                {steps.length > 0 ? (
                   <ol className="space-y-2">
-                    {drip.map((step, i) => (
-                      <li
-                        key={`${step.day}-${i}`}
-                        className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-md border border-subtle bg-sunken px-3 py-2"
-                      >
-                        <span className="w-14 shrink-0 text-small font-semibold text-primary tnum">
-                          Day {step.day}
-                        </span>
-                        <Badge tone="neutral">{dripChannelLabel(step.channel)}</Badge>
-                        <span className="min-w-0 text-small text-secondary">
-                          {step.subject}
-                        </span>
-                      </li>
-                    ))}
+                    {steps.map((step, i) => {
+                      const info = STEP_CHANNEL_INFO[step.channel];
+                      const Icon = info.icon;
+                      const snippet = step.body
+                        ? step.body.length > 140
+                          ? `${step.body.slice(0, 140)}…`
+                          : step.body
+                        : null;
+                      return (
+                        <li
+                          key={step.id}
+                          className="space-y-1.5 rounded-md border border-subtle bg-sunken px-3 py-2.5"
+                        >
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                            <span className="w-6 shrink-0 text-small font-semibold text-primary tnum">
+                              {i + 1}
+                            </span>
+                            <Icon className="size-3.5 shrink-0 text-muted" aria-hidden />
+                            <Badge tone="neutral">{info.label}</Badge>
+                            <span className="text-small font-semibold text-primary tnum">
+                              {delayLabel(step.delayDays)}
+                            </span>
+                            {step.sendTime ? (
+                              <span className="text-small text-muted tnum">{step.sendTime}</span>
+                            ) : null}
+                            {step.approvalRequired ? (
+                              <Badge tone="ai">Approval required</Badge>
+                            ) : null}
+                            {step.language !== "en" ? (
+                              <Badge tone="warning">{campaignLanguageName(step.language)}</Badge>
+                            ) : null}
+                          </div>
+                          {step.templateId && step.templateRef ? (
+                            <Link
+                              href={`/marketing/templates/${step.templateId}`}
+                              className="inline-flex items-center gap-1.5 text-small hover:text-action"
+                            >
+                              <span className="font-mono text-micro text-secondary">
+                                {step.templateRef}
+                              </span>
+                              <span className="text-secondary">{step.templateName}</span>
+                            </Link>
+                          ) : null}
+                          {step.subject ? (
+                            <p className="text-small font-semibold text-primary">{step.subject}</p>
+                          ) : null}
+                          {snippet ? (
+                            <p className="text-small text-secondary">{snippet}</p>
+                          ) : null}
+                          {step.skipCondition ? (
+                            <p className="text-small text-muted">Skip if: {step.skipCondition}</p>
+                          ) : null}
+                          {step.stopCondition ? (
+                            <p className="text-small text-muted">Stop if: {step.stopCondition}</p>
+                          ) : null}
+                        </li>
+                      );
+                    })}
                   </ol>
                 ) : (
                   <p className="text-small text-muted">
-                    No drip steps — this campaign goes out once. Add follow-up steps in
-                    Edit if it should keep working after the first send.
+                    No steps yet — this campaign goes out once.{" "}
+                    {manages ? (
+                      <Link
+                        href={`/marketing/campaigns/${c.id}/steps`}
+                        className="font-semibold text-action hover:underline"
+                      >
+                        Add follow-up steps
+                      </Link>
+                    ) : (
+                      "Add follow-up steps"
+                    )}{" "}
+                    if it should keep working after the first send.
                   </p>
                 )}
-                {drip.length > 0 ? (
-                  <p className="mt-2 text-small text-muted">
-                    Day 0 is the first send; each later step follows that many days
-                    after enrollment.
-                  </p>
-                ) : null}
               </div>
             </Card>
 

@@ -5,22 +5,24 @@
  *
  * The audience editor speaks the same plain language as the New campaign
  * dialog: a rule type picked from the known audiences, plus an optional
- * description in the LO's own words that becomes the label on the card. The
- * drip editor manages its steps locally and serialises them to one hidden
- * JSON field — the Server Action re-validates every step.
+ * description in the LO's own words that becomes the label on the card.
+ *
+ * The multi-step sequence itself moved to a dedicated editor backed by
+ * `campaign_step` (M6) — see the "Manage steps" link below. `campaign.drip`
+ * (the flat legacy shape) is no longer edited here, but its value is still
+ * carried through untouched on every save via the hidden field below: it
+ * stays intact for offline export, per the M6 brief ("keep the drip column
+ * untouched — do not remove it").
  */
 import { useActionState, useState } from "react";
 import Link from "next/link";
-import { Plus, Trash2, Video } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { ListChecks, Video } from "lucide-react";
 import { Field, Input, Select, Textarea } from "@/components/ui/field";
+import { Button } from "@/components/ui/button";
 import { updateCampaign, type CampaignFormState } from "../../../actions";
 import {
   AUDIENCES,
   CAMPAIGN_LANGUAGES,
-  DRIP_CHANNELS,
-  DRIP_CHANNEL_LABELS,
-  MAX_DRIP_STEPS,
   isCampaignLanguage,
   type CampaignLanguage,
   type DripStep,
@@ -81,7 +83,9 @@ export function EditCampaignForm({
   const [scheduledFor, setScheduledFor] = useState(
     toLocalInputValue(campaign.scheduledForIso),
   );
-  const [drip, setDrip] = useState<DripStep[]>(campaign.drip);
+  // No longer edited here (see the file header comment) — carried through to
+  // the Server Action unchanged, so the legacy export stays intact.
+  const drip: DripStep[] = campaign.drip;
 
   const [state, formAction, pending] = useActionState<CampaignFormState, FormData>(
     updateCampaign,
@@ -89,10 +93,6 @@ export function EditCampaignForm({
   );
 
   const audience = AUDIENCES.find((a) => a.type === audienceType);
-
-  function setStep(index: number, patch: Partial<DripStep>) {
-    setDrip((steps) => steps.map((s, i) => (i === index ? { ...s, ...patch } : s)));
-  }
 
   return (
     <form action={formAction} className="space-y-5">
@@ -283,102 +283,26 @@ export function EditCampaignForm({
           </Field>
         ) : null}
 
-        {/* ---------------- Drip ---------------- */}
+        {/* ---------------- Multi-step sequence ---------------- */}
         <div className="space-y-2 border-t border-subtle pt-4">
-          <div className="flex items-baseline justify-between gap-3">
-            <p className="text-label font-semibold text-secondary">Drip sequence</p>
-            <p className="text-small text-muted tnum">
-              {drip.length} of {MAX_DRIP_STEPS} steps
-            </p>
-          </div>
-          <p className="text-small text-muted">
-            Day 0 is the first send; each later step follows that many days after
-            enrollment.
+          <p className="text-label font-semibold text-secondary">Multi-step sequence</p>
+          <p className="text-small text-secondary">
+            Step-by-step editing — channel, delay, send time, template, approval, skip
+            and stop conditions, and language versions — now lives on its own screen.
           </p>
-
-          {drip.map((step, i) => (
-            <div
-              key={i}
-              className="flex flex-wrap items-end gap-2 rounded-md border border-subtle bg-sunken/50 p-2"
-            >
-              <label className="block">
-                <span className="block text-micro font-semibold uppercase tracking-wide text-muted">
-                  Day
-                </span>
-                <Input
-                  type="number"
-                  min={0}
-                  max={365}
-                  value={step.day}
-                  onChange={(e) => setStep(i, { day: Number(e.target.value) })}
-                  aria-label={`Step ${i + 1} day offset`}
-                  className="mt-0.5 w-20"
-                />
-              </label>
-              <label className="block">
-                <span className="block text-micro font-semibold uppercase tracking-wide text-muted">
-                  Channel
-                </span>
-                <Select
-                  value={step.channel}
-                  onChange={(e) => setStep(i, { channel: e.target.value })}
-                  aria-label={`Step ${i + 1} channel`}
-                  className="mt-0.5 w-36"
-                >
-                  {DRIP_CHANNELS.map((ch) => (
-                    <option key={ch} value={ch}>
-                      {DRIP_CHANNEL_LABELS[ch]}
-                    </option>
-                  ))}
-                </Select>
-              </label>
-              <label className="block min-w-40 flex-1">
-                <span className="block text-micro font-semibold uppercase tracking-wide text-muted">
-                  Subject
-                </span>
-                <Input
-                  value={step.subject}
-                  onChange={(e) => setStep(i, { subject: e.target.value })}
-                  aria-label={`Step ${i + 1} subject`}
-                  autoComplete="off"
-                  placeholder="Checking in — any questions?"
-                  className="mt-0.5"
-                />
-              </label>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => setDrip((steps) => steps.filter((_, j) => j !== i))}
-                aria-label={`Remove step ${i + 1}`}
-              >
-                <Trash2 className="size-3.5" aria-hidden />
-                Remove
-              </Button>
-            </div>
-          ))}
-
-          {drip.length < MAX_DRIP_STEPS ? (
-            <Button
-              size="sm"
-              onClick={() =>
-                setDrip((steps) => [
-                  ...steps,
-                  {
-                    day: steps.length ? steps[steps.length - 1].day + 3 : 0,
-                    channel: "email",
-                    subject: "",
-                  },
-                ])
-              }
-            >
-              <Plus className="size-3.5" aria-hidden />
-              Add a step
-            </Button>
-          ) : (
+          <Link
+            href={`/marketing/campaigns/${campaign.id}/steps`}
+            className="inline-flex items-center gap-1.5 text-small font-semibold text-action hover:underline"
+          >
+            <ListChecks className="size-3.5" aria-hidden />
+            Manage steps
+          </Link>
+          {drip.length > 0 ? (
             <p className="text-small text-muted">
-              That&rsquo;s the limit — more steps than this is a nuisance, not a drip.
+              This campaign also carries {drip.length} legacy drip {drip.length === 1 ? "step" : "steps"}{" "}
+              from before the step editor — kept for offline export, untouched by this form.
             </p>
-          )}
+          ) : null}
         </div>
       </section>
 
