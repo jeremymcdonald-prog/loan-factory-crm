@@ -15,8 +15,8 @@ import { relativeTime } from "@/lib/format";
 import { cn } from "@/lib/cn";
 
 export type PersonaView = {
-  filename: string;
-  sizeBytes: number;
+  filename: string | null;
+  sizeBytes: number | null;
   status: "ready" | "failed";
   extractedText: string | null;
   error: string | null;
@@ -143,9 +143,12 @@ export function PersonaSection({ persona }: { persona: PersonaView | null }) {
             <div className="flex min-w-0 items-center gap-2.5">
               <FileText className="size-5 shrink-0 text-muted" aria-hidden />
               <div className="min-w-0">
-                <p className="truncate font-semibold text-primary">{persona.filename}</p>
+                <p className="truncate font-semibold text-primary">
+                  {persona.filename ?? "Persona settings"}
+                </p>
                 <p className="text-small text-muted tnum">
-                  {fileSize(persona.sizeBytes)} · updated {relativeTime(persona.updatedAt)}
+                  {persona.sizeBytes != null ? `${fileSize(persona.sizeBytes)} · ` : ""}updated{" "}
+                  {relativeTime(persona.updatedAt)}
                 </p>
               </div>
             </div>
