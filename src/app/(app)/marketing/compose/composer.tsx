@@ -18,6 +18,8 @@ import { Badge } from "@/components/ui/badge";
 import { Field, Input, Select, Textarea } from "@/components/ui/field";
 import { initialsOf } from "@/lib/format";
 import { cn } from "@/lib/cn";
+import { renderSignatureText, type SignatureProfile } from "@/lib/signature";
+import { getMySignatureProfile } from "@/app/(app)/settings/profile/actions";
 import { saveVideoDraft, type DraftFormState } from "./actions";
 import { VideoRecorderModal, type RecorderResult } from "./video-recorder";
 import { validateVideoFile, formatDuration } from "./video-validation";
@@ -147,6 +149,24 @@ export function Composer({
     saveVideoDraft,
     {},
   );
+
+  // The richer signature fields (title, phone, NMLS, logo) aren't in
+  // ComposerProfile — fetched once so the sender preview below renders the
+  // real signature via the shared helper, not just the raw saved text.
+  const [signatureProfile, setSignatureProfile] = useState<SignatureProfile | null>(null);
+  useEffect(() => {
+    let alive = true;
+    getMySignatureProfile()
+      .then((p) => {
+        if (alive) setSignatureProfile(p);
+      })
+      .catch(() => {
+        /* the sender block falls back to the profile prop below */
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   // Text state survives a reload within the session — the recording can't
   // (object URLs die with the page), so only words are persisted. Restoring
@@ -287,6 +307,16 @@ export function Composer({
   const senderName = profile.senderName?.trim() || profile.fullName;
   const canSave = Boolean(video) && videoTitle.trim().length > 0;
 
+  // The real rendered signature via the shared helper (src/lib/signature.ts)
+  // — falls back to the fetched full profile once it loads, or to the fields
+  // ComposerProfile already carries in the meantime, so this is never blank.
+  const signatureSource: SignatureProfile = signatureProfile ?? {
+    fullName: profile.fullName,
+    signature: profile.signature,
+  };
+  const signatureText = renderSignatureText(signatureSource);
+  const signatureLogo = signatureProfile?.logoDataUrl ?? null;
+
   const senderBlock = (
     <div className="flex items-start gap-3">
       {profile.photoData ? (
@@ -309,13 +339,13 @@ export function Composer({
         {profile.replyTo ? (
           <p className="text-small text-muted">Replies go to {profile.replyTo}</p>
         ) : null}
-        {profile.signature ? (
-          <pre className="mt-1.5 whitespace-pre-wrap font-sans text-small leading-5 text-secondary">
-            {profile.signature}
-          </pre>
-        ) : (
-          <p className="mt-1.5 text-small text-muted">No signature saved yet.</p>
-        )}
+        <pre className="mt-1.5 whitespace-pre-wrap font-sans text-small leading-5 text-secondary">
+          {signatureText}
+        </pre>
+        {signatureLogo ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={signatureLogo} alt="" className="mt-1.5 max-h-10 max-w-full object-contain" />
+        ) : null}
       </div>
     </div>
   );

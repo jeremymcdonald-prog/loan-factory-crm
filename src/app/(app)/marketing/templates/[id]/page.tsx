@@ -2,8 +2,10 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { eq } from "drizzle-orm";
 import { ArrowLeft, ShieldAlert } from "lucide-react";
 import { requireUser, queryAs } from "@/lib/auth";
+import { user as userTable } from "@/db/schema";
 import {
   getTemplate,
   listTemplateChoices,
@@ -15,6 +17,7 @@ import { languageName } from "@/components/crm/language-badge";
 import { PageHeader } from "@/components/shell/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Card, SectionLabel } from "@/components/ui/card";
+import { renderSignatureText } from "@/lib/signature";
 import { NewCampaignButton } from "../../new-campaign-button";
 import { AUDIENCES, AUDIENCE_TYPES, policyRead } from "../../vocabulary";
 
@@ -75,17 +78,40 @@ export default async function TemplatePage({ params }: { params: Promise<{ id: s
   const data = await queryAs(user, async (db) => {
     const record = await getTemplate(db, id);
     if (!record) return null;
+
+    const [me] = await db
+      .select({
+        fullName: userTable.fullName,
+        title: userTable.title,
+        phone: userTable.phone,
+        nmlsId: userTable.nmlsId,
+        signature: userTable.signature,
+        links: userTable.links,
+      })
+      .from(userTable)
+      .where(eq(userTable.id, user.userId))
+      .limit(1);
+
     return {
       record,
       templates: await listTemplateChoices(db),
       sizes: await audienceSizes(db, user, AUDIENCE_TYPES),
       nmls: await companyNmls(db, user),
+      me,
     };
   });
 
   if (!data) notFound();
 
-  const { record, templates, sizes, nmls } = data;
+  const { record, templates, sizes, nmls, me } = data;
+  const signatureText = renderSignatureText({
+    fullName: me?.fullName ?? user.fullName,
+    title: me?.title ?? null,
+    phone: me?.phone ?? null,
+    nmlsId: me?.nmlsId ?? null,
+    signature: me?.signature ?? null,
+  });
+  const signatureLogo = me?.links?.signatureLogo ?? null;
   const policy = policyRead(record.policy);
   const audiences = AUDIENCES.map((a) => ({ ...a, size: sizes[a.type] ?? 0 }));
   const mergeFields = record.mergeFields ?? [];
@@ -254,6 +280,42 @@ export default async function TemplatePage({ params }: { params: Promise<{ id: s
               </div>
             </dl>
           </Card>
+
+          {record.channel === "email" ? (
+            <Card>
+              <div className="border-b border-subtle px-4 py-3">
+                <h2 className="text-h3 font-semibold text-primary">Your signature</h2>
+                <p className="mt-0.5 text-small text-muted">
+                  Added to the bottom when you send this template.
+                </p>
+              </div>
+              <div className="p-4">
+                <div className="rounded-card border border-subtle bg-sunken p-3">
+                  <p className="whitespace-pre-line text-small text-secondary">
+                    {signatureText}
+                  </p>
+                  {signatureLogo ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={signatureLogo}
+                      alt=""
+                      className="mt-1.5 max-h-10 max-w-full object-contain"
+                    />
+                  ) : null}
+                </div>
+                <p className="mt-2 text-small text-muted">
+                  Set in{" "}
+                  <Link
+                    href="/settings/profile"
+                    className="font-semibold text-action hover:underline"
+                  >
+                    My profile
+                  </Link>
+                  .
+                </p>
+              </div>
+            </Card>
+          ) : null}
         </div>
       </div>
 

@@ -19,6 +19,8 @@ import {
   TIMEZONE_VALUES,
   type PersonaKind,
 } from "@/lib/profile-validation";
+import { validateSocialLinks } from "@/lib/bio/validate";
+import type { SignatureProfile } from "@/lib/signature";
 
 export type ProfileState = { error?: string; ok?: string };
 
@@ -30,11 +32,6 @@ function str(formData: FormData, key: string): string {
 // ---------------------------------------------------------------------------
 // Profile details
 // ---------------------------------------------------------------------------
-
-const optionalHttpsUrl = z.union(
-  [z.literal(""), z.url({ protocol: /^https$/ })],
-  "Links must be full https:// addresses.",
-);
 
 const ProfileSchema = z.object({
   fullName: z.string().trim().min(2, "Enter your name."),
@@ -49,11 +46,10 @@ const ProfileSchema = z.object({
     "Choose a timezone from the list.",
   ),
   language: z.enum(["en", "vi", "zh", "es", "ru"], "Choose a language from the list."),
-  website: optionalHttpsUrl,
-  linkedin: optionalHttpsUrl,
-  facebook: optionalHttpsUrl,
-  instagram: optionalHttpsUrl,
 });
+
+/** The `links` bag keys this form owns; every other key (e.g. `signatureLogo`) is preserved untouched. */
+const PROFILE_LINK_KEYS = ["website", "linkedin", "facebook", "instagram", "youtube"] as const;
 
 export async function updateProfile(
   _prev: ProfileState,
@@ -68,22 +64,25 @@ export async function updateProfile(
     nmlsId: str(formData, "nmlsId"),
     timezone: str(formData, "timezone"),
     language: str(formData, "language"),
-    website: str(formData, "website"),
-    linkedin: str(formData, "linkedin"),
-    facebook: str(formData, "facebook"),
-    instagram: str(formData, "instagram"),
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Check the details and try again." };
   }
 
-  const d = parsed.data;
-  const links: Record<string, string> = {};
-  if (d.website) links.website = d.website;
-  if (d.linkedin) links.linkedin = d.linkedin;
-  if (d.facebook) links.facebook = d.facebook;
-  if (d.instagram) links.instagram = d.instagram;
+  // Same normalize-and-reject-javascript:/data: safety the manual link editor
+  // uses (src/lib/bio/validate.ts) — no bare domain rejected, no unsafe scheme stored.
+  const { links: validatedLinks, errors: linkErrors } = validateSocialLinks({
+    website: str(formData, "website"),
+    linkedin: str(formData, "linkedin"),
+    facebook: str(formData, "facebook"),
+    instagram: str(formData, "instagram"),
+    youtube: str(formData, "youtube"),
+  });
+  if (linkErrors.length > 0) {
+    return { error: linkErrors[0] };
+  }
 
+  const d = parsed.data;
   const next = {
     fullName: d.fullName,
     title: d.title || null,
@@ -91,7 +90,6 @@ export async function updateProfile(
     nmlsId: d.nmlsId || null,
     timezone: d.timezone || null,
     language: d.language,
-    links,
   };
 
   try {
@@ -111,16 +109,31 @@ export async function updateProfile(
         .limit(1);
       if (!before) throw new Error("not-found");
 
+      // Preserve any bag keys this form doesn't own (e.g. the signature logo).
+      const preservedLinks = { ...(before.links ?? {}) };
+      for (const key of PROFILE_LINK_KEYS) delete preservedLinks[key];
+      // `other` is part of SocialLinks (used for people/partners) but this
+      // form never submits it — `links` on `user` stays flat string values.
+      const ownedLinks: Record<string, string> = {};
+      for (const key of PROFILE_LINK_KEYS) {
+        const v = validatedLinks[key];
+        if (v) ownedLinks[key] = v;
+      }
+      const mergedLinks: Record<string, string> = { ...preservedLinks, ...ownedLinks };
+
       await db
         .update(userTable)
-        .set({ ...next, updatedAt: new Date() })
+        .set({ ...next, links: mergedLinks, updatedAt: new Date() })
         .where(eq(userTable.id, user.userId));
 
       await recordAudit(db, user, {
         action: "profile.updated",
         entity: "user",
         entityId: user.userId,
-        changes: diff({ ...before, links: before.links ?? {} }, next),
+        changes: diff(
+          { ...before, links: before.links ?? {} },
+          { ...next, links: mergedLinks },
+        ),
       });
     });
   } catch {
@@ -281,6 +294,142 @@ export async function updateSignature(
 
   revalidatePath("/settings/profile");
   return { ok: "Signature saved." };
+}
+
+// ---------------------------------------------------------------------------
+// Signature logo
+//
+// There is no dedicated column for this — it rides inside the same `links`
+// jsonb bag the profile's social links use (key `signatureLogo`), so no
+// schema change is needed. src/lib/signature.ts reads it as `logoDataUrl`.
+// ---------------------------------------------------------------------------
+
+export async function updateSignatureLogo(
+  _prev: ProfileState,
+  formData: FormData,
+): Promise<ProfileState> {
+  const user = await requireUser();
+
+  const logoData = formData.get("logoData");
+  if (typeof logoData !== "string" || !logoData) {
+    return { error: "Choose a logo image first." };
+  }
+
+  // Re-validate server-side with the exact same rule as the profile photo —
+  // the client check is convenience only.
+  const valid = validatePhotoDataUrl(logoData);
+  if (!valid.ok) return { error: valid.reason };
+
+  try {
+    await queryAs(user, async (db) => {
+      const [before] = await db
+        .select({ links: userTable.links })
+        .from(userTable)
+        .where(eq(userTable.id, user.userId))
+        .limit(1);
+      if (!before) throw new Error("not-found");
+
+      const nextLinks = { ...(before.links ?? {}), signatureLogo: logoData };
+
+      await db
+        .update(userTable)
+        .set({ links: nextLinks, updatedAt: new Date() })
+        .where(eq(userTable.id, user.userId));
+
+      // Never write the image itself into the audit log — just what happened.
+      await recordAudit(db, user, {
+        action: "profile.signature_logo_updated",
+        entity: "user",
+        entityId: user.userId,
+        changes: {
+          signatureLogo: {
+            from: before.links?.signatureLogo ? "logo on file" : "none",
+            to: `new logo (${Math.round(logoData.length / 1024)}KB stored)`,
+          },
+        },
+      });
+    });
+  } catch {
+    return { error: "We couldn't save the logo. Nothing was changed." };
+  }
+
+  revalidatePath("/settings/profile");
+  return { ok: "Signature logo updated." };
+}
+
+export async function removeSignatureLogo(): Promise<ProfileState> {
+  const user = await requireUser();
+
+  try {
+    await queryAs(user, async (db) => {
+      const [before] = await db
+        .select({ links: userTable.links })
+        .from(userTable)
+        .where(eq(userTable.id, user.userId))
+        .limit(1);
+      if (!before) throw new Error("not-found");
+      if (!before.links?.signatureLogo) return;
+
+      const nextLinks = { ...before.links };
+      delete nextLinks.signatureLogo;
+
+      await db
+        .update(userTable)
+        .set({ links: nextLinks, updatedAt: new Date() })
+        .where(eq(userTable.id, user.userId));
+
+      await recordAudit(db, user, {
+        action: "profile.signature_logo_removed",
+        entity: "user",
+        entityId: user.userId,
+        changes: { signatureLogo: { from: "logo on file", to: "none" } },
+      });
+    });
+  } catch {
+    return { error: "We couldn't remove the logo. Nothing was changed." };
+  }
+
+  revalidatePath("/settings/profile");
+  return { ok: "Signature logo removed." };
+}
+
+// ---------------------------------------------------------------------------
+// Shared read: the signed-in user's own signature-relevant fields.
+//
+// This is a read, not a mutation — no audit entry, same as any other page
+// load. It exists so other surfaces (the 1:1 email draft on a person's
+// record, the video-email composer) can render the *real* signature via
+// src/lib/signature.ts without duplicating this query. Every Server Action
+// export in a "use server" file is importable from any Client Component in
+// the app, so this is safe to call from outside settings/profile.
+// ---------------------------------------------------------------------------
+
+export async function getMySignatureProfile(): Promise<SignatureProfile> {
+  const user = await requireUser();
+
+  return queryAs(user, async (db) => {
+    const [row] = await db
+      .select({
+        fullName: userTable.fullName,
+        title: userTable.title,
+        phone: userTable.phone,
+        nmlsId: userTable.nmlsId,
+        signature: userTable.signature,
+        links: userTable.links,
+      })
+      .from(userTable)
+      .where(eq(userTable.id, user.userId))
+      .limit(1);
+
+    return {
+      fullName: row?.fullName ?? user.fullName,
+      title: row?.title ?? null,
+      phone: row?.phone ?? null,
+      nmlsId: row?.nmlsId ?? null,
+      signature: row?.signature ?? null,
+      logoDataUrl: row?.links?.signatureLogo ?? null,
+    };
+  });
 }
 
 // ---------------------------------------------------------------------------

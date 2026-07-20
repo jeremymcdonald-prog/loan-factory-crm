@@ -12,6 +12,8 @@ import {
 import type { CampaignChoice } from "@/lib/queries/people";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Textarea, Select } from "@/components/ui/field";
+import { getMySignatureProfile } from "@/app/(app)/settings/profile/actions";
+import { renderSignatureText, type SignatureProfile } from "@/lib/signature";
 
 type DialogKind = "email" | "sms" | "video" | "campaign" | "task" | null;
 
@@ -102,6 +104,34 @@ export function RecordActions({
   );
   const [taskState, taskAction, taskPending] = useActionState<NoteState, FormData>(addTask, {});
 
+  // The signed-in user's own signature, fetched from the shared profile
+  // action so the email draft below can append/preview the *real* rendered
+  // signature (src/lib/signature.ts) rather than nothing at all.
+  const [signatureProfile, setSignatureProfile] = useState<SignatureProfile | null>(null);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    let alive = true;
+    getMySignatureProfile()
+      .then((p) => {
+        if (alive) setSignatureProfile(p);
+      })
+      .catch(() => {
+        /* the dialog simply won't offer a signature to append */
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const signatureText = signatureProfile ? renderSignatureText(signatureProfile) : null;
+
+  function appendSignature() {
+    const el = bodyRef.current;
+    if (!el || !signatureText) return;
+    const separator = el.value.trim() ? "\n\n" : "";
+    el.value = `${el.value}${separator}${signatureText}`;
+    el.focus();
+  }
+
   // Close the task dialog on the pending -> settled transition of a real
   // submission (drafts navigate away; enrollment shows its honest label).
   const taskSubmitted = useRef(false);
@@ -184,8 +214,33 @@ export function RecordActions({
               htmlFor="draft-body"
               hint={DRAFT_COPY[open].hint}
             >
-              <Textarea id="draft-body" name="body" rows={5} required autoFocus />
+              <Textarea id="draft-body" name="body" rows={5} required autoFocus ref={bodyRef} />
             </Field>
+
+            {open === "email" && signatureText ? (
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-label font-semibold text-secondary">Your signature</span>
+                  <Button type="button" variant="ghost" size="sm" onClick={appendSignature}>
+                    Append my signature
+                  </Button>
+                </div>
+                <div className="rounded-card border border-subtle bg-sunken p-3">
+                  <p className="whitespace-pre-line text-small text-secondary">{signatureText}</p>
+                  {signatureProfile?.logoDataUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={signatureProfile.logoDataUrl}
+                      alt=""
+                      className="mt-1.5 max-h-10 max-w-full object-contain"
+                    />
+                  ) : null}
+                </div>
+                <p className="text-small text-muted">
+                  Preview only — use “Append my signature” to add it to the message above.
+                </p>
+              </div>
+            ) : null}
 
             {draftState.error ? (
               <p role="alert" className="text-small text-critical">

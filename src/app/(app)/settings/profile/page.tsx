@@ -34,6 +34,7 @@ export default async function ProfilePage() {
         links: userTable.links,
         notificationPrefs: userTable.notificationPrefs,
         teamName: teamTable.name,
+        teamBranch: teamTable.branch,
       })
       .from(userTable)
       .leftJoin(teamTable, eq(teamTable.id, userTable.teamId))
@@ -102,6 +103,7 @@ export default async function ProfilePage() {
               email={me.email}
               nmlsId={me.nmlsId ?? ""}
               teamName={me.teamName}
+              teamBranch={me.teamBranch}
               timezone={me.timezone ?? ""}
               language={me.language}
               links={me.links ?? {}}
@@ -125,6 +127,7 @@ export default async function ProfilePage() {
               title={me.title ?? ""}
               nmlsId={me.nmlsId ?? ""}
               phone={me.phone ?? ""}
+              logoDataUrl={me.links?.signatureLogo ?? null}
             />
           </div>
         </Card>

@@ -14,6 +14,7 @@ export function ProfileForm({
   email,
   nmlsId,
   teamName,
+  teamBranch,
   timezone,
   language,
   links,
@@ -24,6 +25,7 @@ export function ProfileForm({
   email: string;
   nmlsId: string;
   teamName: string | null;
+  teamBranch: string | null;
   timezone: string;
   language: string;
   links: Record<string, string>;
@@ -56,9 +58,16 @@ export function ProfileForm({
           <Input id="nmlsId" name="nmlsId" defaultValue={nmlsId} inputMode="numeric" />
         </Field>
         <div className="space-y-1.5">
-          <span className="block text-label font-semibold text-secondary">Team</span>
+          <span className="block text-label font-semibold text-secondary">Team &amp; office</span>
           <div className="flex h-10 w-full items-center rounded-control border border-strong bg-sunken px-3 text-body text-primary">
-            {teamName ?? "No team assigned"}
+            {teamName ? (
+              <>
+                {teamName}
+                {teamBranch ? <span className="text-secondary"> · {teamBranch}</span> : null}
+              </>
+            ) : (
+              "No team assigned"
+            )}
           </div>
           <p className="text-small text-muted">
             Change this on the{" "}
@@ -131,6 +140,15 @@ export function ProfileForm({
               type="url"
               defaultValue={links.instagram ?? ""}
               placeholder="https://instagram.com/…"
+            />
+          </Field>
+          <Field label="YouTube" htmlFor="youtube">
+            <Input
+              id="youtube"
+              name="youtube"
+              type="url"
+              defaultValue={links.youtube ?? ""}
+              placeholder="https://youtube.com/@…"
             />
           </Field>
         </div>
