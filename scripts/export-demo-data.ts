@@ -573,7 +573,7 @@ async function main() {
   console.log(
     `integrationConnections=${integrationConnections.length} leadSourceMappings=${leadSourceMappings.length} ` +
       `integrationEvents=${integrationEvents.length} persona=${persona ? "yes" : "no"} ` +
-      `campaignSteps=${campaigns.reduce((n, c: any) => n + (c.steps ? c.steps.length : 0), 0)}`,
+      `campaignSteps=${campaigns.reduce((n, c) => n + ((c as { steps?: unknown[] }).steps?.length ?? 0), 0)}`,
   );
 }
 
