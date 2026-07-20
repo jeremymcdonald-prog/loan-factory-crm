@@ -93,13 +93,13 @@ export default async function AISettingsPage() {
         </div>
 
         <Card className="transition-colors hover:bg-sunken">
-          <Link href="/settings/profile" className="flex items-center gap-3 px-4 py-3.5">
+          <Link href="/settings/ai/persona" className="flex items-center gap-3 px-4 py-3.5">
             <UserCircle className="size-5 shrink-0 text-muted" aria-hidden />
             <div className="min-w-0 flex-1">
               <p className="font-semibold text-primary">My AI persona</p>
               <p className="text-small text-muted">
-                Upload a private document on your profile so the assistant writes like you —
-                and switch it on or off there.
+                A private document, tone, and words to prefer or avoid — so the assistant writes
+                like you. Switch it on or off, and test it, here.
               </p>
             </div>
             <ChevronRight className="size-4 shrink-0 text-muted" aria-hidden />

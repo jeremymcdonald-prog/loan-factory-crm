@@ -489,9 +489,15 @@ export async function updateNotificationPrefs(
 // AI persona
 // ---------------------------------------------------------------------------
 
-const EXTRACT_MAX_CHARS = 20_000;
+export const EXTRACT_MAX_CHARS = 20_000;
 
-async function extractPersonaText(file: File, kind: PersonaKind): Promise<string> {
+/**
+ * Extract plain text from a persona document. Exported so the richer persona
+ * manager (src/app/(app)/settings/ai/actions.ts) can reuse the exact same
+ * extraction logic for the separate "sample of my writing" upload, instead of
+ * duplicating the pdf/docx/txt/md branching.
+ */
+export async function extractPersonaText(file: File, kind: PersonaKind): Promise<string> {
   const buf = await file.arrayBuffer();
 
   if (kind === "txt" || kind === "md") {
@@ -589,6 +595,7 @@ export async function uploadPersona(
   }
 
   revalidatePath("/settings/profile");
+  revalidatePath("/settings/ai/persona");
   if (extractionError) return { error: extractionError };
   return { ok: "Persona document saved. The assistant will use it when drafting as you." };
 }
@@ -611,6 +618,7 @@ export async function deletePersona(): Promise<ProfileState> {
   }
 
   revalidatePath("/settings/profile");
+  revalidatePath("/settings/ai/persona");
   return { ok: "Persona deleted. The assistant now writes in the standard Loan Factory voice." };
 }
 
@@ -642,6 +650,7 @@ export async function togglePersona(
   }
 
   revalidatePath("/settings/profile");
+  revalidatePath("/settings/ai/persona");
   return {
     ok: enable
       ? "Persona enabled. The assistant will use it when drafting as you."

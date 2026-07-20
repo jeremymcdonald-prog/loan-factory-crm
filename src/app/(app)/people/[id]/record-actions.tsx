@@ -13,6 +13,7 @@ import type { CampaignChoice } from "@/lib/queries/people";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Textarea, Select } from "@/components/ui/field";
 import { getMySignatureProfile } from "@/app/(app)/settings/profile/actions";
+import { RewriteInMyVoice } from "@/app/(app)/settings/ai/rewrite-control";
 import { renderSignatureText, type SignatureProfile } from "@/lib/signature";
 
 type DialogKind = "email" | "sms" | "video" | "campaign" | "task" | null;
@@ -216,6 +217,17 @@ export function RecordActions({
             >
               <Textarea id="draft-body" name="body" rows={5} required autoFocus ref={bodyRef} />
             </Field>
+
+            <RewriteInMyVoice
+              getText={() => bodyRef.current?.value ?? ""}
+              onAccept={(text) => {
+                const el = bodyRef.current;
+                if (!el) return;
+                el.value = text;
+                el.focus();
+              }}
+              channel={open}
+            />
 
             {open === "email" && signatureText ? (
               <div className="space-y-1.5">

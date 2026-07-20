@@ -20,6 +20,7 @@ import { initialsOf } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import { renderSignatureText, type SignatureProfile } from "@/lib/signature";
 import { getMySignatureProfile } from "@/app/(app)/settings/profile/actions";
+import { RewriteInMyVoice } from "@/app/(app)/settings/ai/rewrite-control";
 import { saveVideoDraft, type DraftFormState } from "./actions";
 import { VideoRecorderModal, type RecorderResult } from "./video-recorder";
 import { validateVideoFile, formatDuration } from "./video-validation";
@@ -455,6 +456,7 @@ export function Composer({
               placeholder={starter}
             />
           </Field>
+          <RewriteInMyVoice getText={() => intro} onAccept={setIntro} channel="video_script" />
 
           {/* ---------------- The video block ---------------- */}
           <div className="space-y-1.5">
@@ -591,6 +593,7 @@ export function Composer({
               placeholder="Talk soon — reply here or call me any time."
             />
           </Field>
+          <RewriteInMyVoice getText={() => closing} onAccept={setClosing} channel="video_script" />
 
           {/* Sender identity — read-only, exactly as saved on the profile. */}
           <div className="space-y-2 border-t border-subtle pt-4">
